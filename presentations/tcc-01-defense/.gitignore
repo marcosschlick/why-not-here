@@ -1,0 +1,3 @@
+generated_images/
+textures/*.png
+!textures/_obstacle_overlay.png
