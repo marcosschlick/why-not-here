@@ -11,3 +11,4 @@ Its purpose is to centralize the technical and academic work produced during the
 - `publications/`: experiments and code related to articles and publications.
 - `docs/`: academic documents, diagrams, and supporting material.
 - `shared/`: code shared between projects, presentations, and publications.
+- `tools/`: reusable scripts and development tools.
