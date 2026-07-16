@@ -1,6 +1,10 @@
 def apply_obstacles(grid, obstacles):
-    for r, c in obstacles:
-        if 0 <= r < len(grid) and 0 <= c < len(grid[0]):
-            grid[r][c]["cost"] = 0
-            grid[r][c]["traversable"] = False
-            grid[r][c]["terrain_type"] = "obstacle"
+    row_count = len(grid)
+    column_count = len(grid[0])
+
+    for row, column in obstacles:
+        if 0 <= row < row_count and 0 <= column < column_count:
+            cell = grid[row][column]
+            cell["cost"] = 0
+            cell["traversable"] = False
+            cell["terrain_type"] = "obstacle"

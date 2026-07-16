@@ -1,7 +1,11 @@
-import os
+from pathlib import Path
 
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+TEXTURE_DIR = PROJECT_DIR / "textures"
+IMAGE_DIR = PROJECT_DIR / "generated_images"
+
 GRID_SIZE = 32
+TILE_SIZE = 32
 START = (2, 2)
 GOAL = (29, 29)
 # Supported values: "manhattan" and "euclidean".
@@ -17,7 +21,6 @@ HILLS = [
 OBSTACLES = [
     (6, 8),
     (12, 15),
-    (6, 8),
     (29, 26),
 ]
 
@@ -26,4 +29,3 @@ GOAL_COLOR = (0, 255, 255)
 MANHATTAN_ROUTE_COLOR = "yellow"
 EUCLIDEAN_ROUTE_COLOR = "yellow"
 ASTAR_ROUTE_COLOR = "white"
-IMAGE_DIR = os.path.join(PROJECT_DIR, "generated_images")

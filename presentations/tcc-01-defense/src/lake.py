@@ -2,13 +2,17 @@ def apply_lake(grid, center, radius):
     if center is None:
         return
 
-    rows = len(grid)
-    columns = len(grid[0])
-    cy, cx = center
+    row_count = len(grid)
+    column_count = len(grid[0])
+    center_row, center_column = center
 
-    for r in range(rows):
-        for c in range(columns):
-            if (r - cy) ** 2 + (c - cx) ** 2 <= radius**2:
-                grid[r][c]["cost"] = 0
-                grid[r][c]["traversable"] = False
-                grid[r][c]["terrain_type"] = "lake"
+    for row in range(row_count):
+        for column in range(column_count):
+            distance_squared = (row - center_row) ** 2 + (
+                column - center_column
+            ) ** 2
+            if distance_squared <= radius**2:
+                cell = grid[row][column]
+                cell["cost"] = 0
+                cell["traversable"] = False
+                cell["terrain_type"] = "lake"

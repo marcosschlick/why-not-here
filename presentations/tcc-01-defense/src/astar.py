@@ -1,8 +1,6 @@
 import heapq
 import math
 
-import config
-
 
 def _manhattan_distance(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
@@ -16,6 +14,7 @@ _HEURISTICS = {
     "manhattan": _manhattan_distance,
     "euclidean": _euclidean_distance,
 }
+_ORTHOGONAL_MOVES = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
 
 def astar(grid, start, goal, heuristic_name):
@@ -24,63 +23,72 @@ def astar(grid, start, goal, heuristic_name):
     except KeyError as error:
         supported = ", ".join(_HEURISTICS)
         raise ValueError(
-            f"Unsupported A* heuristic '{heuristic_name}'. Expected one of: {supported}."
+            f"Unsupported A* heuristic '{heuristic_name}'. "
+            f"Expected one of: {supported}."
         ) from error
 
-    grid_size = config.GRID_SIZE
-    moves = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    row_count = len(grid)
+    column_count = len(grid[0])
     closed_set = set()
     came_from = {}
     g_score = {start: 0}
-    f_score = {start: heuristic(start, goal)}
-    counter = 0
-    priority_queue = [(f_score[start], counter, start)]
+
+    # The tie breaker preserves insertion order when priorities are equal.
+    tie_breaker = 0
+    priority_queue = [(heuristic(start, goal), tie_breaker, start)]
 
     while priority_queue:
         _, _, current = heapq.heappop(priority_queue)
 
         if current == goal:
-            path = []
-            while current in came_from:
-                path.append(current)
-                current = came_from[current]
-            path.append(start)
-            path.reverse()
-            return path
+            return _reconstruct_path(came_from, start, current)
 
         closed_set.add(current)
 
-        row, col = current
-        for dr, dc in moves:
-            neighbor_row, neighbor_col = row + dr, col + dc
+        row, column = current
+        for row_delta, column_delta in _ORTHOGONAL_MOVES:
+            neighbor_row = row + row_delta
+            neighbor_column = column + column_delta
 
             if (
                 neighbor_row < 0
-                or neighbor_row >= grid_size
-                or neighbor_col < 0
-                or neighbor_col >= grid_size
+                or neighbor_row >= row_count
+                or neighbor_column < 0
+                or neighbor_column >= column_count
             ):
                 continue
 
-            neighbor = (neighbor_row, neighbor_col)
-            cell_data = grid[neighbor_row][neighbor_col]
+            neighbor = (neighbor_row, neighbor_column)
+            cell = grid[neighbor_row][neighbor_column]
 
-            if not cell_data["traversable"]:
+            if not cell["traversable"]:
                 continue
 
-            move_cost = cell_data["cost"]
-            tentative_g = g_score[current] + move_cost
+            tentative_cost = g_score[current] + cell["cost"]
 
-            if neighbor in closed_set and tentative_g >= g_score.get(
+            if neighbor in closed_set and tentative_cost >= g_score.get(
                 neighbor, float("inf")
             ):
                 continue
 
-            if tentative_g < g_score.get(neighbor, float("inf")):
+            if tentative_cost < g_score.get(neighbor, float("inf")):
                 came_from[neighbor] = current
-                g_score[neighbor] = tentative_g
-                f_score[neighbor] = tentative_g + heuristic(neighbor, goal)
-                counter += 1
-                heapq.heappush(priority_queue, (f_score[neighbor], counter, neighbor))
+                g_score[neighbor] = tentative_cost
+                estimated_total_cost = tentative_cost + heuristic(neighbor, goal)
+                tie_breaker += 1
+                heapq.heappush(
+                    priority_queue,
+                    (estimated_total_cost, tie_breaker, neighbor),
+                )
 
     raise RuntimeError("No route found between start and goal.")
+
+
+def _reconstruct_path(came_from, start, current):
+    path = []
+    while current in came_from:
+        path.append(current)
+        current = came_from[current]
+    path.append(start)
+    path.reverse()
+    return path

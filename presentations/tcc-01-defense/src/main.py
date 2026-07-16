@@ -9,10 +9,10 @@ def main():
     grid = build_map()
     print("Map built.")
     print(f"Calculating A* route with {config.ASTAR_HEURISTIC} heuristic...")
-    route = astar(grid, config.START, config.GOAL, config.ASTAR_HEURISTIC)
+    optimal_route = astar(grid, config.START, config.GOAL, config.ASTAR_HEURISTIC)
     print("Route found.")
     print("Generating images...")
-    generate_images(grid, config.START, config.GOAL, route)
+    generate_images(grid, config.START, config.GOAL, optimal_route)
 
 
 if __name__ == "__main__":
