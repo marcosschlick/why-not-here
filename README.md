@@ -4,6 +4,8 @@ Why Not Here is an academic repository for the projects, studies, presentations,
 
 Its purpose is to centralize the technical and academic work produced during the research, providing a structured space for different implementations, experiments, supporting materials, and future developments.
 
+The Python code in this repository uses Python 3.14.6.
+
 ## Repository structure
 
 - `projects/`: project implementations and future versions.
