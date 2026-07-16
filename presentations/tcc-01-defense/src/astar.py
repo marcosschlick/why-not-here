@@ -1,15 +1,38 @@
 import heapq
+import math
 
 import config
 
 
-def astar(grid, start, goal):
+def _manhattan_distance(a, b):
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+def _euclidean_distance(a, b):
+    return math.hypot(a[0] - b[0], a[1] - b[1])
+
+
+_HEURISTICS = {
+    "manhattan": _manhattan_distance,
+    "euclidean": _euclidean_distance,
+}
+
+
+def astar(grid, start, goal, heuristic_name):
+    try:
+        heuristic = _HEURISTICS[heuristic_name]
+    except KeyError as error:
+        supported = ", ".join(_HEURISTICS)
+        raise ValueError(
+            f"Unsupported A* heuristic '{heuristic_name}'. Expected one of: {supported}."
+        ) from error
+
     grid_size = config.GRID_SIZE
     moves = [(-1, 0), (1, 0), (0, -1), (0, 1)]
     closed_set = set()
     came_from = {}
     g_score = {start: 0}
-    f_score = {start: _manhattan_distance(start, goal)}
+    f_score = {start: heuristic(start, goal)}
     counter = 0
     priority_queue = [(f_score[start], counter, start)]
 
@@ -56,12 +79,8 @@ def astar(grid, start, goal):
             if tentative_g < g_score.get(neighbor, float("inf")):
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g
-                f_score[neighbor] = tentative_g + _manhattan_distance(neighbor, goal)
+                f_score[neighbor] = tentative_g + heuristic(neighbor, goal)
                 counter += 1
                 heapq.heappush(priority_queue, (f_score[neighbor], counter, neighbor))
 
     raise RuntimeError("No route found between start and goal.")
-
-
-def _manhattan_distance(a, b):
-    return abs(a[0] - b[0]) + abs(a[1] - b[1])

@@ -4,6 +4,8 @@ PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GRID_SIZE = 32
 START = (2, 2)
 GOAL = (29, 29)
+# Supported values: "manhattan" and "euclidean".
+ASTAR_HEURISTIC = "euclidean"
 LAKE_CENTER = (20, 25)
 LAKE_RADIUS = 4
 HILLS = [
