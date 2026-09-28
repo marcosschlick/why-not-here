@@ -52,18 +52,11 @@ def modify_config(payload: dict[str, Any]) -> dict[str, Any]:
 
 @router.post("/map/generate")
 def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
-    updates: dict[str, Any] = {
-        "MAP_H": payload.MAP_H,
-        "MAP_W": payload.MAP_W,
-        "CONNECTIVITY": payload.CONNECTIVITY,
-        "DEFAULT_REDUCTION_METHOD": payload.DEFAULT_REDUCTION_METHOD,
-        "USE_INCREMENTAL_SOLVER": payload.USE_INCREMENTAL_SOLVER,
-        "OUTPUT_DIR": payload.OUTPUT_DIR,
-    }
-    if payload.MAP_DEFAULT_SEED is not None:
-        updates["MAP_DEFAULT_SEED"] = payload.MAP_DEFAULT_SEED
-    if payload.extra_config:
-        updates.update(payload.extra_config)
+    updates: dict[str, Any] = payload.model_dump(exclude_unset=False, exclude_none=True)
+    if "extra_config" in updates:
+        extra = updates.pop("extra_config")
+        if isinstance(extra, dict):
+            updates.update(extra)
 
     update_configurations(updates)
 
@@ -71,7 +64,9 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
         grid = generate_map(verbose=False)
         start, goal = prepare_endpoints(grid)
         auto_path = create_alternative_path(grid, start, goal)
-        optimal_path, optimal_cost, _ = plan_path(grid, start, goal)
+        optimal_path, optimal_cost, _ = plan_path(
+            grid, start, goal, algorithm=config.DEFAULT_PLANNER
+        )
 
         map_image_in_out = get_project_path(config.OUTPUT_DIR) / "map" / "map.png"
         if map_image_in_out.exists():

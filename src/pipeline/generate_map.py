@@ -19,6 +19,8 @@ def generate_map(verbose: bool = True) -> Grid:
         connectivity=config.CONNECTIVITY,
         elevation_scale=config.MAP_ELEVATION_SCALE,
         elevation_freq=config.MAP_ELEVATION_FREQ,
+        obstacle_freq=config.MAP_OBSTACLE_FREQ,
+        obstacle_threshold=config.MAP_OBSTACLE_THRESHOLD,
     )
 
     _start, _goal = prepare_endpoints(grid)

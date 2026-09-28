@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   browseDirectory,
   checkOutputDir,
@@ -42,6 +42,86 @@ export function ConfigForm({
   const [isBrowsing, setIsBrowsing] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
+  // Advanced Settings state
+  const [planner, setPlanner] = useState<string>(
+    initialConfig?.DEFAULT_PLANNER ?? "ASTAR",
+  );
+  const [solver, setSolver] = useState<string>(
+    initialConfig?.DEFAULT_SOLVER ?? "HIGHS",
+  );
+  const [solverTimeout, setSolverTimeout] = useState<number>(
+    initialConfig?.SOLVER_TIMEOUT_SEC ?? 6000,
+  );
+  const [targetTerrain, setTargetTerrain] = useState<string>(
+    initialConfig?.TARGET_TERRAIN ?? "COMPACTED_SOIL",
+  );
+  const [rhoTerrain, setRhoTerrain] = useState<number>(
+    initialConfig?.RHO_TERRAIN ?? 1.0,
+  );
+  const [rhoObstacle, setRhoObstacle] = useState<number>(
+    initialConfig?.RHO_OBSTACLE ?? 2.5,
+  );
+  const [rhoSlope, setRhoSlope] = useState<number>(
+    initialConfig?.RHO_SLOPE ?? 1.5,
+  );
+  const [maxIspIterations, setMaxIspIterations] = useState<number>(
+    initialConfig?.MAX_ISP_ITERATIONS ?? 50,
+  );
+  const [bboxMargin, setBboxMargin] = useState<number>(
+    initialConfig?.BBOX_MARGIN ?? 2,
+  );
+  const [mapSeed, setMapSeed] = useState<number>(
+    initialConfig?.MAP_DEFAULT_SEED ?? 42,
+  );
+  const [mapElevationScale, setMapElevationScale] = useState<number>(
+    initialConfig?.MAP_ELEVATION_SCALE ?? 2.0,
+  );
+  const [mapElevationFreq, setMapElevationFreq] = useState<number>(
+    initialConfig?.MAP_ELEVATION_FREQ ?? 0.06,
+  );
+  const [mapObstacleFreq, setMapObstacleFreq] = useState<number>(
+    initialConfig?.MAP_OBSTACLE_FREQ ?? 0.05,
+  );
+  const [mapObstacleThreshold, setMapObstacleThreshold] = useState<number>(
+    initialConfig?.MAP_OBSTACLE_THRESHOLD ?? 0.85,
+  );
+
+  useEffect(() => {
+    if (!initialConfig) return;
+    setMapH(initialConfig.MAP_H ?? 64);
+    setMapW(initialConfig.MAP_W ?? 128);
+    setConnectivity(initialConfig.CONNECTIVITY ?? 8);
+    setReductionMethod(initialConfig.DEFAULT_REDUCTION_METHOD ?? "NONE");
+    setUseIncremental(initialConfig.USE_INCREMENTAL_SOLVER ?? false);
+    setOutputDir(initialConfig.OUTPUT_DIR ?? "output");
+    if (initialConfig.DEFAULT_PLANNER) setPlanner(initialConfig.DEFAULT_PLANNER);
+    if (initialConfig.DEFAULT_SOLVER) setSolver(initialConfig.DEFAULT_SOLVER);
+    if (initialConfig.SOLVER_TIMEOUT_SEC !== undefined)
+      setSolverTimeout(initialConfig.SOLVER_TIMEOUT_SEC);
+    if (initialConfig.TARGET_TERRAIN)
+      setTargetTerrain(initialConfig.TARGET_TERRAIN);
+    if (initialConfig.RHO_TERRAIN !== undefined)
+      setRhoTerrain(initialConfig.RHO_TERRAIN);
+    if (initialConfig.RHO_OBSTACLE !== undefined)
+      setRhoObstacle(initialConfig.RHO_OBSTACLE);
+    if (initialConfig.RHO_SLOPE !== undefined)
+      setRhoSlope(initialConfig.RHO_SLOPE);
+    if (initialConfig.MAX_ISP_ITERATIONS !== undefined)
+      setMaxIspIterations(initialConfig.MAX_ISP_ITERATIONS);
+    if (initialConfig.BBOX_MARGIN !== undefined)
+      setBboxMargin(initialConfig.BBOX_MARGIN);
+    if (initialConfig.MAP_DEFAULT_SEED !== undefined)
+      setMapSeed(initialConfig.MAP_DEFAULT_SEED);
+    if (initialConfig.MAP_ELEVATION_SCALE !== undefined)
+      setMapElevationScale(initialConfig.MAP_ELEVATION_SCALE);
+    if (initialConfig.MAP_ELEVATION_FREQ !== undefined)
+      setMapElevationFreq(initialConfig.MAP_ELEVATION_FREQ);
+    if (initialConfig.MAP_OBSTACLE_FREQ !== undefined)
+      setMapObstacleFreq(initialConfig.MAP_OBSTACLE_FREQ);
+    if (initialConfig.MAP_OBSTACLE_THRESHOLD !== undefined)
+      setMapObstacleThreshold(initialConfig.MAP_OBSTACLE_THRESHOLD);
+  }, [initialConfig]);
+
   const [cleaningDirInfo, setCleaningDirInfo] = useState<{
     dir: string;
     fileCount: number;
@@ -59,13 +139,20 @@ export function ConfigForm({
       DEFAULT_REDUCTION_METHOD: reductionMethod,
       USE_INCREMENTAL_SOLVER: useIncremental,
       OUTPUT_DIR: outputDir.trim() || "output",
-      MAP_DEFAULT_SEED: Number(initialConfig?.MAP_DEFAULT_SEED ?? 42),
-      DEFAULT_PLANNER: String(initialConfig?.DEFAULT_PLANNER ?? "ASTAR"),
-      DEFAULT_SOLVER: String(initialConfig?.DEFAULT_SOLVER ?? "HIGHS"),
-      RHO_TERRAIN: Number(initialConfig?.RHO_TERRAIN ?? 1.0),
-      RHO_OBSTACLE: Number(initialConfig?.RHO_OBSTACLE ?? 5.0),
-      RHO_SLOPE: Number(initialConfig?.RHO_SLOPE ?? 10.0),
-      MAX_ISP_ITERATIONS: Number(initialConfig?.MAX_ISP_ITERATIONS ?? 15),
+      MAP_DEFAULT_SEED: Number(mapSeed),
+      DEFAULT_PLANNER: planner,
+      DEFAULT_SOLVER: solver,
+      SOLVER_TIMEOUT_SEC: Number(solverTimeout),
+      TARGET_TERRAIN: targetTerrain,
+      RHO_TERRAIN: Number(rhoTerrain),
+      RHO_OBSTACLE: Number(rhoObstacle),
+      RHO_SLOPE: Number(rhoSlope),
+      MAX_ISP_ITERATIONS: Number(maxIspIterations),
+      BBOX_MARGIN: Number(bboxMargin),
+      MAP_ELEVATION_SCALE: Number(mapElevationScale),
+      MAP_ELEVATION_FREQ: Number(mapElevationFreq),
+      MAP_OBSTACLE_FREQ: Number(mapObstacleFreq),
+      MAP_OBSTACLE_THRESHOLD: Number(mapObstacleThreshold),
     };
   }
 
@@ -203,7 +290,7 @@ export function ConfigForm({
       </div>
 
       <fieldset className="config-fieldset">
-        <legend>1. Pipeline Configuration</legend>
+        <legend>Pipeline Configuration</legend>
 
         <div className="form-grid">
           <div className="form-group">
@@ -325,6 +412,270 @@ export function ConfigForm({
             </div>
           </div>
         </div>
+
+        <details className="advanced-settings-section">
+          <summary className="advanced-settings-summary">
+            <div className="advanced-summary-title-row">
+              <span className="advanced-summary-icon" aria-hidden="true">
+                ▶
+              </span>
+              <div className="advanced-summary-content">
+                <span className="advanced-summary-title">Advanced Settings</span>
+                <span className="advanced-summary-desc">
+                  Planners, solvers, objective weights, iterations &amp; procedural map heuristics
+                </span>
+              </div>
+            </div>
+            <span className="advanced-settings-badge">14 Parameters</span>
+          </summary>
+
+          <div className="advanced-settings-body">
+            <div className="advanced-group">
+              <h4 className="advanced-group-title">Planning &amp; Solver</h4>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label htmlFor="defaultPlanner">
+                    <span>Default Planner</span>
+                    <span className="form-group-hint">Shortest path</span>
+                  </label>
+                  <select
+                    id="defaultPlanner"
+                    value={planner}
+                    onChange={(e) => setPlanner(e.target.value)}
+                  >
+                    <option value="ASTAR">ASTAR</option>
+                    <option value="DIJKSTRA">DIJKSTRA</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="defaultSolver">
+                    <span>MILP Solver</span>
+                    <span className="form-group-hint">Optimization engine</span>
+                  </label>
+                  <select
+                    id="defaultSolver"
+                    value={solver}
+                    onChange={(e) => setSolver(e.target.value)}
+                  >
+                    <option value="HIGHS">HIGHS</option>
+                    <option value="SCIP">SCIP</option>
+                    <option value="CBC">CBC</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="solverTimeout">
+                    <span>Solver Timeout (sec)</span>
+                    <span className="form-group-hint">Per-solve time limit</span>
+                  </label>
+                  <input
+                    id="solverTimeout"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={solverTimeout}
+                    onChange={(e) => setSolverTimeout(Number(e.target.value))}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="advanced-group">
+              <h4 className="advanced-group-title">ISP Weights &amp; Objectives</h4>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label htmlFor="targetTerrain">
+                    <span>Target Terrain</span>
+                    <span className="form-group-hint">Modification target</span>
+                  </label>
+                  <select
+                    id="targetTerrain"
+                    value={targetTerrain}
+                    onChange={(e) => setTargetTerrain(e.target.value)}
+                  >
+                    <option value="HIGHWAY">HIGHWAY</option>
+                    <option value="PAVED_ROAD">PAVED_ROAD</option>
+                    <option value="COMPACTED_SOIL">COMPACTED_SOIL</option>
+                    <option value="GRASSLAND">GRASSLAND</option>
+                    <option value="UNPAVED_TRACK">UNPAVED_TRACK</option>
+                    <option value="SAND">SAND</option>
+                    <option value="FOREST">FOREST</option>
+                    <option value="ROCKY">ROCKY</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="rhoTerrain">
+                    <span>Rho Terrain (ρ_terrain)</span>
+                    <span className="form-group-hint">Weight for terrain modification</span>
+                  </label>
+                  <input
+                    id="rhoTerrain"
+                    type="number"
+                    step={0.1}
+                    min={0}
+                    value={rhoTerrain}
+                    onChange={(e) => setRhoTerrain(Number(e.target.value))}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="rhoObstacle">
+                    <span>Rho Obstacle (ρ_obstacle)</span>
+                    <span className="form-group-hint">Weight for obstacle removal</span>
+                  </label>
+                  <input
+                    id="rhoObstacle"
+                    type="number"
+                    step={0.1}
+                    min={0}
+                    value={rhoObstacle}
+                    onChange={(e) => setRhoObstacle(Number(e.target.value))}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="rhoSlope">
+                    <span>Rho Slope (ρ_slope)</span>
+                    <span className="form-group-hint">Weight for slope leveling</span>
+                  </label>
+                  <input
+                    id="rhoSlope"
+                    type="number"
+                    step={0.1}
+                    min={0}
+                    value={rhoSlope}
+                    onChange={(e) => setRhoSlope(Number(e.target.value))}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="advanced-group">
+              <h4 className="advanced-group-title">Incremental / Algorithm Tuning</h4>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label htmlFor="maxIspIterations">
+                    <span>Max ISP Iterations</span>
+                    <span className="form-group-hint">1–100 cutting planes</span>
+                  </label>
+                  <input
+                    id="maxIspIterations"
+                    type="number"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={maxIspIterations}
+                    onChange={(e) => setMaxIspIterations(Number(e.target.value))}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="bboxMargin">
+                    <span>BBox Margin</span>
+                    <span className="form-group-hint">Min 1 cell buffer</span>
+                  </label>
+                  <input
+                    id="bboxMargin"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={bboxMargin}
+                    onChange={(e) => setBboxMargin(Number(e.target.value))}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="advanced-group">
+              <h4 className="advanced-group-title">Map Generation Tuning</h4>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label htmlFor="mapSeed">
+                    <span>Map Default Seed</span>
+                    <span className="form-group-hint">Noise RNG seed</span>
+                  </label>
+                  <input
+                    id="mapSeed"
+                    type="number"
+                    value={mapSeed}
+                    onChange={(e) => setMapSeed(Number(e.target.value))}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="mapElevationScale">
+                    <span>Elevation Scale</span>
+                    <span className="form-group-hint">Height multiplier</span>
+                  </label>
+                  <input
+                    id="mapElevationScale"
+                    type="number"
+                    step={0.1}
+                    value={mapElevationScale}
+                    onChange={(e) => setMapElevationScale(Number(e.target.value))}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="mapElevationFreq">
+                    <span>Elevation Frequency</span>
+                    <span className="form-group-hint">Perlin terrain frequency</span>
+                  </label>
+                  <input
+                    id="mapElevationFreq"
+                    type="number"
+                    step={0.01}
+                    value={mapElevationFreq}
+                    onChange={(e) => setMapElevationFreq(Number(e.target.value))}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="mapObstacleFreq">
+                    <span>Obstacle Frequency</span>
+                    <span className="form-group-hint">Cluster distribution scale</span>
+                  </label>
+                  <input
+                    id="mapObstacleFreq"
+                    type="number"
+                    step={0.01}
+                    value={mapObstacleFreq}
+                    onChange={(e) => setMapObstacleFreq(Number(e.target.value))}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="mapObstacleThreshold">
+                    <span>Obstacle Threshold</span>
+                    <span className="form-group-hint">Threshold cutoff (0–1)</span>
+                  </label>
+                  <input
+                    id="mapObstacleThreshold"
+                    type="number"
+                    step={0.05}
+                    min={0}
+                    max={1}
+                    value={mapObstacleThreshold}
+                    onChange={(e) => setMapObstacleThreshold(Number(e.target.value))}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
 
         <div className="form-actions-row">
           <div className="primary-actions">

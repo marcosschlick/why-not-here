@@ -1,4 +1,5 @@
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -77,7 +78,10 @@ def update_configurations(updates: dict[str, Any]) -> dict[str, Any]:
         if hasattr(config, submodule_name):
             setattr(getattr(config, submodule_name), key, casted_val)
 
-        persist_parameter_to_file(key, casted_val)
+        # In-memory propagation to all imported src modules
+        for mod_name, mod in list(sys.modules.items()):
+            if (mod_name == "src.config" or mod_name.startswith("src.")) and hasattr(mod, key):
+                setattr(mod, key, casted_val)
 
         if (
             key == "TARGET_TERRAIN"
@@ -88,7 +92,9 @@ def update_configurations(updates: dict[str, Any]) -> dict[str, Any]:
             config.TARGET_SPEED = target_speed
             if hasattr(config, "config_isp"):
                 config.config_isp.TARGET_SPEED = target_speed
-            persist_parameter_to_file("TARGET_SPEED", target_speed)
+            for mod_name, mod in list(sys.modules.items()):
+                if (mod_name == "src.config" or mod_name.startswith("src.")) and hasattr(mod, "TARGET_SPEED"):
+                    mod.TARGET_SPEED = target_speed
 
         applied[key] = casted_val
     return applied

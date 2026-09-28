@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RunRequest(BaseModel):
@@ -8,6 +8,8 @@ class RunRequest(BaseModel):
 
 
 class GenerateMapRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     MAP_H: int = Field(default=64, ge=4, le=1024)
     MAP_W: int = Field(default=128, ge=4, le=1024)
     CONNECTIVITY: int = Field(default=8)
@@ -19,5 +21,7 @@ class GenerateMapRequest(BaseModel):
 
 
 class SolveISPRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     user_path: list[list[int]] | None = None
     config: dict[str, Any] | None = None

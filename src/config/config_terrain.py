@@ -3,11 +3,17 @@ MAX_SLOPE_DEG = 20.0
 
 # Terrain definitions and nominal speeds (m/s)
 TERRAINS = {
+    "HIGHWAY": 2.0,
+    "PAVED_ROAD": 1.5,
     "COMPACTED_SOIL": 1.2,
+    "GRASSLAND": 1.0,
     "GRASS": 1.0,
+    "UNPAVED_TRACK": 0.9,
     "DRY_VEGETATION": 0.8,
     "SAND": 0.6,
+    "FOREST": 0.5,
     "MUD": 0.4,
+    "ROCKY": 0.3,
     "WATER_RIVER": 0.0,
 }
 

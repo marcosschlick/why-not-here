@@ -32,7 +32,9 @@ def run_isp(
     grid = Grid.load(map_json_path)
     start, goal = prepare_endpoints(grid)
 
-    p_star, cost_star, expanded = plan_path(grid, start, goal)
+    p_star, cost_star, expanded = plan_path(
+        grid, start, goal, algorithm=config.DEFAULT_PLANNER
+    )
     if not p_star:
         print("Error: No traversable path found between start and goal.")
         return None
@@ -72,6 +74,13 @@ def run_isp(
             goal,
             p_user,
             reduction_method=config.DEFAULT_REDUCTION_METHOD,
+            bbox_margin=config.BBOX_MARGIN,
+            solver_name=config.DEFAULT_SOLVER,
+            timeout=config.SOLVER_TIMEOUT_SEC,
+            max_iterations=config.MAX_ISP_ITERATIONS,
+            rho_terrain=config.RHO_TERRAIN,
+            rho_obstacle=config.RHO_OBSTACLE,
+            rho_slope=config.RHO_SLOPE,
         )
     else:
         start_time = time.perf_counter()
@@ -83,7 +92,11 @@ def run_isp(
             margin=config.BBOX_MARGIN,
         )
         solver = ISPSolver(
-            solver_name=config.DEFAULT_SOLVER, timeout=config.SOLVER_TIMEOUT_SEC
+            solver_name=config.DEFAULT_SOLVER,
+            timeout=config.SOLVER_TIMEOUT_SEC,
+            rho_terrain=config.RHO_TERRAIN,
+            rho_obstacle=config.RHO_OBSTACLE,
+            rho_slope=config.RHO_SLOPE,
         )
         success, modifications, cost = solver.solve(
             grid, start, goal, p_user, reduced_graph=reduced_graph

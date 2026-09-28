@@ -8,10 +8,17 @@ export interface SystemConfig {
   MAP_DEFAULT_SEED: number;
   DEFAULT_PLANNER?: string;
   DEFAULT_SOLVER?: string;
+  SOLVER_TIMEOUT_SEC?: number;
+  TARGET_TERRAIN?: string;
   RHO_TERRAIN?: number;
   RHO_OBSTACLE?: number;
   RHO_SLOPE?: number;
   MAX_ISP_ITERATIONS?: number;
+  BBOX_MARGIN?: number;
+  MAP_ELEVATION_SCALE?: number;
+  MAP_ELEVATION_FREQ?: number;
+  MAP_OBSTACLE_FREQ?: number;
+  MAP_OBSTACLE_THRESHOLD?: number;
   [key: string]: unknown;
 }
 
