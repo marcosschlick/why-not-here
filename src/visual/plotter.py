@@ -1,0 +1,126 @@
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+
+from ..grid import Grid
+from ..isp import SemanticModifications
+from .layers import (
+    create_grid_rgb_matrix,
+    draw_endpoints,
+    draw_modifications,
+    draw_path,
+    draw_steep_slopes,
+    find_steep_cells,
+)
+from .legend import build_tactical_legend
+from .style import (
+    OPTIMAL_PATH_COLOR,
+    USER_PATH_COLOR,
+    compute_layout,
+)
+
+
+def render_tactical_map(
+    grid: Grid,
+    optimal_path: list[tuple[int, int]] | None = None,
+    user_path: list[tuple[int, int]] | None = None,
+    modifications: SemanticModifications | None = None,
+    modified_grid: Grid | None = None,
+    highlight_steep_slopes: bool = True,
+    title: str = "Tactical Grid Map",
+    save_path: str | Path | None = None,
+    show: bool = False,
+    dpi: int = 150,
+    endpoints: tuple[tuple[int, int], tuple[int, int]] | None = None,
+) -> plt.Figure:
+    target_grid = modified_grid if modified_grid is not None else grid
+    layout = compute_layout(target_grid.h, target_grid.w)
+
+    fig, ax = plt.subplots(figsize=(9.0, 7.8), dpi=dpi)
+    rgb_img = create_grid_rgb_matrix(target_grid)
+    ax.imshow(rgb_img, origin="upper", interpolation="nearest")
+
+    if layout["show_grid"]:
+        ax.set_xticks(np.arange(-0.5, target_grid.w, 1), minor=True)
+        ax.set_yticks(np.arange(-0.5, target_grid.h, 1), minor=True)
+        ax.grid(
+            which="minor",
+            color="white",
+            linestyle="-",
+            linewidth=layout["grid_lw"],
+            alpha=layout["grid_alpha"],
+        )
+        ax.tick_params(which="minor", size=0)
+
+    step = layout["tick_step"]
+    ax.set_xticks(range(0, target_grid.w, step))
+    ax.set_yticks(range(0, target_grid.h, step))
+    ax.set_title(title, fontsize=12, fontweight="bold", pad=12)
+    ax.set_xlabel("Column (j)", fontsize=10)
+    ax.set_ylabel("Row (i)", fontsize=10)
+
+    has_steep = False
+    if highlight_steep_slopes:
+        steep_cells = find_steep_cells(target_grid)
+        if steep_cells:
+            has_steep = True
+            draw_steep_slopes(ax, steep_cells)
+
+    if modifications is not None:
+        draw_modifications(ax, modifications, path_lw=layout["path_lw"])
+
+    if optimal_path:
+        draw_path(
+            ax=ax,
+            path=optimal_path,
+            color=OPTIMAL_PATH_COLOR,
+            label="Optimal Path p*",
+            linestyle="-",
+            linewidth=layout["path_lw"],
+            marker_size=layout["marker_size"],
+            zorder=5,
+        )
+
+    if user_path:
+        draw_path(
+            ax=ax,
+            path=user_path,
+            color=USER_PATH_COLOR,
+            label="Alternative Path p'",
+            linestyle="--",
+            linewidth=layout["path_lw"],
+            marker_size=layout["marker_size"],
+            zorder=5,
+        )
+
+    if optimal_path:
+        draw_endpoints(ax, optimal_path[0], optimal_path[-1], size=layout["endpoint_s"])
+    elif user_path:
+        draw_endpoints(ax, user_path[0], user_path[-1], size=layout["endpoint_s"])
+    elif endpoints:
+        draw_endpoints(ax, endpoints[0], endpoints[1], size=layout["endpoint_s"])
+
+    build_tactical_legend(
+        ax=ax,
+        grid=target_grid,
+        has_steep=has_steep,
+        modifications=modifications,
+    )
+
+    plt.tight_layout()
+
+    if save_path:
+        path = Path(save_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(path, bbox_inches="tight", dpi=dpi)
+        if not show:
+            plt.close(fig)
+
+    if show:
+        plt.show()
+
+    return fig
