@@ -1,0 +1,28 @@
+services:
+  backend:
+    build: .
+    container_name: tcc_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./src:/app/src
+      - ./web/api:/app/web/api
+      - ./maps:/app/maps
+      - ./output:/app/output
+      - ./results:/app/results
+
+  frontend:
+    build: ./web/frontend
+    container_name: tcc_frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_BACKEND_URL=http://backend:8000
+    volumes:
+      - ./web/frontend/src:/app/src
+      - /app/node_modules
+    depends_on:
+      - backend

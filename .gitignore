@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+docs/*.pdf
+maps/
+output/
+results/
+.ruff_cache

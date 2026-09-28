@@ -1,0 +1,10 @@
+cvxpy
+highspy
+numpy
+scipy
+matplotlib
+Pillow
+fastapi
+uvicorn
+PyQt6
+ruff
