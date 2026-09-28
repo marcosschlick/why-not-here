@@ -1,0 +1,24 @@
+# Random seed
+MAP_DEFAULT_SEED = 42
+
+# Elevation parameters
+MAP_ELEVATION_SCALE = 2.0
+MAP_ELEVATION_FREQ = 0.06
+MAP_ELEVATION_OCTAVES = 3
+
+# Biome parameters
+MAP_BIOME_FREQ = 0.03
+
+MAP_BIOME_OCTAVES = 2
+MAP_BIOME_THRESHOLDS = {
+    "WATER_RIVER": 0.20,
+    "MUD": 0.32,
+    "SAND": 0.45,
+    "DRY_VEGETATION": 0.60,
+    "GRASS": 0.80,
+    "COMPACTED_SOIL": 1.00,
+}
+
+# Obstacle cluster parameters
+MAP_OBSTACLE_FREQ = 0.05
+MAP_OBSTACLE_THRESHOLD = 0.85
