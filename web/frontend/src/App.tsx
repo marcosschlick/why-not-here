@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { AboutModal } from "./components/AboutModal";
 import { ConfigForm } from "./components/ConfigForm";
 import { QueuePanel } from "./components/QueuePanel";
 import { ResultsView } from "./components/ResultsView";
 import { RouteCanvas } from "./components/RouteCanvas";
+import { formatReductionMethod } from "./utils/formatters";
+import { Topbar } from "./components/Topbar";
 import { fetchConfig, generateMap, solveISP } from "./services/api";
 import type { LastResult, MapData, QueueItem, SystemConfig } from "./types";
 
@@ -33,6 +36,7 @@ export function App() {
     useState<number>(0);
   const [interactiveQueueMode, setInteractiveQueueMode] =
     useState<boolean>(true);
+  const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (!isSolvingISP) return;
@@ -300,54 +304,25 @@ export function App() {
 
   return (
     <div className="app-layout">
-      <header className="app-topbar">
-        <div className="topbar-brand">
-          <div className="brand-text">
-            <h1>Trajectory Planning &amp; ISP</h1>
-            <span className="brand-tagline">
-              Iterative Semantic Pathing &bull; Closed-Loop Solver
-            </span>
-          </div>
-        </div>
-
-        <nav className="topbar-nav" role="tablist" aria-label="Workflow Steps">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={currentStep === "config"}
-            className={`nav-tab ${currentStep === "config" ? "active" : ""}`}
-            onClick={() => setCurrentStep("config")}
-          >
-            <span className="nav-step-num">1</span>
-            <span>Configuration</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={currentStep === "route_canvas"}
-            className={`nav-tab ${currentStep === "route_canvas" ? "active" : ""}`}
-            onClick={() => mapData && setCurrentStep("route_canvas")}
-            disabled={!mapData}
-          >
-            <span className="nav-step-num">2</span>
-            <span>Route Definition</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={currentStep === "results"}
-            className={`nav-tab ${currentStep === "results" ? "active" : ""}`}
-            onClick={() =>
-              (lastResult || (isBatchMode && queue.length > 0)) &&
-              setCurrentStep("results")
-            }
-            disabled={!lastResult && !(isBatchMode && queue.length > 0)}
-          >
-            <span className="nav-step-num">3</span>
-            <span>Results &amp; Metrics</span>
-          </button>
-        </nav>
-      </header>
+      <Topbar
+        currentStep={currentStep}
+        onSelectStep={setCurrentStep}
+        hasMapData={Boolean(mapData)}
+        hasResults={Boolean(lastResult || (isBatchMode && queue.length > 0))}
+        activeReductionMethod={
+          isBatchMode && queue[activeBatchResultIndex]
+            ? queue[activeBatchResultIndex].config.DEFAULT_REDUCTION_METHOD
+            : mapData?.config.DEFAULT_REDUCTION_METHOD ||
+              config?.DEFAULT_REDUCTION_METHOD
+        }
+        isIncrementalActive={
+          isBatchMode && queue[activeBatchResultIndex]
+            ? queue[activeBatchResultIndex].config.USE_INCREMENTAL_SOLVER
+            : mapData?.config.USE_INCREMENTAL_SOLVER ||
+              config?.USE_INCREMENTAL_SOLVER
+        }
+        onOpenAbout={() => setIsAboutOpen(true)}
+      />
 
       <main className="main-content-wrapper">
         {errorMessage && (
@@ -485,6 +460,7 @@ export function App() {
               result={lastResult}
               artifacts={artifacts}
               cacheKey={cacheKey}
+              config={mapData?.config || config}
               onNewRun={() => {
                 setIsBatchMode(false);
                 setCurrentStep("config");
@@ -525,10 +501,42 @@ export function App() {
           <div className="loading-overlay-card">
             <div className="loading-spinner" />
             <h3>Solving ISP Model...</h3>
+            {(() => {
+              const activeConfig =
+                isBatchMode && queue[activeBatchResultIndex]
+                  ? queue[activeBatchResultIndex].config
+                  : mapData?.config || config;
+              if (!activeConfig) return null;
+              const reduction = formatReductionMethod(
+                activeConfig.DEFAULT_REDUCTION_METHOD ||
+                  (activeConfig.GRAPH_REDUCTION_METHOD as string),
+              );
+              const solverMode = activeConfig.USE_INCREMENTAL_SOLVER
+                ? "Iterative / Incremental MILP"
+                : "Standard Monolithic MILP";
+              const h = activeConfig.MAP_H ?? 20;
+              const w = activeConfig.MAP_W ?? 20;
+              const seed = activeConfig.MAP_DEFAULT_SEED ?? 42;
+              return (
+                <div className="loading-params-summary">
+                  <span className="loading-param-chip">
+                    Reduction Method: {reduction}
+                  </span>
+                  <span className="loading-param-chip">
+                    Solver Mode: {solverMode}
+                  </span>
+                  <span className="loading-param-chip">
+                    Grid Dimension: {w}×{h} (Seed: {seed})
+                  </span>
+                </div>
+              );
+            })()}
             <p className="loading-overlay-desc">
-              Formulating and solving mixed-integer linear programming (MILP).
-              For large grids or unreduced graphs, this optimization may take
-              between 30 seconds and a few minutes. Please wait...
+              Solving ISP formulation via Mixed-Integer Linear Programming
+              (MILP). Because the inverse problem under discrete terrain
+              attributes is NP-hard, solving large grids or runs without graph
+              reduction explores a large combinatorial space and may take
+              several minutes depending on hardware. Please wait...
             </p>
             <div className="loading-elapsed-timer">
               Elapsed time: <strong>{elapsedTime}s</strong>
@@ -536,6 +544,8 @@ export function App() {
           </div>
         </div>
       )}
+
+      <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
     </div>
   );
 }

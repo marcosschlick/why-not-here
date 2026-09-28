@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import type { LastResult, QueueItem } from "../types";
+import type { LastResult, QueueItem, SystemConfig } from "../types";
+import { SolverConfigBadges } from "./SolverConfigBadges";
+import { formatReductionMethod } from "../utils/formatters";
 
 interface ResultsViewProps {
   result: LastResult | null;
@@ -10,6 +12,7 @@ interface ResultsViewProps {
   activeBatchIndex?: number;
   onSelectBatchIndex?: (index: number) => void;
   elapsedTime?: number;
+  config?: SystemConfig | null;
 }
 
 function ArtifactCard({
@@ -89,6 +92,7 @@ export function ResultsView({
   activeBatchIndex,
   onSelectBatchIndex,
   elapsedTime,
+  config,
 }: ResultsViewProps) {
   const [internalBatchIndex, setInternalBatchIndex] = useState<number>(0);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -108,6 +112,9 @@ export function ResultsView({
 
   const activeBatchItem =
     isBatch && batchQueue ? batchQueue[currentBatchIdx] : null;
+
+  const currentConfig =
+    (isBatch && activeBatchItem ? activeBatchItem.config : config) ?? null;
 
   const currentResult: LastResult | null = isBatch
     ? (activeBatchItem?.result ?? null)
@@ -259,10 +266,23 @@ export function ResultsView({
               ? `Solving Run ${currentBatchIdx + 1} of ${batchQueue!.length}...`
               : `Run ${currentBatchIdx + 1} Pending in Queue`}
           </h3>
+          {isSolving && activeBatchItem?.config && (
+            <div className="loading-params-summary">
+              <span className="loading-param-chip">
+                Reduction Method: {formatReductionMethod(activeBatchItem.config.DEFAULT_REDUCTION_METHOD)}
+              </span>
+              <span className="loading-param-chip">
+                Solver Mode: {activeBatchItem.config.USE_INCREMENTAL_SOLVER ? "Iterative / Incremental MILP" : "Standard Monolithic MILP"}
+              </span>
+              <span className="loading-param-chip">
+                Grid Dimension: {activeBatchItem.config.MAP_W}×{activeBatchItem.config.MAP_H} (Seed: {activeBatchItem.config.MAP_DEFAULT_SEED})
+              </span>
+            </div>
+          )}
           <p className="batch-pending-desc">
             {isSolving
-              ? `Formulating and solving mixed-integer linear programming (MILP) for grid ${activeBatchItem?.config.MAP_H}x${activeBatchItem?.config.MAP_W} (Seed ${activeBatchItem?.config.MAP_DEFAULT_SEED}). This optimization may take between 30 seconds and a few minutes depending on graph reduction. Results will automatically render here once complete.`
-              : `This configuration is queued and will execute automatically after preceding runs complete. Select any completed run above to inspect its metrics and tactical artifacts.`}
+              ? "Solving ISP formulation via Mixed-Integer Linear Programming (MILP). Because the inverse problem under discrete terrain attributes is NP-hard, solving large grids or runs without graph reduction explores a large combinatorial space and may take several minutes depending on hardware. Please wait..."
+              : "This configuration is queued and will execute automatically after preceding runs complete. Select any completed run above to inspect its metrics and tactical artifacts."}
           </p>
           {isSolving && typeof elapsedTime === "number" && (
             <div className="batch-elapsed-timer">
@@ -271,6 +291,8 @@ export function ResultsView({
           )}
         </div>
       )}
+
+      {currentConfig && <SolverConfigBadges config={currentConfig} />}
 
       {currentResult && (
         <div className="metrics-grid">
@@ -286,17 +308,17 @@ export function ResultsView({
             </span>
           </div>
 
-          <div className="metric-card">
+          <div className="metric-card optimal-card">
             <span className="metric-label">Initial Cost (A*)</span>
             <span className="metric-value">{origCostDisplay}</span>
           </div>
 
-          <div className="metric-card">
+          <div className="metric-card alternative-card">
             <span className="metric-label">Alternative Cost</span>
             <span className="metric-value">{altCostDisplay}</span>
           </div>
 
-          <div className="metric-card span-all">
+          <div className="metric-card span-all modifications-card">
             <span className="metric-label">Semantic Modifications Applied</span>
             <div className="modifications-badges">
               <span className="mod-badge terrain">

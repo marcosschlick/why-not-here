@@ -24,10 +24,10 @@ export function ExecutionPanel({
   return (
     <form onSubmit={handleSubmit} className="execution-form">
       <fieldset>
-        <legend>Execução</legend>
+        <legend>Execution</legend>
         <div className="execution-controls">
           <div className="form-group inline">
-            <label htmlFor="runsInput">Quantidade de execuções</label>
+            <label htmlFor="runsInput">Number of runs</label>
             <input
               id="runsInput"
               type="number"
@@ -39,12 +39,12 @@ export function ExecutionPanel({
             />
           </div>
           <button type="submit" disabled={isRunning}>
-            Executar Pipeline
+            Execute Pipeline
           </button>
         </div>
         <div className="execution-status">
           <strong>Status: </strong>
-          <span>{statusText || "Pronto"}</span>
+          <span>{statusText || "Ready"}</span>
         </div>
       </fieldset>
     </form>

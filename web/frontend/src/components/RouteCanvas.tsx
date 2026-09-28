@@ -199,7 +199,7 @@ export function RouteCanvas({
         if (idx === 0) ctx.moveTo(cx, cy);
         else ctx.lineTo(cx, cy);
       }
-      ctx.strokeStyle = "rgba(200, 225, 250, 0.65)";
+      ctx.strokeStyle = "rgba(219, 84, 97, 0.35)";
       ctx.lineWidth = Math.max(3, effectiveCellSize * 0.7);
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -213,13 +213,13 @@ export function RouteCanvas({
         if (idx === 0) ctx.moveTo(cx, cy);
         else ctx.lineTo(cx, cy);
       }
-      ctx.strokeStyle = "#327DE1";
+      ctx.strokeStyle = "#DB5461";
       ctx.lineWidth = Math.max(2, effectiveCellSize * 0.4);
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.stroke();
 
-      ctx.fillStyle = "#327DE1";
+      ctx.fillStyle = "#E85D6B";
       for (const [r, c] of userPath) {
         const cx = c * effectiveCellSize + effectiveCellSize / 2;
         const cy = r * effectiveCellSize + effectiveCellSize / 2;
@@ -247,14 +247,14 @@ export function RouteCanvas({
     ctx.lineTo(0, sRadius);
     ctx.lineTo(-sRadius, 0);
     ctx.closePath();
-    ctx.fillStyle = "#00B0FF";
+    ctx.fillStyle = "#327DE1";
     ctx.fill();
-    ctx.strokeStyle = "#003366";
+    ctx.strokeStyle = "#324B64";
     ctx.lineWidth = 2;
     ctx.stroke();
 
     if (effectiveCellSize >= 12) {
-      ctx.fillStyle = "#003366";
+      ctx.fillStyle = "#ffffff";
       ctx.font = `bold ${Math.max(8, effectiveCellSize * 0.6)}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -271,12 +271,12 @@ export function RouteCanvas({
     ctx.arc(gx, gy, gRadius, 0, Math.PI * 2);
     ctx.fillStyle = "#FFD700";
     ctx.fill();
-    ctx.strokeStyle = "#664400";
+    ctx.strokeStyle = "#324B64";
     ctx.lineWidth = 2;
     ctx.stroke();
 
     if (effectiveCellSize >= 12) {
-      ctx.fillStyle = "#664400";
+      ctx.fillStyle = "#324B64";
       ctx.font = `bold ${Math.max(8, effectiveCellSize * 0.6)}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -287,7 +287,7 @@ export function RouteCanvas({
     if (hoveredCell) {
       const [hr, hc] = hoveredCell;
       if (hr >= 0 && hr < h && hc >= 0 && hc < w) {
-        ctx.strokeStyle = "#C8E1FA";
+        ctx.strokeStyle = "#327DE1";
         ctx.lineWidth = 2;
         const hx = Math.round(hc * effectiveCellSize);
         const hy = Math.round(hr * effectiveCellSize);
@@ -646,7 +646,7 @@ export function RouteCanvas({
         <div className="cell-inspector">{hoveredInfo}</div>
         <div className="canvas-legend">
           <span className="legend-item">
-            <span className="legend-color" style={{ background: "#00B0FF" }} />
+            <span className="legend-color" style={{ background: "#327DE1" }} />
             Start (S)
           </span>
           <span className="legend-item">
@@ -654,8 +654,8 @@ export function RouteCanvas({
             Goal (G)
           </span>
           <span className="legend-item">
-            <span className="legend-color" style={{ background: "#327DE1" }} />
-            Selected Route
+            <span className="legend-color" style={{ background: "#DB5461" }} />
+            Alternative Route (p&apos;)
           </span>
           <span className="legend-item">
             <span className="legend-color" style={{ background: "#0585E6" }} />
