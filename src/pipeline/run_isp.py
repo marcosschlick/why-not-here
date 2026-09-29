@@ -2,7 +2,12 @@ import time
 
 from src import config
 from src.grid.grid import Grid
-from src.incremental import ClosedLoopResult, ISPValidator, solve_closed_loop
+from src.incremental import (
+    ClosedLoopResult,
+    ISPValidator,
+    solve_closed_loop,
+    validate_global_optimality,
+)
 from src.isp.solver import ISPSolver
 from src.planning import plan_path
 from src.reduction import create_reduced_graph
@@ -98,13 +103,32 @@ def run_isp(
             rho_obstacle=config.RHO_OBSTACLE,
             rho_slope=config.RHO_SLOPE,
         )
-        success, modifications, cost = solver.solve(
+        success, modifications, obj_val = solver.solve(
             grid, start, goal, p_user, reduced_graph=reduced_graph
         )
         elapsed = time.perf_counter() - start_time
-        explanation = ISPValidator.generate_explanation_text(
-            modifications if success else None, grid
-        )
+
+        final_alt_cost = cost_user_orig
+        if success and modifications is not None:
+            is_globally_optimal, _, p_cost, _ = validate_global_optimality(
+                grid, start, goal, p_user, modifications
+            )
+            final_alt_cost = p_cost
+            if not is_globally_optimal:
+                solver_status = "SUBGRAPH_OPTIMAL_ONLY" if reduced_graph is not None else "SUBOPTIMAL"
+                success = False
+            else:
+                solver_status = "OPTIMAL"
+        else:
+            solver_status = "FAILED"
+
+        if success and modifications is not None:
+            explanation = ISPValidator.generate_explanation_text(modifications, grid)
+        else:
+            explanation = (
+                "A rota alternativa p' não pôde ser tornada ótima pelo planejador "
+                "no domínio de intervenções permitidas."
+            )
         cost_baseline = ISPValidator.generate_cost_baseline_justification(
             cost_star,
             cost_user_orig,
@@ -117,9 +141,9 @@ def run_isp(
             competing_paths_count=1,
             original_optimal_path=p_star if p_star else [],
             original_optimal_cost=cost_star,
-            final_alternative_cost=cost,
+            final_alternative_cost=final_alt_cost,
             runtime_sec=elapsed,
-            solver_status="OPTIMAL" if success else "FAILED",
+            solver_status=solver_status,
             reduction_method=config.DEFAULT_REDUCTION_METHOD,
             cost_baseline_text=cost_baseline,
         )

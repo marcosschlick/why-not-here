@@ -33,6 +33,7 @@ class BaseISPSolver:
         self.rho_obstacle = rho_obstacle
         self.rho_slope = rho_slope
         self.epsilon_l1 = epsilon_l1
+        self.last_solver_status: str | None = None
 
     def _select_solver(self) -> str | None:
         if self.solver_name in cp.installed_solvers():
@@ -64,6 +65,7 @@ class BaseISPSolver:
         solver = self._select_solver()
 
         if solver is None:
+            self.last_solver_status = "SOLVER_NOT_FOUND"
             return False, float("inf")
 
         solver_kwargs = {}
@@ -74,7 +76,9 @@ class BaseISPSolver:
 
         try:
             problem.solve(solver=solver, **solver_kwargs)
-        except (cp.SolverError, ValueError, TypeError, RuntimeError):
+            self.last_solver_status = str(problem.status)
+        except (cp.SolverError, ValueError, TypeError, RuntimeError) as e:
+            self.last_solver_status = f"SOLVER_ERROR: {e}"
             return False, float("inf")
 
         if (

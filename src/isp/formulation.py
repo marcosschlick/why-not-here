@@ -58,9 +58,11 @@ def compute_affine_edge_costs(
 
     cross_items: list[tuple[int, int, int, float]] = []
 
+    max_speed = max(grid.speeds.values()) if (grid.speeds and len(grid.speeds) > 0) else V_MAX
+
     for k, (u, v) in enumerate(isp.edges):
         d_uv = grid.get_distance(u, v)
-        w_min[k] = d_uv / V_MAX
+        w_min[k] = d_uv / max_speed
 
         if custom_edge_costs and (u, v) in custom_edge_costs:
             c_base[k] = custom_edge_costs[(u, v)]
@@ -124,14 +126,14 @@ def compute_affine_edge_costs(
                 delta_u = (
                     (d_uv / 2.0) * ((1.0 / v_u_eff) - (1.0 / v_target)) * slope_pen
                 )
-                if delta_u > 1e-6:
+                if abs(delta_u) > 1e-6:
                     cross_items.append((k, t_idx, s_idx, delta_u))
             if v in isp.terrain_to_idx:
                 t_idx = isp.terrain_to_idx[v]
                 delta_v = (
                     (d_uv / 2.0) * ((1.0 / v_v_eff) - (1.0 / v_target)) * slope_pen
                 )
-                if delta_v > 1e-6:
+                if abs(delta_v) > 1e-6:
                     cross_items.append((k, t_idx, s_idx, delta_v))
 
     return w_min, c_base, M_terrain, M_obs, M_slope, M_slope_phys, cross_items
@@ -167,7 +169,7 @@ def build_base_formulation(
         edge = (alternative_path[r], alternative_path[r + 1])
         if edge not in isp.edge_to_idx:
             return None
-        x_alt[isp.edge_to_idx[edge]] = 1.0
+        x_alt[isp.edge_to_idx[edge]] += 1.0
 
     z_terrain = (
         cp.Variable(isp.num_terrain_vars, boolean=True)
@@ -220,6 +222,13 @@ def build_base_formulation(
     )
     if cross_term is not None:
         w_prime = w_prime + cross_term
+
+    if z_obstacle is not None:
+        extra_constraints.append(z_obstacle == 1.0)
+    if z_slope is not None:
+        for (u, v), s_idx in isp.slope_to_idx.items():
+            if abs(grid.get_slope(u, v)) > grid.max_slope_deg:
+                extra_constraints.append(z_slope[s_idx] == 1.0)
 
     obj_terms = []
     if z_terrain is not None:

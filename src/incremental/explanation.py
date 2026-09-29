@@ -15,8 +15,11 @@ TERRAIN_NAMES_PT = {
 def generate_explanation_text(
     modifications: SemanticModifications | None,
     grid: Grid | None = None,
+    fallback_reason: str | None = None,
 ) -> str:
     if modifications is None:
+        if fallback_reason:
+            return fallback_reason
         return "Nenhuma intervenção viável foi encontrada para tornar a rota alternativa p' ótima."
 
     has_terrain = bool(modifications.terrain_nodes)
@@ -45,12 +48,12 @@ def generate_explanation_text(
             details = ", ".join(f"{cnt} de {name}" for name, cnt in counts.items())
             lines.append(
                 f"- Pavimentar {len(modifications.terrain_nodes)} células de terreno lento "
-                f"({details}) para o padrão de alta velocidade (asfalto)."
+                f"({details}) para o padrão de referência (solo compactado)."
             )
         else:
             lines.append(
                 f"- Pavimentar {len(modifications.terrain_nodes)} células com terrenos degradados "
-                f"para o patamar de referência de alta velocidade (asfalto)."
+                f"para o patamar de referência (solo compactado)."
             )
 
     if has_obstacle:

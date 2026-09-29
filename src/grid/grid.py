@@ -59,7 +59,10 @@ class Grid:
         if self.get_cell(u).is_blocked or self.get_cell(v).is_blocked:
             return False
 
-        return abs(self.get_slope(u, v)) <= self.max_slope_deg
+        if abs(self.get_slope(u, v)) > self.max_slope_deg:
+            return False
+
+        return self.get_velocity(u, v) > 0.0
 
     def get_velocity(self, u: tuple[int, int], v: tuple[int, int]) -> float:
         v_u = self.speeds.get(self.get_cell(u).terrain, 0.0)
@@ -78,6 +81,8 @@ class Grid:
         if not self.is_traversable(u, v):
             return float("inf")
         vel = self.get_velocity(u, v)
+        if vel <= 0.0:
+            return float("inf")
         base_cost = self.get_distance(u, v) / vel
         slope_factor = 1.0 + self.get_slope_penalty(u, v)
         return base_cost * slope_factor

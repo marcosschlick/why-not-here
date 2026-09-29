@@ -54,9 +54,6 @@ class ISPSolver(BaseISPSolver):
         if formulation is None:
             return False, None, float("inf")
 
-        if not formulation.obj_terms:
-            return True, SemanticModifications([], [], []), 0.0
-
         num_nodes = len(formulation.isp.nodes)
         num_edges = len(formulation.isp.edges)
 
@@ -77,11 +74,15 @@ class ISPSolver(BaseISPSolver):
             B_T @ pi <= formulation.w_prime,
             formulation.w_prime @ formulation.x_alt == b_vec @ pi,
             formulation.w_prime >= formulation.w_min,
-            formulation.w_prime @ formulation.x_alt <= formulation.isp.big_m - 1.0,
             pi[goal_idx] == 0.0,
         ] + formulation.extra_constraints
 
-        problem = cp.Problem(cp.Minimize(cp.sum(formulation.obj_terms)), constraints)
+        obj_expr = (
+            cp.sum(formulation.obj_terms)
+            if formulation.obj_terms
+            else cp.Constant(0.0)
+        )
+        problem = cp.Problem(cp.Minimize(obj_expr), constraints)
         success, cost = self._solve_milp(problem)
         if not success:
             return False, None, float("inf")

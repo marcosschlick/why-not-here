@@ -68,6 +68,26 @@ class ClosedLoopISPSolver:
         )
         start_time = time.perf_counter()
 
+        is_valid, status, msg = validate_alternative_path(
+            full_grid, start, goal, alternative_path
+        )
+        if not is_valid:
+            p_star, cost_p_star, _ = astar(full_grid, start, goal)
+            return ClosedLoopResult(
+                success=False,
+                modifications=None,
+                explanation_text=msg or "",
+                iterations=0,
+                competing_paths_count=0,
+                original_optimal_path=p_star if p_star else [],
+                original_optimal_cost=cost_p_star,
+                final_alternative_cost=float("inf"),
+                runtime_sec=time.perf_counter() - start_time,
+                solver_status=status or "INVALID_ALTERNATIVE_PATH",
+                reduction_method=method,
+                cost_baseline_text="",
+            )
+
         p_star, cost_p_star, _ = astar(full_grid, start, goal)
         cost_p_prime_init = ISPValidator.compute_path_cost(full_grid, alternative_path)
         baseline_text = generate_cost_baseline_justification(
@@ -98,20 +118,6 @@ class ClosedLoopISPSolver:
                 cost_baseline_text=baseline_text,
             )
 
-        is_valid, status, msg = validate_alternative_path(
-            full_grid, start, goal, alternative_path
-        )
-        if not is_valid:
-            return make_res(
-                False,
-                None,
-                msg or "",
-                0,
-                0,
-                float("inf"),
-                status or "INVALID_ALTERNATIVE_PATH",
-            )
-
         if start == goal and len(alternative_path) == 1:
             return make_res(
                 True,
@@ -133,7 +139,7 @@ class ClosedLoopISPSolver:
                 geom_msg or "",
                 0,
                 1,
-                float("inf"),
+                cost_p_prime_init,
                 geom_status or "GEOMETRICALLY_INFEASIBLE",
             )
 
@@ -161,7 +167,8 @@ class ClosedLoopISPSolver:
         cost_p_prime = float("inf")
 
         for iteration in range(1, self.max_iterations + 1):
-            if time.perf_counter() - start_time > self.global_timeout:
+            elapsed = time.perf_counter() - start_time
+            if elapsed >= self.global_timeout:
                 return make_res(
                     False,
                     delta,
@@ -172,6 +179,8 @@ class ClosedLoopISPSolver:
                     "TIMEOUT",
                 )
 
+            step_solver.timeout = max(0.1, min(self.timeout, self.global_timeout - elapsed))
+
             milp_ok, delta, _ = step_solver.solve_step(
                 full_grid,
                 start,
@@ -181,6 +190,17 @@ class ClosedLoopISPSolver:
                 reduced_graph=reduced_graph,
             )
 
+            if time.perf_counter() - start_time >= self.global_timeout and not milp_ok:
+                return make_res(
+                    False,
+                    delta,
+                    "Tempo limite global de execução excedido.",
+                    iteration,
+                    len(Q),
+                    cost_p_prime,
+                    "TIMEOUT",
+                )
+
             if not milp_ok or delta is None:
                 return make_res(
                     False,
@@ -188,7 +208,7 @@ class ClosedLoopISPSolver:
                     "Nenhuma intervenção viável encontrada pelo solver MILP.",
                     iteration,
                     len(Q),
-                    float("inf"),
+                    cost_p_prime_init,
                     "INFEASIBLE_OR_FAILED",
                 )
 

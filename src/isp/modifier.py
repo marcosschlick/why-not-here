@@ -14,6 +14,7 @@ def apply_semantic_modifications(
         connectivity=grid.connectivity,
         max_slope_deg=grid.max_slope_deg,
     )
+    new_grid.speeds = dict(grid.speeds)
 
     new_grid.load_terrain_matrix(grid.terrain)
     new_grid.load_elevation_matrix(grid.elevation)
