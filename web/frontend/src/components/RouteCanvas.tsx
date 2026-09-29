@@ -6,11 +6,16 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type { MapData } from "../types";
+import {
+  connectPoints,
+  constrainDirection,
+  type GridPoint,
+} from "../utils/geometry";
 
 interface RouteCanvasProps {
   mapData: MapData;
-  userPath: [number, number][];
-  onPathChange: (path: [number, number][]) => void;
+  userPath: GridPoint[];
+  onPathChange: (path: GridPoint[]) => void;
   onSolve: () => void;
   isSolving: boolean;
   onCancel?: () => void;
@@ -42,32 +47,6 @@ const GOAL_EDGE_RGB: Rgb = [102, 68, 0];
 const USER_PATH_RGB: Rgb = [255, 23, 68];
 const GRID_RGB: Rgb = [255, 255, 255];
 
-function connectPoints(
-  p1: [number, number],
-  p2: [number, number],
-  connectivity: number,
-): [number, number][] {
-  let [r, c] = p1;
-  const [rEnd, cEnd] = p2;
-  const pts: [number, number][] = [];
-  let safety = 0;
-
-  while ((r !== rEnd || c !== cEnd) && safety < 10000) {
-    safety++;
-    pts.push([r, c]);
-    const dr = rEnd > r ? 1 : rEnd < r ? -1 : 0;
-    const dc = cEnd > c ? 1 : cEnd < c ? -1 : 0;
-    if (connectivity === 4 && dr !== 0 && dc !== 0) {
-      r += dr;
-    } else {
-      r += dr;
-      c += dc;
-    }
-  }
-  pts.push([rEnd, cEnd]);
-  return pts;
-}
-
 export function RouteCanvas({
   mapData,
   userPath,
@@ -83,9 +62,14 @@ export function RouteCanvas({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
-  const [hoveredCell, setHoveredCell] = useState<[number, number] | null>(null);
+  const [hoveredCell, setHoveredCell] = useState<GridPoint | null>(null);
+  const [isShiftDown, setIsShiftDown] = useState<boolean>(false);
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [cellSize, setCellSize] = useState<number>(10);
+
+  const strokeBasePathRef = useRef<GridPoint[] | null>(null);
+  const dragOriginRef = useRef<GridPoint | null>(null);
+  const rawHoveredCellRef = useRef<GridPoint | null>(null);
 
   const { h, w, start, goal, connectivity, terrain, elevation, obstacle } =
     mapData;
@@ -94,6 +78,49 @@ export function RouteCanvas({
     userPath.length > 0 &&
     userPath[userPath.length - 1][0] === goal[0] &&
     userPath[userPath.length - 1][1] === goal[1];
+
+  useEffect(() => {
+    function updateHoverWithShift(shiftState: boolean) {
+      const raw = rawHoveredCellRef.current;
+      if (!raw) return;
+      if (shiftState) {
+        const origin =
+          dragOriginRef.current ??
+          (userPath.length > 0 ? userPath[userPath.length - 1] : start);
+        setHoveredCell(constrainDirection(origin, raw, connectivity, h, w));
+      } else {
+        setHoveredCell(raw);
+      }
+    }
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Shift") {
+        setIsShiftDown(true);
+        updateHoverWithShift(true);
+      }
+    }
+
+    function handleKeyUp(e: KeyboardEvent) {
+      if (e.key === "Shift") {
+        setIsShiftDown(false);
+        updateHoverWithShift(false);
+      }
+    }
+
+    function handleBlur() {
+      setIsShiftDown(false);
+      updateHoverWithShift(false);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, [userPath, start, connectivity, h, w]);
 
   const updateCellSize = useCallback(() => {
     if (!containerRef.current) return;
@@ -308,6 +335,26 @@ export function RouteCanvas({
         const hw = Math.round((hc + 1) * effectiveCellSize) - hx;
         const hh = Math.round((hr + 1) * effectiveCellSize) - hy;
         ctx.strokeRect(hx, hy, hw, hh);
+
+        if (isShiftDown && !isConnectedToGoal) {
+          const origin =
+            dragOriginRef.current ??
+            (userPath.length > 0 ? userPath[userPath.length - 1] : start);
+          const ox = origin[1] * effectiveCellSize + effectiveCellSize / 2;
+          const oy = origin[0] * effectiveCellSize + effectiveCellSize / 2;
+          const targetX = hc * effectiveCellSize + effectiveCellSize / 2;
+          const targetY = hr * effectiveCellSize + effectiveCellSize / 2;
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.setLineDash([4, 4]);
+          ctx.moveTo(ox, oy);
+          ctx.lineTo(targetX, targetY);
+          ctx.strokeStyle = rgba(START_RGB, 0.85);
+          ctx.lineWidth = Math.max(1.5, effectiveCellSize * 0.2);
+          ctx.stroke();
+          ctx.restore();
+        }
       }
     }
   }, [
@@ -322,6 +369,8 @@ export function RouteCanvas({
     goal,
     userPath,
     hoveredCell,
+    isShiftDown,
+    isConnectedToGoal,
   ]);
 
   function getCellFromCoordinates(
@@ -346,13 +395,23 @@ export function RouteCanvas({
     if (event.button !== 0 || isConnectedToGoal) return;
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // ignore
-    }
-    const cell = getCellFromCoordinates(event);
-    if (!cell) return;
+    } catch {}
+    const rawCell = getCellFromCoordinates(event);
+    if (!rawCell) return;
 
     setIsDrawing(true);
+    rawHoveredCellRef.current = rawCell;
+
+    const isShift = event.shiftKey || isShiftDown;
+    const currentOrigin =
+      userPath.length > 0 ? userPath[userPath.length - 1] : start;
+
+    dragOriginRef.current = currentOrigin;
+    strokeBasePathRef.current = [...userPath];
+
+    const cell = isShift
+      ? constrainDirection(currentOrigin, rawCell, connectivity, h, w)
+      : rawCell;
 
     if (userPath.length === 0) {
       const connected = connectPoints(start, cell, connectivity);
@@ -366,14 +425,13 @@ export function RouteCanvas({
       }
       onPathChange(connected);
     } else {
-      const lastPoint = userPath[userPath.length - 1];
       const existingIdx = userPath.findIndex(
         (p) => p[0] === cell[0] && p[1] === cell[1],
       );
-      if (existingIdx >= 0) {
+      if (existingIdx >= 0 && !isShift) {
         onPathChange(userPath.slice(0, existingIdx + 1));
       } else {
-        const extension = connectPoints(lastPoint, cell, connectivity);
+        const extension = connectPoints(currentOrigin, cell, connectivity);
         const goalIdx = extension.findIndex(
           (p) => p[0] === goal[0] && p[1] === goal[1],
         );
@@ -390,43 +448,89 @@ export function RouteCanvas({
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
-    const cell = getCellFromCoordinates(event);
+    const rawCell = getCellFromCoordinates(event);
+    const isShift = event.shiftKey || isShiftDown;
+    if (event.shiftKey !== isShiftDown) {
+      setIsShiftDown(event.shiftKey);
+    }
+
+    if (!rawCell) {
+      rawHoveredCellRef.current = null;
+      setHoveredCell(null);
+      return;
+    }
+
+    rawHoveredCellRef.current = rawCell;
+
+    const currentOrigin =
+      dragOriginRef.current ??
+      (userPath.length > 0 ? userPath[userPath.length - 1] : start);
+
+    const cell = isShift
+      ? constrainDirection(currentOrigin, rawCell, connectivity, h, w)
+      : rawCell;
+
     setHoveredCell(cell);
 
-    if (!isDrawing || !cell || isConnectedToGoal) return;
+    if (!isDrawing || isConnectedToGoal) return;
 
-    if (userPath.length === 0) {
-      const connected = connectPoints(start, cell, connectivity);
-      const goalIdx = connected.findIndex(
+    if (isShift) {
+      const basePath = strokeBasePathRef.current ?? userPath;
+      const origin =
+        dragOriginRef.current ??
+        (basePath.length > 0 ? basePath[basePath.length - 1] : start);
+      const extension = connectPoints(origin, cell, connectivity);
+      const goalIdx = extension.findIndex(
         (p) => p[0] === goal[0] && p[1] === goal[1],
       );
       if (goalIdx >= 0) {
-        onPathChange(connected.slice(0, goalIdx + 1));
+        const combined =
+          basePath.length === 0
+            ? extension.slice(0, goalIdx + 1)
+            : [...basePath, ...extension.slice(1, goalIdx + 1)];
+        onPathChange(combined);
         setIsDrawing(false);
         return;
       }
-      onPathChange(connected);
-      return;
-    }
-
-    const lastPoint = userPath[userPath.length - 1];
-    if (lastPoint[0] === cell[0] && lastPoint[1] === cell[1]) {
-      return;
-    }
-
-    const extension = connectPoints(lastPoint, cell, connectivity);
-    const goalIdx = extension.findIndex(
-      (p) => p[0] === goal[0] && p[1] === goal[1],
-    );
-    if (goalIdx >= 0) {
-      const combined = [...userPath, ...extension.slice(1, goalIdx + 1)];
+      const combined =
+        basePath.length === 0
+          ? extension
+          : [...basePath, ...extension.slice(1)];
       onPathChange(combined);
-      setIsDrawing(false);
-      return;
-    }
+    } else {
+      if (userPath.length === 0) {
+        const connected = connectPoints(start, cell, connectivity);
+        const goalIdx = connected.findIndex(
+          (p) => p[0] === goal[0] && p[1] === goal[1],
+        );
+        if (goalIdx >= 0) {
+          onPathChange(connected.slice(0, goalIdx + 1));
+          setIsDrawing(false);
+          return;
+        }
+        onPathChange(connected);
+        return;
+      }
 
-    const combined = [...userPath, ...extension.slice(1)];
-    onPathChange(combined);
+      const lastPoint = userPath[userPath.length - 1];
+      if (lastPoint[0] === cell[0] && lastPoint[1] === cell[1]) {
+        return;
+      }
+
+      const extension = connectPoints(lastPoint, cell, connectivity);
+      const goalIdx = extension.findIndex(
+        (p) => p[0] === goal[0] && p[1] === goal[1],
+      );
+      if (goalIdx >= 0) {
+        const combined = [...userPath, ...extension.slice(1, goalIdx + 1)];
+        onPathChange(combined);
+        setIsDrawing(false);
+        return;
+      }
+
+      const combined = [...userPath, ...extension.slice(1)];
+      onPathChange(combined);
+    }
   }
 
   function handlePointerUp(event: ReactPointerEvent<HTMLCanvasElement>) {
@@ -434,10 +538,10 @@ export function RouteCanvas({
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
     setIsDrawing(false);
+    strokeBasePathRef.current = null;
+    dragOriginRef.current = null;
   }
 
   function handleAutoRoute() {
@@ -477,6 +581,11 @@ export function RouteCanvas({
       <strong>
         [{hoveredCell[0]}, {hoveredCell[1]}]
       </strong>{" "}
+      {isShiftDown && (
+        <strong className="shift-indicator">
+          ({connectivity === 4 ? "Orthogonal Lock" : "45° / Orthogonal Lock"})
+        </strong>
+      )}{" "}
       &bull; Terrain{" "}
       <strong>{terrain[hoveredCell[0]]?.[hoveredCell[1]] || "-"}</strong> &bull;
       Elevation{" "}
@@ -491,7 +600,9 @@ export function RouteCanvas({
       )}
     </span>
   ) : (
-    <span>Hover over grid or drag pointer to interact</span>
+    <span>
+      Hover over grid or drag pointer to interact (hold Shift for straight/diagonal lines)
+    </span>
   );
 
   return (
@@ -589,6 +700,12 @@ export function RouteCanvas({
             G: [{goal[0]}, {goal[1]}]
           </span>
 
+          {isShiftDown && (
+            <span className="node-marker shift-badge">
+              Shift: {connectivity === 4 ? "Orthogonal Snap" : "45° / Orthogonal Snap"}
+            </span>
+          )}
+
           {isConnectedToGoal ? (
             <span className="badge badge-success">
               Route connected to Goal ({userPath.length} steps) &bull; Locked
@@ -647,6 +764,7 @@ export function RouteCanvas({
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
           onPointerLeave={() => {
+            rawHoveredCellRef.current = null;
             if (!isDrawing) {
               setHoveredCell(null);
             }

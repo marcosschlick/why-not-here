@@ -829,6 +829,16 @@ kbd,
   background: var(--surface-danger);
   border-color: var(--border-danger);
 }
+.shift-badge {
+  color: var(--bright-snow);
+  background: var(--azure-blue);
+  border-color: var(--azure-blue);
+  box-shadow: 0 0 0.5rem color-mix(in srgb, var(--azure-blue) 35%, transparent);
+}
+.shift-indicator {
+  color: var(--azure-blue);
+  font-weight: 700;
+}
 .canvas-wrapper {
   display: grid;
   place-items: center;
