@@ -178,7 +178,9 @@ export function ResultsView({
 
   const altCostDisplay =
     typeof currentResult?.final_alternative_cost === "number"
-      ? `${currentResult.final_alternative_cost.toFixed(2)}s`
+      ? isFailed
+        ? `${currentResult.final_alternative_cost.toFixed(2)}s (Suboptimal)`
+        : `${currentResult.final_alternative_cost.toFixed(2)}s`
       : isFailed
         ? "Impassable (∞)"
         : "-";
