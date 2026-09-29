@@ -63,7 +63,6 @@ export function ConfigForm({
   const [isBrowsing, setIsBrowsing] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  // Advanced Settings state
   const [planner, setPlanner] = useState<string>(
     initialConfig?.DEFAULT_PLANNER ?? "ASTAR",
   );
@@ -174,9 +173,7 @@ export function ConfigForm({
         });
         return;
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
     action();
   }
 
@@ -216,9 +213,7 @@ export function ConfigForm({
           });
         }
       }
-    } catch {
-      // ignore
-    } finally {
+    } catch {} finally {
       setIsBrowsing(false);
     }
   }
@@ -239,9 +234,7 @@ export function ConfigForm({
           },
         });
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   async function handleConfirmClean() {
@@ -485,8 +478,6 @@ export function ConfigForm({
                     value={targetTerrain}
                     onChange={(e) => setTargetTerrain(e.target.value)}
                   >
-                    <option value="HIGHWAY">HIGHWAY</option>
-                    <option value="PAVED_ROAD">PAVED_ROAD</option>
                     <option value="COMPACTED_SOIL">COMPACTED_SOIL</option>
                     <option value="GRASSLAND">GRASSLAND</option>
                     <option value="UNPAVED_TRACK">UNPAVED_TRACK</option>

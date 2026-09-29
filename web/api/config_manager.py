@@ -78,7 +78,6 @@ def update_configurations(updates: dict[str, Any]) -> dict[str, Any]:
         if hasattr(config, submodule_name):
             setattr(getattr(config, submodule_name), key, casted_val)
 
-        # In-memory propagation to all imported src modules
         for mod_name, mod in list(sys.modules.items()):
             if (mod_name == "src.config" or mod_name.startswith("src.")) and hasattr(mod, key):
                 setattr(mod, key, casted_val)
