@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   browseDirectory,
   checkOutputDir,
@@ -16,6 +16,23 @@ interface ConfigFormProps {
   queueCount: number;
 }
 
+const MAP_SIZE_OPTIONS = [
+  { height: 16, width: 32 },
+  { height: 32, width: 64 },
+  { height: 64, width: 128 },
+  { height: 128, width: 256 },
+  { height: 256, width: 512 },
+  { height: 512, width: 1024 },
+] as const;
+
+function resolveMapSize(height?: number, width?: number) {
+  return (
+    MAP_SIZE_OPTIONS.find(
+      (option) => option.height === height && option.width === width,
+    ) ?? MAP_SIZE_OPTIONS[2]
+  );
+}
+
 export function ConfigForm({
   initialConfig,
   onGenerateMap,
@@ -25,8 +42,12 @@ export function ConfigForm({
   onSwitchMode,
   queueCount,
 }: ConfigFormProps) {
-  const [mapH, setMapH] = useState<number>(initialConfig?.MAP_H ?? 64);
-  const [mapW, setMapW] = useState<number>(initialConfig?.MAP_W ?? 128);
+  const initialMapSize = resolveMapSize(
+    initialConfig?.MAP_H,
+    initialConfig?.MAP_W,
+  );
+  const [mapH, setMapH] = useState<number>(initialMapSize.height);
+  const [mapW, setMapW] = useState<number>(initialMapSize.width);
   const [connectivity, setConnectivity] = useState<number>(
     initialConfig?.CONNECTIVITY ?? 8,
   );
@@ -86,42 +107,6 @@ export function ConfigForm({
     initialConfig?.MAP_OBSTACLE_THRESHOLD ?? 0.85,
   );
 
-  useEffect(() => {
-    if (!initialConfig) return;
-    setMapH(initialConfig.MAP_H ?? 64);
-    setMapW(initialConfig.MAP_W ?? 128);
-    setConnectivity(initialConfig.CONNECTIVITY ?? 8);
-    setReductionMethod(initialConfig.DEFAULT_REDUCTION_METHOD ?? "NONE");
-    setUseIncremental(initialConfig.USE_INCREMENTAL_SOLVER ?? false);
-    setOutputDir(initialConfig.OUTPUT_DIR ?? "output");
-    if (initialConfig.DEFAULT_PLANNER) setPlanner(initialConfig.DEFAULT_PLANNER);
-    if (initialConfig.DEFAULT_SOLVER) setSolver(initialConfig.DEFAULT_SOLVER);
-    if (initialConfig.SOLVER_TIMEOUT_SEC !== undefined)
-      setSolverTimeout(initialConfig.SOLVER_TIMEOUT_SEC);
-    if (initialConfig.TARGET_TERRAIN)
-      setTargetTerrain(initialConfig.TARGET_TERRAIN);
-    if (initialConfig.RHO_TERRAIN !== undefined)
-      setRhoTerrain(initialConfig.RHO_TERRAIN);
-    if (initialConfig.RHO_OBSTACLE !== undefined)
-      setRhoObstacle(initialConfig.RHO_OBSTACLE);
-    if (initialConfig.RHO_SLOPE !== undefined)
-      setRhoSlope(initialConfig.RHO_SLOPE);
-    if (initialConfig.MAX_ISP_ITERATIONS !== undefined)
-      setMaxIspIterations(initialConfig.MAX_ISP_ITERATIONS);
-    if (initialConfig.BBOX_MARGIN !== undefined)
-      setBboxMargin(initialConfig.BBOX_MARGIN);
-    if (initialConfig.MAP_DEFAULT_SEED !== undefined)
-      setMapSeed(initialConfig.MAP_DEFAULT_SEED);
-    if (initialConfig.MAP_ELEVATION_SCALE !== undefined)
-      setMapElevationScale(initialConfig.MAP_ELEVATION_SCALE);
-    if (initialConfig.MAP_ELEVATION_FREQ !== undefined)
-      setMapElevationFreq(initialConfig.MAP_ELEVATION_FREQ);
-    if (initialConfig.MAP_OBSTACLE_FREQ !== undefined)
-      setMapObstacleFreq(initialConfig.MAP_OBSTACLE_FREQ);
-    if (initialConfig.MAP_OBSTACLE_THRESHOLD !== undefined)
-      setMapObstacleThreshold(initialConfig.MAP_OBSTACLE_THRESHOLD);
-  }, [initialConfig]);
-
   const [cleaningDirInfo, setCleaningDirInfo] = useState<{
     dir: string;
     fileCount: number;
@@ -129,6 +114,15 @@ export function ConfigForm({
     onConfirm: () => void;
   } | null>(null);
   const [isCleaning, setIsCleaning] = useState<boolean>(false);
+
+  function handleMapSizeChange(value: string) {
+    const selectedSize = MAP_SIZE_OPTIONS.find(
+      (option) => `${option.height}x${option.width}` === value,
+    );
+    if (!selectedSize) return;
+    setMapH(selectedSize.height);
+    setMapW(selectedSize.width);
+  }
 
   function getCurrentConfig(): SystemConfig {
     return {
@@ -294,35 +288,24 @@ export function ConfigForm({
 
         <div className="form-grid">
           <div className="form-group">
-            <label htmlFor="mapH">
-              <span>Map Height</span>
-              <span className="form-group-hint">4–1024 cells</span>
+            <label htmlFor="mapSize">
+              <span>Map Size</span>
+              <span className="form-group-hint">Approved resolutions</span>
             </label>
-            <input
-              id="mapH"
-              type="number"
-              min={4}
-              max={1024}
-              value={mapH}
-              onChange={(e) => setMapH(Number(e.target.value))}
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="mapW">
-              <span>Map Width</span>
-              <span className="form-group-hint">4–1024 cells</span>
-            </label>
-            <input
-              id="mapW"
-              type="number"
-              min={4}
-              max={1024}
-              value={mapW}
-              onChange={(e) => setMapW(Number(e.target.value))}
-              required
-            />
+            <select
+              id="mapSize"
+              value={`${mapH}x${mapW}`}
+              onChange={(e) => handleMapSizeChange(e.target.value)}
+            >
+              {MAP_SIZE_OPTIONS.map((option) => (
+                <option
+                  key={`${option.height}x${option.width}`}
+                  value={`${option.height}x${option.width}`}
+                >
+                  {option.height}×{option.width}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="form-group">
@@ -420,9 +403,12 @@ export function ConfigForm({
                 ▶
               </span>
               <div className="advanced-summary-content">
-                <span className="advanced-summary-title">Advanced Settings</span>
+                <span className="advanced-summary-title">
+                  Advanced Settings
+                </span>
                 <span className="advanced-summary-desc">
-                  Planners, solvers, objective weights, iterations &amp; procedural map heuristics
+                  Planners, solvers, objective weights, iterations &amp;
+                  procedural map heuristics
                 </span>
               </div>
             </div>
@@ -467,7 +453,9 @@ export function ConfigForm({
                 <div className="form-group">
                   <label htmlFor="solverTimeout">
                     <span>Solver Timeout (sec)</span>
-                    <span className="form-group-hint">Per-solve time limit</span>
+                    <span className="form-group-hint">
+                      Per-solve time limit
+                    </span>
                   </label>
                   <input
                     id="solverTimeout"
@@ -483,7 +471,9 @@ export function ConfigForm({
             </div>
 
             <div className="advanced-group">
-              <h4 className="advanced-group-title">ISP Weights &amp; Objectives</h4>
+              <h4 className="advanced-group-title">
+                ISP Weights &amp; Objectives
+              </h4>
               <div className="form-grid">
                 <div className="form-group">
                   <label htmlFor="targetTerrain">
@@ -509,7 +499,9 @@ export function ConfigForm({
                 <div className="form-group">
                   <label htmlFor="rhoTerrain">
                     <span>Rho Terrain (ρ_terrain)</span>
-                    <span className="form-group-hint">Weight for terrain modification</span>
+                    <span className="form-group-hint">
+                      Weight for terrain modification
+                    </span>
                   </label>
                   <input
                     id="rhoTerrain"
@@ -525,7 +517,9 @@ export function ConfigForm({
                 <div className="form-group">
                   <label htmlFor="rhoObstacle">
                     <span>Rho Obstacle (ρ_obstacle)</span>
-                    <span className="form-group-hint">Weight for obstacle removal</span>
+                    <span className="form-group-hint">
+                      Weight for obstacle removal
+                    </span>
                   </label>
                   <input
                     id="rhoObstacle"
@@ -541,7 +535,9 @@ export function ConfigForm({
                 <div className="form-group">
                   <label htmlFor="rhoSlope">
                     <span>Rho Slope (ρ_slope)</span>
-                    <span className="form-group-hint">Weight for slope leveling</span>
+                    <span className="form-group-hint">
+                      Weight for slope leveling
+                    </span>
                   </label>
                   <input
                     id="rhoSlope"
@@ -557,12 +553,16 @@ export function ConfigForm({
             </div>
 
             <div className="advanced-group">
-              <h4 className="advanced-group-title">Incremental / Algorithm Tuning</h4>
+              <h4 className="advanced-group-title">
+                Incremental / Algorithm Tuning
+              </h4>
               <div className="form-grid">
                 <div className="form-group">
                   <label htmlFor="maxIspIterations">
                     <span>Max ISP Iterations</span>
-                    <span className="form-group-hint">1–100 cutting planes</span>
+                    <span className="form-group-hint">
+                      1–100 cutting planes
+                    </span>
                   </label>
                   <input
                     id="maxIspIterations"
@@ -571,7 +571,9 @@ export function ConfigForm({
                     max={100}
                     step={1}
                     value={maxIspIterations}
-                    onChange={(e) => setMaxIspIterations(Number(e.target.value))}
+                    onChange={(e) =>
+                      setMaxIspIterations(Number(e.target.value))
+                    }
                     required
                   />
                 </div>
@@ -621,7 +623,9 @@ export function ConfigForm({
                     type="number"
                     step={0.1}
                     value={mapElevationScale}
-                    onChange={(e) => setMapElevationScale(Number(e.target.value))}
+                    onChange={(e) =>
+                      setMapElevationScale(Number(e.target.value))
+                    }
                     required
                   />
                 </div>
@@ -629,14 +633,18 @@ export function ConfigForm({
                 <div className="form-group">
                   <label htmlFor="mapElevationFreq">
                     <span>Elevation Frequency</span>
-                    <span className="form-group-hint">Perlin terrain frequency</span>
+                    <span className="form-group-hint">
+                      Perlin terrain frequency
+                    </span>
                   </label>
                   <input
                     id="mapElevationFreq"
                     type="number"
                     step={0.01}
                     value={mapElevationFreq}
-                    onChange={(e) => setMapElevationFreq(Number(e.target.value))}
+                    onChange={(e) =>
+                      setMapElevationFreq(Number(e.target.value))
+                    }
                     required
                   />
                 </div>
@@ -644,7 +652,9 @@ export function ConfigForm({
                 <div className="form-group">
                   <label htmlFor="mapObstacleFreq">
                     <span>Obstacle Frequency</span>
-                    <span className="form-group-hint">Cluster distribution scale</span>
+                    <span className="form-group-hint">
+                      Cluster distribution scale
+                    </span>
                   </label>
                   <input
                     id="mapObstacleFreq"
@@ -659,7 +669,9 @@ export function ConfigForm({
                 <div className="form-group">
                   <label htmlFor="mapObstacleThreshold">
                     <span>Obstacle Threshold</span>
-                    <span className="form-group-hint">Threshold cutoff (0–1)</span>
+                    <span className="form-group-hint">
+                      Threshold cutoff (0–1)
+                    </span>
                   </label>
                   <input
                     id="mapObstacleThreshold"
@@ -668,7 +680,9 @@ export function ConfigForm({
                     min={0}
                     max={1}
                     value={mapObstacleThreshold}
-                    onChange={(e) => setMapObstacleThreshold(Number(e.target.value))}
+                    onChange={(e) =>
+                      setMapObstacleThreshold(Number(e.target.value))
+                    }
                     required
                   />
                 </div>

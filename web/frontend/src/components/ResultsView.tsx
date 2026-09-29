@@ -13,6 +13,7 @@ interface ResultsViewProps {
   onSelectBatchIndex?: (index: number) => void;
   elapsedTime?: number;
   config?: SystemConfig | null;
+  mapImageUrl?: string;
 }
 
 function ArtifactCard({
@@ -75,7 +76,7 @@ function ArtifactCard({
             alt={displayTitle}
             onLoad={() => setIsLoaded(true)}
             onError={() => setHasError(true)}
-            style={{ opacity: isLoaded ? 1 : 0 }}
+            className={`artifact-image ${isLoaded ? "is-loaded" : ""}`}
           />
         )}
       </div>
@@ -93,6 +94,7 @@ export function ResultsView({
   onSelectBatchIndex,
   elapsedTime,
   config,
+  mapImageUrl,
 }: ResultsViewProps) {
   const [internalBatchIndex, setInternalBatchIndex] = useState<number>(0);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -122,6 +124,12 @@ export function ResultsView({
   const currentArtifacts: string[] = isBatch
     ? (activeBatchItem?.artifacts ?? [])
     : artifacts;
+  const currentMapImageUrl = isBatch
+    ? activeBatchItem?.mapData?.map_image_url
+    : mapImageUrl;
+  const tacticalArtifacts = currentArtifacts.filter(
+    (artifactPath) => artifactPath.split("?")[0].split("/").pop() !== "map.png",
+  );
   const currentStatus = isBatch
     ? activeBatchItem?.status
     : result
@@ -146,7 +154,12 @@ export function ResultsView({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedImage]);
 
-  if (!isBatch && !currentResult && currentArtifacts.length === 0) {
+  if (
+    !isBatch &&
+    !currentResult &&
+    tacticalArtifacts.length === 0 &&
+    !currentMapImageUrl
+  ) {
     return null;
   }
 
@@ -250,7 +263,7 @@ export function ResultsView({
         {onNewRun && (
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary results-new-run-action"
             onClick={onNewRun}
           >
             New Run
@@ -269,13 +282,21 @@ export function ResultsView({
           {isSolving && activeBatchItem?.config && (
             <div className="loading-params-summary">
               <span className="loading-param-chip">
-                Reduction Method: {formatReductionMethod(activeBatchItem.config.DEFAULT_REDUCTION_METHOD)}
+                Reduction Method:{" "}
+                {formatReductionMethod(
+                  activeBatchItem.config.DEFAULT_REDUCTION_METHOD,
+                )}
               </span>
               <span className="loading-param-chip">
-                Solver Mode: {activeBatchItem.config.USE_INCREMENTAL_SOLVER ? "Iterative / Incremental MILP" : "Standard Monolithic MILP"}
+                Solver Mode:{" "}
+                {activeBatchItem.config.USE_INCREMENTAL_SOLVER
+                  ? "Iterative / Incremental MILP"
+                  : "Standard Monolithic MILP"}
               </span>
               <span className="loading-param-chip">
-                Grid Dimension: {activeBatchItem.config.MAP_W}×{activeBatchItem.config.MAP_H} (Seed: {activeBatchItem.config.MAP_DEFAULT_SEED})
+                Grid Dimension: {activeBatchItem.config.MAP_W}×
+                {activeBatchItem.config.MAP_H} (Seed:{" "}
+                {activeBatchItem.config.MAP_DEFAULT_SEED})
               </span>
             </div>
           )}
@@ -292,7 +313,14 @@ export function ResultsView({
         </div>
       )}
 
-      {currentConfig && <SolverConfigBadges config={currentConfig} />}
+      {currentConfig && (
+        <SolverConfigBadges
+          config={currentConfig}
+          mapImageUrl={currentMapImageUrl}
+          cacheKey={cacheKey}
+          onSelectMap={setSelectedImage}
+        />
+      )}
 
       {currentResult && (
         <div className="metrics-grid">
@@ -337,15 +365,8 @@ export function ResultsView({
 
       {currentResult?.explanation_text && (
         <div className="report-card">
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "12px",
-            }}
-          >
-            <h3 style={{ margin: 0 }}>Contrastive Explanation</h3>
+          <div className="report-card-header">
+            <h3>Contrastive Explanation</h3>
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -363,15 +384,8 @@ export function ResultsView({
 
       {currentResult?.cost_baseline_text && (
         <div className="report-card">
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "12px",
-            }}
-          >
-            <h3 style={{ margin: 0 }}>Alternative Route Cost Baselines</h3>
+          <div className="report-card-header">
+            <h3>Alternative Route Cost Baselines</h3>
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -387,11 +401,11 @@ export function ResultsView({
         </div>
       )}
 
-      {currentArtifacts.length > 0 && (
+      {tacticalArtifacts.length > 0 && (
         <div className="artifacts-card">
           <h3>Generated Tactical Artifacts</h3>
           <div className="artifacts-grid">
-            {currentArtifacts.map((artifactPath) => (
+            {tacticalArtifacts.map((artifactPath) => (
               <ArtifactCard
                 key={artifactPath}
                 artifactPath={artifactPath}

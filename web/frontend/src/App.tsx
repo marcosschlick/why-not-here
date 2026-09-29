@@ -342,6 +342,7 @@ export function App() {
         {currentStep === "config" && (
           <div className="step-container config-step">
             <ConfigForm
+              key={config ? "server-config" : "fallback-config"}
               initialConfig={config}
               onGenerateMap={handleGenerateMap}
               onAddToQueue={handleAddToQueue}
@@ -461,6 +462,11 @@ export function App() {
               artifacts={artifacts}
               cacheKey={cacheKey}
               config={mapData?.config || config}
+              mapImageUrl={
+                isBatchMode
+                  ? queue[activeBatchResultIndex]?.mapData?.map_image_url
+                  : mapData?.map_image_url
+              }
               onNewRun={() => {
                 setIsBatchMode(false);
                 setCurrentStep("config");

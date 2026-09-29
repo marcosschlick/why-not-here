@@ -19,7 +19,13 @@ interface RouteCanvasProps {
   batchStepper?: React.ReactNode;
 }
 
-const TERRAIN_RGB: Record<string, [number, number, number]> = {
+type Rgb = [number, number, number];
+
+function rgba([red, green, blue]: Rgb, alpha = 1): string {
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+const TERRAIN_RGB: Record<string, Rgb> = {
   COMPACTED_SOIL: [158, 107, 71],
   GRASS: [46, 148, 56],
   DRY_VEGETATION: [191, 194, 51],
@@ -27,6 +33,14 @@ const TERRAIN_RGB: Record<string, [number, number, number]> = {
   MUD: [92, 56, 41],
   WATER_RIVER: [5, 133, 230],
 };
+
+const OBSTACLE_RGB: Rgb = [20, 20, 23];
+const START_RGB: Rgb = [0, 176, 255];
+const START_EDGE_RGB: Rgb = [0, 51, 102];
+const GOAL_RGB: Rgb = [255, 215, 0];
+const GOAL_EDGE_RGB: Rgb = [102, 68, 0];
+const USER_PATH_RGB: Rgb = [255, 23, 68];
+const GRID_RGB: Rgb = [255, 255, 255];
 
 function connectPoints(
   p1: [number, number],
@@ -162,10 +176,10 @@ export function RouteCanvas({
           ctx.fillStyle = `rgb(${r},${g},${b})`;
           ctx.fillRect(x, y, cellW, cellH);
         } else if (isObs) {
-          ctx.fillStyle = "#282828";
+          ctx.fillStyle = rgba(OBSTACLE_RGB);
           ctx.fillRect(x, y, cellW, cellH);
           if (effectiveCellSize >= 8) {
-            ctx.fillStyle = "rgba(100, 125, 150, 0.25)";
+            ctx.fillStyle = rgba(OBSTACLE_RGB, 0.34);
             ctx.fillRect(
               x + 1,
               y + 1,
@@ -183,7 +197,7 @@ export function RouteCanvas({
         }
 
         if (effectiveCellSize >= 10) {
-          ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+          ctx.strokeStyle = rgba(GRID_RGB, 0.16);
           ctx.lineWidth = 0.5;
           ctx.strokeRect(x, y, cellW, cellH);
         }
@@ -199,7 +213,7 @@ export function RouteCanvas({
         if (idx === 0) ctx.moveTo(cx, cy);
         else ctx.lineTo(cx, cy);
       }
-      ctx.strokeStyle = "rgba(219, 84, 97, 0.35)";
+      ctx.strokeStyle = rgba(USER_PATH_RGB, 0.35);
       ctx.lineWidth = Math.max(3, effectiveCellSize * 0.7);
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -213,13 +227,13 @@ export function RouteCanvas({
         if (idx === 0) ctx.moveTo(cx, cy);
         else ctx.lineTo(cx, cy);
       }
-      ctx.strokeStyle = "#DB5461";
+      ctx.strokeStyle = rgba(USER_PATH_RGB);
       ctx.lineWidth = Math.max(2, effectiveCellSize * 0.4);
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.stroke();
 
-      ctx.fillStyle = "#E85D6B";
+      ctx.fillStyle = rgba(USER_PATH_RGB);
       for (const [r, c] of userPath) {
         const cx = c * effectiveCellSize + effectiveCellSize / 2;
         const cy = r * effectiveCellSize + effectiveCellSize / 2;
@@ -247,14 +261,14 @@ export function RouteCanvas({
     ctx.lineTo(0, sRadius);
     ctx.lineTo(-sRadius, 0);
     ctx.closePath();
-    ctx.fillStyle = "#327DE1";
+    ctx.fillStyle = rgba(START_RGB);
     ctx.fill();
-    ctx.strokeStyle = "#324B64";
+    ctx.strokeStyle = rgba(START_EDGE_RGB);
     ctx.lineWidth = 2;
     ctx.stroke();
 
     if (effectiveCellSize >= 12) {
-      ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = rgba(GRID_RGB);
       ctx.font = `bold ${Math.max(8, effectiveCellSize * 0.6)}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -269,14 +283,14 @@ export function RouteCanvas({
     ctx.save();
     ctx.beginPath();
     ctx.arc(gx, gy, gRadius, 0, Math.PI * 2);
-    ctx.fillStyle = "#FFD700";
+    ctx.fillStyle = rgba(GOAL_RGB);
     ctx.fill();
-    ctx.strokeStyle = "#324B64";
+    ctx.strokeStyle = rgba(GOAL_EDGE_RGB);
     ctx.lineWidth = 2;
     ctx.stroke();
 
     if (effectiveCellSize >= 12) {
-      ctx.fillStyle = "#324B64";
+      ctx.fillStyle = rgba(GOAL_EDGE_RGB);
       ctx.font = `bold ${Math.max(8, effectiveCellSize * 0.6)}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -287,7 +301,7 @@ export function RouteCanvas({
     if (hoveredCell) {
       const [hr, hc] = hoveredCell;
       if (hr >= 0 && hr < h && hc >= 0 && hc < w) {
-        ctx.strokeStyle = "#327DE1";
+        ctx.strokeStyle = rgba(START_RGB);
         ctx.lineWidth = 2;
         const hx = Math.round(hc * effectiveCellSize);
         const hy = Math.round(hr * effectiveCellSize);
@@ -471,9 +485,9 @@ export function RouteCanvas({
       </strong>{" "}
       &bull; Status{" "}
       {obstacle[hoveredCell[0]]?.[hoveredCell[1]] === 1 ? (
-        <strong style={{ color: "#b3261e" }}>Obstacle</strong>
+        <strong className="cell-status cell-status-obstacle">Obstacle</strong>
       ) : (
-        <strong style={{ color: "#1b6d39" }}>Free</strong>
+        <strong className="cell-status cell-status-free">Free</strong>
       )}
     </span>
   ) : (
@@ -625,11 +639,9 @@ export function RouteCanvas({
       <div className="canvas-wrapper" ref={wrapperRef}>
         <canvas
           ref={canvasRef}
-          className="interactive-canvas"
-          style={{
-            touchAction: "none",
-            cursor: isConnectedToGoal ? "not-allowed" : "crosshair",
-          }}
+          className={`interactive-canvas ${
+            isConnectedToGoal ? "is-locked" : ""
+          }`}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -644,27 +656,53 @@ export function RouteCanvas({
 
       <div className="canvas-footer-info">
         <div className="cell-inspector">{hoveredInfo}</div>
-        <div className="canvas-legend">
-          <span className="legend-item">
-            <span className="legend-color" style={{ background: "#327DE1" }} />
-            Start (S)
-          </span>
-          <span className="legend-item">
-            <span className="legend-color" style={{ background: "#FFD700" }} />
-            Goal (G)
-          </span>
-          <span className="legend-item">
-            <span className="legend-color" style={{ background: "#DB5461" }} />
-            Alternative Route (p&apos;)
-          </span>
-          <span className="legend-item">
-            <span className="legend-color" style={{ background: "#0585E6" }} />
-            River
-          </span>
-          <span className="legend-item">
-            <span className="legend-color" style={{ background: "#282828" }} />
-            Obstacle
-          </span>
+        <div className="canvas-legend" aria-label="Map legend">
+          <div className="legend-group">
+            <span className="legend-group-label">Terrain</span>
+            <span className="legend-item">
+              <span className="legend-color legend-compacted-soil" />
+              Compacted Soil
+            </span>
+            <span className="legend-item">
+              <span className="legend-color legend-grass" />
+              Grass
+            </span>
+            <span className="legend-item">
+              <span className="legend-color legend-dry-vegetation" />
+              Dry Vegetation
+            </span>
+            <span className="legend-item">
+              <span className="legend-color legend-sand" />
+              Sand
+            </span>
+            <span className="legend-item">
+              <span className="legend-color legend-mud" />
+              Mud
+            </span>
+            <span className="legend-item">
+              <span className="legend-color legend-river" />
+              River
+            </span>
+          </div>
+          <div className="legend-group">
+            <span className="legend-group-label">Markers</span>
+            <span className="legend-item">
+              <span className="legend-color legend-obstacle" />
+              Obstacle
+            </span>
+            <span className="legend-item">
+              <span className="legend-color legend-start" />
+              Start (S)
+            </span>
+            <span className="legend-item">
+              <span className="legend-color legend-goal" />
+              Goal (G)
+            </span>
+            <span className="legend-item">
+              <span className="legend-color legend-route" />
+              Alternative Route (p&apos;)
+            </span>
+          </div>
         </div>
       </div>
     </section>

@@ -116,7 +116,7 @@ export function QueuePanel({
           >
             <div
               className="progress-fill"
-              style={{ width: `${progressPercent}%` }}
+              style={{ transform: `scaleX(${progressPercent / 100})` }}
             />
           </div>
         </div>

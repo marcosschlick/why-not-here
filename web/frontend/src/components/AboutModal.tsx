@@ -35,7 +35,9 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
         <div className="about-modal-header">
           <div className="about-modal-badge-row">
             <span className="about-tag-pill">XAIP Research</span>
-            <span className="about-tag-pill highlight">Inverse Optimization</span>
+            <span className="about-tag-pill highlight">
+              Inverse Optimization
+            </span>
           </div>
           <button
             type="button"
@@ -61,9 +63,14 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
           <div className="about-core-question-card">
             <div className="about-question-icon">?</div>
             <div className="about-question-content">
-              <span className="about-question-lead">Core Contrastive Question:</span>
+              <span className="about-question-lead">
+                Core Contrastive Question:
+              </span>
               <p className="about-question-text">
-                &ldquo;Why was the optimal route <strong className="symbol-opt">p*</strong> chosen instead of the user-expected alternative <strong className="symbol-user">p&apos;</strong>?&rdquo;
+                &ldquo;Why was the optimal route{" "}
+                <strong className="symbol-opt">p*</strong> chosen instead of the
+                user-expected alternative{" "}
+                <strong className="symbol-user">p&apos;</strong>?&rdquo;
               </p>
             </div>
           </div>
@@ -75,7 +82,10 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
                 <h3>Optimal Planning (A*)</h3>
               </div>
               <p>
-                Computes the least-cost path (<strong className="symbol-opt">p*</strong>) considering distance, terrain traversal friction, elevation slope, and obstacle clearance penalties.
+                Computes the least-cost path (
+                <strong className="symbol-opt">p*</strong>) considering
+                distance, terrain traversal friction, elevation slope, and
+                obstacle clearance penalties.
               </p>
             </div>
 
@@ -85,7 +95,10 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
                 <h3>Inverse Optimization (ISP / MILP)</h3>
               </div>
               <p>
-                Formulates a Mixed-Integer Linear Program (MILP) to identify minimal environmental modifications that would make the alternative route (<strong className="symbol-user">p&apos;</strong>) optimal.
+                Formulates a Mixed-Integer Linear Program (MILP) to identify
+                minimal environmental modifications that would make the
+                alternative route (
+                <strong className="symbol-user">p&apos;</strong>) optimal.
               </p>
             </div>
 
@@ -95,7 +108,9 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
                 <h3>Scalability Strategies</h3>
               </div>
               <p>
-                Leverages graph reduction (Bounding Box, Reachable Set) and incremental iterative cutting-plane solvers to ensure computational tractability on 2D grids.
+                Leverages graph reduction (Bounding Box, Reachable Set) and
+                incremental iterative cutting-plane solvers to ensure
+                computational tractability on 2D grids.
               </p>
             </div>
           </div>
@@ -103,15 +118,27 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
           <div className="about-meta-box">
             <span className="about-meta-label">Authors &amp; Affiliation</span>
             <span className="about-meta-value">
-              Marcos da Silva Schlick, Abner Gilead Araujo Guedes, Victor Machado Alves &bull; IFSul (Sant&apos;Ana do Livramento, Brazil)
+              Marcos da Silva Schlick, Abner Gilead Araujo Guedes, Victor
+              Machado Alves &bull; IFSul (Sant&apos;Ana do Livramento, Brazil)
             </span>
           </div>
         </div>
 
         <div className="about-modal-footer">
-          <span className="about-footer-note">
-            Why Not Here? &bull; Explainable Artificial Intelligence Planning (XAIP)
-          </span>
+          <div className="about-footer-content">
+            <span className="about-footer-note">
+              Why Not Here? &bull; Explainable Artificial Intelligence Planning
+              (XAIP)
+            </span>
+            <a
+              className="about-github-link"
+              href="https://github.com/marcosschlick/why-not-here"
+              target="_blank"
+              rel="noreferrer"
+            >
+              GitHub Repository
+            </a>
+          </div>
           <button
             type="button"
             className="btn btn-primary btn-sm"
