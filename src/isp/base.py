@@ -3,11 +3,8 @@ import numpy as np
 
 from ..config import (
     DEFAULT_SOLVER,
-    EPSILON_L1,
+    INCREMENTAL_TOLERANCE,
     MIP_GAP_TOLERANCE,
-    RHO_OBSTACLE,
-    RHO_SLOPE,
-    RHO_TERRAIN,
     SOLVER_TIMEOUT_SEC,
 )
 from ..grid import Grid
@@ -21,18 +18,12 @@ class BaseISPSolver:
         solver_name: str = DEFAULT_SOLVER,
         timeout: float = SOLVER_TIMEOUT_SEC,
         mip_gap: float = MIP_GAP_TOLERANCE,
-        rho_terrain: float = RHO_TERRAIN,
-        rho_obstacle: float = RHO_OBSTACLE,
-        rho_slope: float = RHO_SLOPE,
-        epsilon_l1: float = EPSILON_L1,
+        tolerance: float = INCREMENTAL_TOLERANCE,
     ) -> None:
         self.solver_name = solver_name
         self.timeout = timeout
         self.mip_gap = mip_gap
-        self.rho_terrain = rho_terrain
-        self.rho_obstacle = rho_obstacle
-        self.rho_slope = rho_slope
-        self.epsilon_l1 = epsilon_l1
+        self.tolerance = tolerance
         self.last_solver_status: str | None = None
 
     def _select_solver(self) -> str | None:
@@ -55,10 +46,6 @@ class BaseISPSolver:
             active_nodes=active_nodes,
             active_edges=active_edges,
             custom_edge_costs=custom_edge_costs,
-            rho_terrain=self.rho_terrain,
-            rho_obstacle=self.rho_obstacle,
-            rho_slope=self.rho_slope,
-            epsilon_l1=self.epsilon_l1,
         )
 
     def _solve_milp(self, problem: cp.Problem) -> tuple[bool, float]:
@@ -76,18 +63,25 @@ class BaseISPSolver:
 
         try:
             problem.solve(solver=solver, **solver_kwargs)
-            self.last_solver_status = str(problem.status)
-        except (cp.SolverError, ValueError, TypeError, RuntimeError) as e:
-            self.last_solver_status = f"SOLVER_ERROR: {e}"
+        except (cp.SolverError, ValueError, TypeError, RuntimeError):
+            self.last_solver_status = "SOLVER_ERROR"
             return False, float("inf")
 
-        if (
-            problem.status not in (cp.OPTIMAL, cp.OPTIMAL_INACCURATE)
-            or problem.value is None
-        ):
+        if problem.status == cp.OPTIMAL and problem.value is not None:
+            self.last_solver_status = "OPTIMAL"
+            return True, float(problem.value)
+
+        if problem.status == cp.OPTIMAL_INACCURATE:
+            self.last_solver_status = "OPTIMAL_INACCURATE"
             return False, float("inf")
 
-        return True, float(problem.value)
+        if problem.status == cp.INFEASIBLE:
+            self.last_solver_status = "INFEASIBLE"
+        elif problem.status == cp.USER_LIMIT:
+            self.last_solver_status = "TIMEOUT"
+        else:
+            self.last_solver_status = "SOLVER_FAILED"
+        return False, float("inf")
 
     def _extract_modifications(
         self,

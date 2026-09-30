@@ -67,17 +67,14 @@ Configures forward heuristic search algorithms and default routing endpoints.
 
 ## 5. Inverse Shortest Path Formulation (`src/config/config_isp.py`)
 
-Defines intervention cost penalties and regularizers for the MILP objective formulation.
+Defines the semantic target used by terrain interventions in the MILP formulation.
 
 | Parameter        | Type    | Default Value      | Description                                                                      |
 | :--------------- | :------ | :----------------- | :------------------------------------------------------------------------------- |
 | `TARGET_TERRAIN` | `str`   | `"COMPACTED_SOIL"` | Semantic target terrain used for soil paving/upgrade modifications.              |
 | `TARGET_SPEED`   | `float` | `1.2`              | Nominal traversal speed of `TARGET_TERRAIN` in m/s (`TERRAINS[TARGET_TERRAIN]`). |
-| `RHO_TERRAIN`    | `float` | `1.0`              | Cost penalty weight per upgraded terrain cell in the MILP objective.             |
-| `RHO_OBSTACLE`   | `float` | `2.5`              | Cost penalty weight per removed obstacle cell in the MILP objective.             |
-| `RHO_SLOPE`      | `float` | `1.5`              | Cost penalty weight per leveled slope edge in the MILP objective.                |
-| `EPSILON_L1`     | `float` | `1e-4`             | Secondary $L_1$ norm penalty weight for tie-breaking and sparsity promotion.     |
-| `BIG_M`          | `float` | `1e4`              | Large penalty scalar modeling forbidden transitions in MILP constraints.         |
+
+The MILP objective assigns unit cost to each binary terrain, obstacle, and slope intervention. Its prohibitive transition penalty is derived from the active graph and is not a user configuration parameter.
 
 ---
 

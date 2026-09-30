@@ -1,13 +1,6 @@
 import numpy as np
 
-from ..config import (
-    BIG_M,
-    EPSILON_L1,
-    RHO_OBSTACLE,
-    RHO_SLOPE,
-    RHO_TERRAIN,
-    TARGET_TERRAIN,
-)
+from ..config import BASE_TERRAIN, TARGET_TERRAIN
 from ..grid import Grid
 from .modifier import apply_semantic_modifications
 from .types import SemanticModifications
@@ -22,11 +15,6 @@ class ISPSemantics:
         active_edges: set[tuple[tuple[int, int], tuple[int, int]]] | None = None,
         custom_edge_costs: dict[tuple[tuple[int, int], tuple[int, int]], float]
         | None = None,
-        rho_terrain: float = RHO_TERRAIN,
-        rho_obstacle: float = RHO_OBSTACLE,
-        rho_slope: float = RHO_SLOPE,
-        epsilon_l1: float = EPSILON_L1,
-        big_m: float = BIG_M,
     ) -> None:
         self.grid = grid
         self.candidate_path = candidate_path
@@ -35,11 +23,6 @@ class ISPSemantics:
         self.custom_edge_costs = (
             custom_edge_costs if custom_edge_costs is not None else {}
         )
-        self.rho_terrain = rho_terrain
-        self.rho_obstacle = rho_obstacle
-        self.rho_slope = rho_slope
-        self.epsilon_l1 = epsilon_l1
-        self.big_m = big_m
 
         path_nodes = set(candidate_path)
 
@@ -140,6 +123,55 @@ class ISPSemantics:
         self.total_z_vars = (
             self.num_terrain_vars + self.num_obstacle_vars + self.num_slope_vars
         )
+        self.big_m = self._compute_big_m()
+
+    def _compute_big_m(self) -> float:
+        node_min_speeds: dict[tuple[int, int], float | None] = {}
+        target_speed = self.grid.speeds.get(TARGET_TERRAIN, 0.0)
+        base_speed = self.grid.speeds.get(BASE_TERRAIN, 0.0)
+
+        for u in self.nodes:
+            cell = self.grid.get_cell(u)
+            current_speed = self.grid.speeds.get(cell.terrain, 0.0)
+            possible_speeds = [
+                current_speed if current_speed > 0.0 else base_speed
+            ]
+            if u in self.terrain_to_idx:
+                possible_speeds.append(target_speed)
+            positive_speeds = [
+                speed
+                for speed in possible_speeds
+                if np.isfinite(speed) and speed > 0.0
+            ]
+            node_min_speeds[u] = min(positive_speeds) if positive_speeds else None
+
+        max_edge_cost = max(
+            (
+                cost
+                for cost in self.custom_edge_costs.values()
+                if np.isfinite(cost) and cost > 0.0
+            ),
+            default=0.0,
+        )
+        slope_factor = 2.0 if self.grid.max_slope_deg > 0.0 else 1.0
+
+        for edge in self.edges:
+            if edge in self.custom_edge_costs:
+                continue
+            u, v = edge
+            speed_u = node_min_speeds[u]
+            speed_v = node_min_speeds[v]
+            if speed_u is None or speed_v is None:
+                continue
+            edge_cost_bound = (
+                self.grid.get_distance(u, v)
+                * 0.5
+                * (1.0 / speed_u + 1.0 / speed_v)
+                * slope_factor
+            )
+            max_edge_cost = max(max_edge_cost, edge_cost_bound)
+
+        return len(self.nodes) * max_edge_cost
 
     def get_modifications(self, z: np.ndarray) -> SemanticModifications:
         z_terrain = z[: self.num_terrain_vars]

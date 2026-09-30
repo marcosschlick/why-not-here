@@ -3,10 +3,6 @@ import numpy as np
 
 from ..config import (
     BASE_TERRAIN,
-    EPSILON_L1,
-    RHO_OBSTACLE,
-    RHO_SLOPE,
-    RHO_TERRAIN,
     TARGET_TERRAIN,
     V_MAX,
 )
@@ -25,7 +21,6 @@ def compute_affine_edge_costs(
 ) -> tuple[
     np.ndarray,
     np.ndarray,
-    np.ndarray | None,
     np.ndarray | None,
     np.ndarray | None,
     np.ndarray | None,
@@ -50,12 +45,6 @@ def compute_affine_edge_costs(
         if isp.num_slope_vars > 0
         else None
     )
-    M_slope_phys = (
-        np.zeros((num_edges, isp.num_slope_vars), dtype=np.float64)
-        if isp.num_slope_vars > 0
-        else None
-    )
-
     cross_items: list[tuple[int, int, int, float]] = []
 
     max_speed = max(grid.speeds.values()) if (grid.speeds and len(grid.speeds) > 0) else V_MAX
@@ -111,8 +100,6 @@ def compute_affine_edge_costs(
         if M_slope is not None and (u, v) in isp.slope_to_idx:
             s_idx = isp.slope_to_idx[(u, v)]
             M_slope[k, s_idx] += isp.big_m * s_viol + t_base0 * slope_pen
-            if M_slope_phys is not None:
-                M_slope_phys[k, s_idx] += t_base0 * slope_pen
 
         if (
             isp.num_terrain_vars > 0
@@ -136,7 +123,7 @@ def compute_affine_edge_costs(
                 if abs(delta_v) > 1e-6:
                     cross_items.append((k, t_idx, s_idx, delta_v))
 
-    return w_min, c_base, M_terrain, M_obs, M_slope, M_slope_phys, cross_items
+    return w_min, c_base, M_terrain, M_obs, M_slope, cross_items
 
 
 def build_base_formulation(
@@ -146,10 +133,6 @@ def build_base_formulation(
     active_edges: set[tuple[tuple[int, int], tuple[int, int]]] | None = None,
     custom_edge_costs: dict[tuple[tuple[int, int], tuple[int, int]], float]
     | None = None,
-    rho_terrain: float = RHO_TERRAIN,
-    rho_obstacle: float = RHO_OBSTACLE,
-    rho_slope: float = RHO_SLOPE,
-    epsilon_l1: float = EPSILON_L1,
 ) -> MIPFormulation | None:
     isp = ISPSemantics(
         grid=grid,
@@ -157,10 +140,6 @@ def build_base_formulation(
         active_nodes=active_nodes,
         active_edges=active_edges,
         custom_edge_costs=custom_edge_costs,
-        rho_terrain=rho_terrain,
-        rho_obstacle=rho_obstacle,
-        rho_slope=rho_slope,
-        epsilon_l1=epsilon_l1,
     )
 
     num_edges = len(isp.edges)
@@ -196,7 +175,6 @@ def build_base_formulation(
         M_terrain,
         M_obs,
         M_slope,
-        M_slope_phys,
         cross_items,
     ) = compute_affine_edge_costs(
         grid=grid,
@@ -230,17 +208,11 @@ def build_base_formulation(
             if abs(grid.get_slope(u, v)) > grid.max_slope_deg:
                 extra_constraints.append(z_slope[s_idx] == 1.0)
 
-    obj_terms = []
-    if z_terrain is not None:
-        obj_terms.append(rho_terrain * cp.sum(z_terrain))
-        if M_terrain is not None:
-            obj_terms.append(epsilon_l1 * (np.sum(-M_terrain, axis=0) @ z_terrain))
-    if z_obstacle is not None:
-        obj_terms.append(rho_obstacle * cp.sum(z_obstacle))
-    if z_slope is not None:
-        obj_terms.append(rho_slope * cp.sum(z_slope))
-        if M_slope_phys is not None:
-            obj_terms.append(epsilon_l1 * (np.sum(M_slope_phys, axis=0) @ z_slope))
+    obj_terms = [
+        cp.sum(variable)
+        for variable in (z_terrain, z_obstacle, z_slope)
+        if variable is not None
+    ]
 
     return MIPFormulation(
         isp=isp,

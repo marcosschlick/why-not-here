@@ -75,15 +75,6 @@ export function ConfigForm({
   const [targetTerrain, setTargetTerrain] = useState<string>(
     initialConfig?.TARGET_TERRAIN ?? "COMPACTED_SOIL",
   );
-  const [rhoTerrain, setRhoTerrain] = useState<number>(
-    initialConfig?.RHO_TERRAIN ?? 1.0,
-  );
-  const [rhoObstacle, setRhoObstacle] = useState<number>(
-    initialConfig?.RHO_OBSTACLE ?? 2.5,
-  );
-  const [rhoSlope, setRhoSlope] = useState<number>(
-    initialConfig?.RHO_SLOPE ?? 1.5,
-  );
   const [maxIspIterations, setMaxIspIterations] = useState<number>(
     initialConfig?.MAX_ISP_ITERATIONS ?? 50,
   );
@@ -137,9 +128,6 @@ export function ConfigForm({
       DEFAULT_SOLVER: solver,
       SOLVER_TIMEOUT_SEC: Number(solverTimeout),
       TARGET_TERRAIN: targetTerrain,
-      RHO_TERRAIN: Number(rhoTerrain),
-      RHO_OBSTACLE: Number(rhoObstacle),
-      RHO_SLOPE: Number(rhoSlope),
       MAX_ISP_ITERATIONS: Number(maxIspIterations),
       BBOX_MARGIN: Number(bboxMargin),
       MAP_ELEVATION_SCALE: Number(mapElevationScale),
@@ -213,7 +201,8 @@ export function ConfigForm({
           });
         }
       }
-    } catch {} finally {
+    } catch {
+    } finally {
       setIsBrowsing(false);
     }
   }
@@ -464,9 +453,7 @@ export function ConfigForm({
             </div>
 
             <div className="advanced-group">
-              <h4 className="advanced-group-title">
-                ISP Weights &amp; Objectives
-              </h4>
+              <h4 className="advanced-group-title">ISP Objective</h4>
               <div className="form-grid">
                 <div className="form-group">
                   <label htmlFor="targetTerrain">
@@ -485,60 +472,6 @@ export function ConfigForm({
                     <option value="FOREST">FOREST</option>
                     <option value="ROCKY">ROCKY</option>
                   </select>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="rhoTerrain">
-                    <span>Rho Terrain (ρ_terrain)</span>
-                    <span className="form-group-hint">
-                      Weight for terrain modification
-                    </span>
-                  </label>
-                  <input
-                    id="rhoTerrain"
-                    type="number"
-                    step={0.1}
-                    min={0}
-                    value={rhoTerrain}
-                    onChange={(e) => setRhoTerrain(Number(e.target.value))}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="rhoObstacle">
-                    <span>Rho Obstacle (ρ_obstacle)</span>
-                    <span className="form-group-hint">
-                      Weight for obstacle removal
-                    </span>
-                  </label>
-                  <input
-                    id="rhoObstacle"
-                    type="number"
-                    step={0.1}
-                    min={0}
-                    value={rhoObstacle}
-                    onChange={(e) => setRhoObstacle(Number(e.target.value))}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="rhoSlope">
-                    <span>Rho Slope (ρ_slope)</span>
-                    <span className="form-group-hint">
-                      Weight for slope leveling
-                    </span>
-                  </label>
-                  <input
-                    id="rhoSlope"
-                    type="number"
-                    step={0.1}
-                    min={0}
-                    value={rhoSlope}
-                    onChange={(e) => setRhoSlope(Number(e.target.value))}
-                    required
-                  />
                 </div>
               </div>
             </div>
