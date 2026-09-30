@@ -25,6 +25,7 @@ CONFIG_REGISTRY = {
     "BBOX_MARGIN": "config_reduction.py",
     "USE_INCREMENTAL_SOLVER": "config_incremental.py",
     "MAX_ISP_ITERATIONS": "config_incremental.py",
+    "INCREMENTAL_ASTAR_SCOPE": "config_incremental.py",
     "OUTPUT_DIR": "config_storage.py",
 }
 

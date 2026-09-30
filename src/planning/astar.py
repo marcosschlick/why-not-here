@@ -8,14 +8,27 @@ def astar(
     grid: Grid,
     start: tuple[int, int],
     goal: tuple[int, int],
+    active_nodes: set[tuple[int, int]] | None = None,
+    active_edges: set[tuple[tuple[int, int], tuple[int, int]]] | None = None,
+    custom_edge_costs: dict[tuple[tuple[int, int], tuple[int, int]], float]
+    | None = None,
 ) -> tuple[list[tuple[int, int]] | None, float, int]:
-
     if not (0 <= start[0] < grid.h and 0 <= start[1] < grid.w):
         return None, float("inf"), 0
     if not (0 <= goal[0] < grid.h and 0 <= goal[1] < grid.w):
         return None, float("inf"), 0
     if grid.get_cell(start).is_blocked or grid.get_cell(goal).is_blocked:
         return None, float("inf"), 0
+    if active_nodes is not None and (
+        start not in active_nodes or goal not in active_nodes
+    ):
+        return None, float("inf"), 0
+
+    adj = None
+    if active_edges is not None:
+        adj = {}
+        for u, v in active_edges:
+            adj.setdefault(u, []).append(v)
 
     v_max = max(grid.speeds.values())
 
@@ -49,11 +62,29 @@ def astar(
             path.reverse()
             return path, g_score[goal], nodes_expanded
 
-        for neighbor in grid.get_neighbors(current, only_traversable=True):
+        if adj is not None:
+            candidate_neighbors = adj.get(current, [])
+        else:
+            candidate_neighbors = grid.get_neighbors(current, only_traversable=True)
+
+        for neighbor in candidate_neighbors:
             if neighbor in closed_set:
                 continue
 
-            cost_edge = grid.get_cost(current, neighbor)
+            if active_nodes is not None and neighbor not in active_nodes:
+                continue
+
+            edge = (current, neighbor)
+            if custom_edge_costs is not None and edge in custom_edge_costs:
+                cost_edge = custom_edge_costs[edge]
+            else:
+                if not grid.is_traversable(current, neighbor):
+                    continue
+                cost_edge = grid.get_cost(current, neighbor)
+
+            if cost_edge == float("inf"):
+                continue
+
             tentative_g = g_score[current] + cost_edge
             if tentative_g < g_score.get(neighbor, float("inf")):
                 came_from[neighbor] = current

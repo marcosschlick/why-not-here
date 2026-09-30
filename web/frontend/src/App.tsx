@@ -536,6 +536,13 @@ export function App() {
               const solverMode = activeConfig.USE_INCREMENTAL_SOLVER
                 ? "Iterative / Incremental MILP"
                 : "Standard Monolithic MILP";
+              const astarScope =
+                activeConfig.USE_INCREMENTAL_SOLVER &&
+                activeConfig.DEFAULT_REDUCTION_METHOD !== "NONE"
+                  ? activeConfig.INCREMENTAL_ASTAR_SCOPE === "SUBGRAPH"
+                    ? "Reduced Subgraph"
+                    : "Global Grid"
+                  : null;
               const h = activeConfig.MAP_H ?? 20;
               const w = activeConfig.MAP_W ?? 20;
               const seed = activeConfig.MAP_DEFAULT_SEED ?? 42;
@@ -547,6 +554,11 @@ export function App() {
                   <span className="loading-param-chip">
                     Solver Mode: {solverMode}
                   </span>
+                  {astarScope && (
+                    <span className="loading-param-chip">
+                      A* Scope: {astarScope}
+                    </span>
+                  )}
                   <span className="loading-param-chip">
                     Grid Dimension: {w}×{h} (Seed: {seed})
                   </span>

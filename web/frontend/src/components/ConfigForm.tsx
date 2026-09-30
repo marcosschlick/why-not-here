@@ -81,6 +81,9 @@ export function ConfigForm({
   const [bboxMargin, setBboxMargin] = useState<number>(
     initialConfig?.BBOX_MARGIN ?? 2,
   );
+  const [incrementalAstarScope, setIncrementalAstarScope] = useState<string>(
+    initialConfig?.INCREMENTAL_ASTAR_SCOPE ?? "GLOBAL",
+  );
   const [mapSeed, setMapSeed] = useState<number>(
     initialConfig?.MAP_DEFAULT_SEED ?? 42,
   );
@@ -130,6 +133,7 @@ export function ConfigForm({
       TARGET_TERRAIN: targetTerrain,
       MAX_ISP_ITERATIONS: Number(maxIspIterations),
       BBOX_MARGIN: Number(bboxMargin),
+      INCREMENTAL_ASTAR_SCOPE: incrementalAstarScope,
       MAP_ELEVATION_SCALE: Number(mapElevationScale),
       MAP_ELEVATION_FREQ: Number(mapElevationFreq),
       MAP_OBSTACLE_FREQ: Number(mapObstacleFreq),
@@ -325,6 +329,24 @@ export function ConfigForm({
             </select>
           </div>
 
+          {reductionMethod === "BBOX" && (
+            <div className="form-group">
+              <label htmlFor="bboxMargin">
+                <span>BBox Margin</span>
+                <span className="form-group-hint">Min 1 cell buffer</span>
+              </label>
+              <input
+                id="bboxMargin"
+                type="number"
+                min={1}
+                step={1}
+                value={bboxMargin}
+                onChange={(e) => setBboxMargin(Number(e.target.value))}
+                required
+              />
+            </div>
+          )}
+
           <div className="form-group">
             <label htmlFor="incrementalToggle">
               <span>Incremental Solver</span>
@@ -350,6 +372,44 @@ export function ConfigForm({
               </button>
             </div>
           </div>
+
+          {useIncremental && (
+            <div className="form-group">
+              <label htmlFor="maxIspIterations">
+                <span>Max ISP Iterations</span>
+                <span className="form-group-hint">1–100 cutting planes</span>
+              </label>
+              <input
+                id="maxIspIterations"
+                type="number"
+                min={1}
+                max={100}
+                step={1}
+                value={maxIspIterations}
+                onChange={(e) =>
+                  setMaxIspIterations(Number(e.target.value))
+                }
+                required
+              />
+            </div>
+          )}
+
+          {useIncremental && reductionMethod !== "NONE" && (
+            <div className="form-group">
+              <label htmlFor="incrementalAstarScope">
+                <span>Incremental A* Scope</span>
+                <span className="form-group-hint">Competing paths search</span>
+              </label>
+              <select
+                id="incrementalAstarScope"
+                value={incrementalAstarScope}
+                onChange={(e) => setIncrementalAstarScope(e.target.value)}
+              >
+                <option value="GLOBAL">Global Grid</option>
+                <option value="SUBGRAPH">Reduced Subgraph</option>
+              </select>
+            </div>
+          )}
 
           <div className="form-group">
             <label htmlFor="outputDir">
@@ -394,7 +454,7 @@ export function ConfigForm({
                 </span>
               </div>
             </div>
-            <span className="advanced-settings-badge">14 Parameters</span>
+            <span className="advanced-settings-badge">9 Parameters</span>
           </summary>
 
           <div className="advanced-settings-body">
@@ -472,50 +532,6 @@ export function ConfigForm({
                     <option value="FOREST">FOREST</option>
                     <option value="ROCKY">ROCKY</option>
                   </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="advanced-group">
-              <h4 className="advanced-group-title">
-                Incremental / Algorithm Tuning
-              </h4>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label htmlFor="maxIspIterations">
-                    <span>Max ISP Iterations</span>
-                    <span className="form-group-hint">
-                      1–100 cutting planes
-                    </span>
-                  </label>
-                  <input
-                    id="maxIspIterations"
-                    type="number"
-                    min={1}
-                    max={100}
-                    step={1}
-                    value={maxIspIterations}
-                    onChange={(e) =>
-                      setMaxIspIterations(Number(e.target.value))
-                    }
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="bboxMargin">
-                    <span>BBox Margin</span>
-                    <span className="form-group-hint">Min 1 cell buffer</span>
-                  </label>
-                  <input
-                    id="bboxMargin"
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={bboxMargin}
-                    onChange={(e) => setBboxMargin(Number(e.target.value))}
-                    required
-                  />
                 </div>
               </div>
             </div>

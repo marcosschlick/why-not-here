@@ -100,6 +100,7 @@ Governs the cutting-plane iterative solver and closed-loop validation cycle.
 | `MAX_ISP_ITERATIONS`      | `int`   | `50`          | Maximum number of cutting-plane iterations.                                         |
 | `INCREMENTAL_TOLERANCE`   | `float` | `1e-4`        | Optimality gap tolerance for the closed-loop certificate.                           |
 | `CLOSED_LOOP_TIMEOUT_SEC` | `float` | `300.0`       | Global timeout in seconds for the entire closed-loop process.                       |
+| `INCREMENTAL_ASTAR_SCOPE` | `str`   | `"GLOBAL"`    | A* search scope for competing paths (`"GLOBAL"` = full grid, `"SUBGRAPH"` = reduced subgraph only with final global certification). |
 
 ---
 

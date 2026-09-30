@@ -5,6 +5,7 @@ from src.config import (
     CLOSED_LOOP_TIMEOUT_SEC,
     DEFAULT_REDUCTION_METHOD,
     DEFAULT_SOLVER,
+    INCREMENTAL_ASTAR_SCOPE,
     INCREMENTAL_TOLERANCE,
     MAX_ISP_ITERATIONS,
     SOLVER_TIMEOUT_SEC,
@@ -12,7 +13,7 @@ from src.config import (
 from src.grid.grid import Grid
 from src.isp.semantics import SemanticModifications
 from src.planning.astar import astar
-from src.reduction import create_reduced_graph
+from src.reduction import create_reduced_graph, prepare_subgraph
 
 from .explanation import (
     generate_cost_baseline_justification,
@@ -21,7 +22,11 @@ from .explanation import (
 from .precheck import check_geometric_feasibility, validate_alternative_path
 from .result import ClosedLoopResult
 from .step_solver import IncrementalISPSolver
-from .validator import ISPValidator, validate_global_optimality
+from .validator import (
+    ISPValidator,
+    validate_global_optimality,
+    validate_subgraph_optimality,
+)
 
 
 class ClosedLoopISPSolver:
@@ -34,6 +39,7 @@ class ClosedLoopISPSolver:
         tolerance: float = INCREMENTAL_TOLERANCE,
         reduction_method: str = DEFAULT_REDUCTION_METHOD,
         bbox_margin: int = BBOX_MARGIN,
+        astar_scope: str = INCREMENTAL_ASTAR_SCOPE,
     ) -> None:
         self.solver_name = solver_name
         self.timeout = timeout
@@ -42,6 +48,7 @@ class ClosedLoopISPSolver:
         self.tolerance = tolerance
         self.reduction_method = reduction_method
         self.bbox_margin = bbox_margin
+        self.astar_scope = astar_scope
 
     def solve(
         self,
@@ -50,10 +57,16 @@ class ClosedLoopISPSolver:
         goal: tuple[int, int],
         alternative_path: list[tuple[int, int]],
         reduction_method: str | None = None,
+        astar_scope: str | None = None,
     ) -> ClosedLoopResult:
         method = (
             reduction_method if reduction_method is not None else self.reduction_method
         )
+        scope = (
+            astar_scope if astar_scope is not None else self.astar_scope
+        ).strip().upper()
+        if method == "NONE":
+            scope = "GLOBAL"
         start_time = time.perf_counter()
 
         is_valid, status, msg = validate_alternative_path(
@@ -146,6 +159,10 @@ class ClosedLoopISPSolver:
             margin=self.bbox_margin,
         )
 
+        active_nodes, active_edges, custom_costs = prepare_subgraph(
+            full_grid, alternative_path, reduced_graph, None
+        )
+
         delta = None
         cost_p_prime = float("inf")
 
@@ -210,26 +227,82 @@ class ClosedLoopISPSolver:
                     solver_status,
                 )
 
-            is_opt, q_viol, cost_p_prime, _ = validate_global_optimality(
-                full_grid,
-                start,
-                goal,
-                alternative_path,
-                delta,
-                tolerance=self.tolerance,
-            )
+            if (
+                scope == "SUBGRAPH"
+                and active_nodes is not None
+                and active_edges is not None
+            ):
+                is_opt, q_viol, cost_p_prime, _ = validate_subgraph_optimality(
+                    full_grid,
+                    start,
+                    goal,
+                    alternative_path,
+                    delta,
+                    active_nodes=active_nodes,
+                    active_edges=active_edges,
+                    custom_edge_costs=custom_costs,
+                    tolerance=self.tolerance,
+                )
+            else:
+                is_opt, q_viol, cost_p_prime, _ = validate_global_optimality(
+                    full_grid,
+                    start,
+                    goal,
+                    alternative_path,
+                    delta,
+                    tolerance=self.tolerance,
+                )
 
             if is_opt:
-                explanation = generate_explanation_text(delta, full_grid)
-                return make_res(
-                    True,
-                    delta,
-                    explanation,
-                    iteration,
-                    len(Q),
-                    cost_p_prime,
-                    step_solver.last_solver_status or "OPTIMAL",
-                )
+                if scope == "SUBGRAPH":
+                    is_globally_opt, _, p_cost_glob, _ = (
+                        validate_global_optimality(
+                            full_grid,
+                            start,
+                            goal,
+                            alternative_path,
+                            delta,
+                            tolerance=self.tolerance,
+                        )
+                    )
+                    if is_globally_opt:
+                        explanation = generate_explanation_text(
+                            delta, full_grid
+                        )
+                        return make_res(
+                            True,
+                            delta,
+                            explanation,
+                            iteration,
+                            len(Q),
+                            p_cost_glob,
+                            step_solver.last_solver_status or "OPTIMAL",
+                        )
+                    else:
+                        explanation = (
+                            "The alternative path p' could not be made optimal by the planner "
+                            "within the allowed intervention domain."
+                        )
+                        return make_res(
+                            False,
+                            delta,
+                            explanation,
+                            iteration,
+                            len(Q),
+                            p_cost_glob,
+                            "SUBGRAPH_OPTIMAL_ONLY",
+                        )
+                else:
+                    explanation = generate_explanation_text(delta, full_grid)
+                    return make_res(
+                        True,
+                        delta,
+                        explanation,
+                        iteration,
+                        len(Q),
+                        cost_p_prime,
+                        step_solver.last_solver_status or "OPTIMAL",
+                    )
 
             if q_viol is None:
                 return make_res(
@@ -278,6 +351,7 @@ def solve_closed_loop(
     global_timeout: float = CLOSED_LOOP_TIMEOUT_SEC,
     max_iterations: int = MAX_ISP_ITERATIONS,
     tolerance: float = INCREMENTAL_TOLERANCE,
+    astar_scope: str = INCREMENTAL_ASTAR_SCOPE,
 ) -> ClosedLoopResult:
     solver = ClosedLoopISPSolver(
         solver_name=solver_name,
@@ -287,7 +361,13 @@ def solve_closed_loop(
         tolerance=tolerance,
         reduction_method=reduction_method,
         bbox_margin=bbox_margin,
+        astar_scope=astar_scope,
     )
     return solver.solve(
-        full_grid, start, goal, alternative_path, reduction_method=reduction_method
+        full_grid,
+        start,
+        goal,
+        alternative_path,
+        reduction_method=reduction_method,
+        astar_scope=astar_scope,
     )

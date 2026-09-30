@@ -50,6 +50,8 @@ export function SolverConfigBadges({
   const solverName = formatSolverType(
     config.USE_INCREMENTAL_SOLVER,
     config.DEFAULT_SOLVER,
+    config.DEFAULT_REDUCTION_METHOD,
+    config.INCREMENTAL_ASTAR_SCOPE,
   );
   const gridSpecs = `${config.MAP_H}×${config.MAP_W} (${config.CONNECTIVITY}-Connected)`;
 

@@ -79,3 +79,59 @@ def validate_global_optimality(
         return True, None, p_cost, q_cost
 
     return False, q_global, p_cost, q_cost
+
+
+def validate_subgraph_optimality(
+    full_grid: Grid,
+    start: tuple[int, int],
+    goal: tuple[int, int],
+    alternative_path: list[tuple[int, int]],
+    modifications: SemanticModifications,
+    active_nodes: set[tuple[int, int]],
+    active_edges: set[tuple[tuple[int, int], tuple[int, int]]],
+    custom_edge_costs: dict[tuple[tuple[int, int], tuple[int, int]], float]
+    | None = None,
+    tolerance: float = INCREMENTAL_TOLERANCE,
+) -> tuple[bool, list[tuple[int, int]] | None, float, float]:
+    mod_grid = ISPValidator.apply_modifications(full_grid, modifications)
+
+    if (
+        not alternative_path
+        or alternative_path[0] != start
+        or alternative_path[-1] != goal
+    ):
+        q_sub, q_cost, _ = astar(
+            mod_grid,
+            start,
+            goal,
+            active_nodes=active_nodes,
+            active_edges=active_edges,
+            custom_edge_costs=custom_edge_costs,
+        )
+        return (
+            False,
+            q_sub,
+            float("inf"),
+            q_cost if q_sub is not None else float("inf"),
+        )
+
+    if start == goal and len(alternative_path) == 1:
+        return True, None, 0.0, 0.0
+
+    p_cost = ISPValidator.compute_path_cost(mod_grid, alternative_path)
+
+    q_sub, q_cost, _ = astar(
+        mod_grid,
+        start,
+        goal,
+        active_nodes=active_nodes,
+        active_edges=active_edges,
+        custom_edge_costs=custom_edge_costs,
+    )
+    if q_sub is None:
+        q_cost = float("inf")
+
+    if p_cost != float("inf") and q_sub is not None and p_cost <= q_cost + tolerance:
+        return True, None, p_cost, q_cost
+
+    return False, q_sub, p_cost, q_cost

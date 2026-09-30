@@ -123,7 +123,12 @@ def run_isp(
         print(msg_user)
 
     strategy_name = "INCREMENTAL" if config.USE_INCREMENTAL_SOLVER else "MONOLITHIC"
-    msg_strat = f"Running ISP solver (Strategy: {strategy_name}, Reduction: {config.DEFAULT_REDUCTION_METHOD}, Solver: {config.DEFAULT_SOLVER})..."
+    scope_str = (
+        f", A* Scope: {config.INCREMENTAL_ASTAR_SCOPE}"
+        if config.USE_INCREMENTAL_SOLVER and config.DEFAULT_REDUCTION_METHOD != "NONE"
+        else ""
+    )
+    msg_strat = f"Running ISP solver (Strategy: {strategy_name}, Reduction: {config.DEFAULT_REDUCTION_METHOD}{scope_str}, Solver: {config.DEFAULT_SOLVER})..."
     log_lines.append(msg_strat)
     if verbose:
         print(msg_strat)
@@ -140,6 +145,7 @@ def run_isp(
             timeout=config.SOLVER_TIMEOUT_SEC,
             max_iterations=config.MAX_ISP_ITERATIONS,
             tolerance=config.INCREMENTAL_TOLERANCE,
+            astar_scope=config.INCREMENTAL_ASTAR_SCOPE,
         )
     else:
         start_time = time.perf_counter()

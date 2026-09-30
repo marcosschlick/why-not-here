@@ -6,7 +6,11 @@ from .explanation import (
 from .precheck import check_geometric_feasibility, validate_alternative_path
 from .result import ClosedLoopResult
 from .step_solver import IncrementalISPSolver
-from .validator import ISPValidator, validate_global_optimality
+from .validator import (
+    ISPValidator,
+    validate_global_optimality,
+    validate_subgraph_optimality,
+)
 
 __all__ = [
     "ClosedLoopISPSolver",
@@ -19,4 +23,5 @@ __all__ = [
     "solve_closed_loop",
     "validate_alternative_path",
     "validate_global_optimality",
+    "validate_subgraph_optimality",
 ]
