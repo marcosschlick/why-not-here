@@ -25,3 +25,12 @@ class SolveISPRequest(BaseModel):
 
     user_path: list[list[int]] | None = None
     config: dict[str, Any] | None = None
+
+
+class SemanticModificationsData(BaseModel):
+    terrain: int
+    obstacle: int
+    slope: int
+    terrain_nodes: list[tuple[int, int]]
+    obstacle_nodes: list[tuple[int, int]]
+    slope_edges: list[tuple[tuple[int, int], tuple[int, int]]]

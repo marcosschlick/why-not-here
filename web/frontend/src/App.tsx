@@ -297,6 +297,12 @@ export function App() {
       }
       setLastResult(item.result);
       setArtifacts(item.artifacts || []);
+      if (item.mapData) {
+        setMapData(item.mapData);
+        setUserPath(
+          item.userPath || item.mapData.auto_path || [item.mapData.start],
+        );
+      }
       setCacheKey(Date.now());
       setCurrentStep("results");
     }
@@ -382,7 +388,7 @@ export function App() {
                   ? batchReviewIndex < queue.length - 1
                     ? `Save Route & Next Map (${batchReviewIndex + 2}/${queue.length}) →`
                     : `Solve Batch (${queue.length} Runs)`
-                  : "3. Solve ISP"
+                  : "Solve ISP"
               }
               onPrevMap={
                 isBatchMode && batchReviewIndex > 0
@@ -459,6 +465,16 @@ export function App() {
           <div className="step-container results-step">
             <ResultsView
               result={lastResult}
+              mapData={
+                isBatchMode
+                  ? queue[activeBatchResultIndex]?.mapData || null
+                  : mapData
+              }
+              userPath={
+                isBatchMode
+                  ? queue[activeBatchResultIndex]?.userPath || []
+                  : userPath
+              }
               artifacts={artifacts}
               cacheKey={cacheKey}
               config={mapData?.config || config}

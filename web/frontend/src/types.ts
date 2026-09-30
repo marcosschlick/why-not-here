@@ -10,9 +10,6 @@ export interface SystemConfig {
   DEFAULT_SOLVER?: string;
   SOLVER_TIMEOUT_SEC?: number;
   TARGET_TERRAIN?: string;
-  RHO_TERRAIN?: number;
-  RHO_OBSTACLE?: number;
-  RHO_SLOPE?: number;
   MAX_ISP_ITERATIONS?: number;
   BBOX_MARGIN?: number;
   MAP_ELEVATION_SCALE?: number;
@@ -38,6 +35,15 @@ export interface MapData {
   config: SystemConfig;
 }
 
+export interface SemanticModificationsData {
+  terrain: number;
+  obstacle: number;
+  slope: number;
+  terrain_nodes?: [number, number][];
+  obstacle_nodes?: [number, number][];
+  slope_edges?: [[number, number], [number, number]][];
+}
+
 export interface LastResult {
   success: boolean;
   solver_status: string;
@@ -47,11 +53,7 @@ export interface LastResult {
   original_optimal_cost?: number | null;
   final_alternative_cost?: number | null;
   cost_baseline_text?: string;
-  modifications?: {
-    terrain: number;
-    obstacle: number;
-    slope: number;
-  } | null;
+  modifications?: SemanticModificationsData | null;
 }
 
 export interface SolveResponse {

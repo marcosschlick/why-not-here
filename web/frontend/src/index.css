@@ -405,6 +405,7 @@ kbd,
 .canvas-header-card,
 .queue-panel-container,
 .results-container,
+.results-map-card,
 .solver-params-bar,
 .report-card,
 .canvas-footer-info,
@@ -871,6 +872,10 @@ kbd,
 .interactive-canvas.is-locked {
   cursor: not-allowed;
 }
+.interactive-canvas.is-read-only {
+  cursor: default;
+  touch-action: auto;
+}
 .canvas-footer-info {
   display: flex;
   align-items: flex-start;
@@ -961,6 +966,29 @@ kbd,
 }
 .legend-mud {
   background: var(--map-mud);
+}
+.legend-isp-terrain {
+  background: #00e5ff;
+  border-color: #00e5ff;
+}
+.legend-isp-obstacle {
+  background: repeating-linear-gradient(
+    135deg,
+    #ff1744 0,
+    #ff1744 0.18rem,
+    transparent 0.18rem,
+    transparent 0.34rem
+  );
+  border-color: #ff1744;
+}
+.legend-isp-slope {
+  background: linear-gradient(
+    transparent 42%,
+    #aa00ff 42%,
+    #aa00ff 58%,
+    transparent 58%
+  );
+  border-color: #aa00ff;
 }
 
 .queue-panel-header,
@@ -1331,6 +1359,60 @@ kbd,
 }
 .metric-card.modifications-card {
   border-top: 0.2rem solid var(--yale-blue);
+}
+.results-map-card {
+  display: grid;
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+}
+.results-map-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.results-map-header h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1rem;
+}
+.results-map-header .subtitle {
+  margin: 0.25rem 0 0;
+}
+.results-map-canvas-wrapper {
+  width: 100%;
+  min-width: 0;
+  min-height: 16rem;
+}
+.results-map-card > .canvas-legend {
+  justify-content: start;
+}
+.results-map-notice,
+.candidate-solution-badge {
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border-danger);
+  border-radius: var(--radius-sm);
+  color: var(--text-danger);
+  background: var(--surface-danger);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.results-map-notice {
+  margin: 0;
+}
+.solver-guarantee-notice {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  color: var(--text-structural);
+  background: var(--surface-info);
+  border: 1px solid color-mix(in srgb, var(--azure-blue) 32%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+}
+.candidate-solution-badge {
+  flex: 0 0 auto;
+  letter-spacing: 0.035em;
 }
 .metric-value {
   color: var(--text-strong);
@@ -1934,6 +2016,10 @@ kbd,
   .canvas-legend {
     grid-template-columns: 1fr;
     justify-content: stretch;
+  }
+  .results-map-header {
+    flex-direction: column;
+    align-items: stretch;
   }
   .legend-group {
     gap: 0.45rem 0.7rem;

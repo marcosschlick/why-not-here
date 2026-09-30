@@ -1,10 +1,20 @@
-import { useEffect, useState } from "react";
-import type { LastResult, QueueItem, SystemConfig } from "../types";
+import { useEffect, useRef, useState } from "react";
+import type {
+  LastResult,
+  MapData,
+  QueueItem,
+  SemanticModificationsData,
+  SystemConfig,
+} from "../types";
 import { SolverConfigBadges } from "./SolverConfigBadges";
 import { formatReductionMethod } from "../utils/formatters";
+import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
+import type { GridPoint } from "../utils/geometry";
 
 interface ResultsViewProps {
   result: LastResult | null;
+  mapData?: MapData | null;
+  userPath?: GridPoint[];
   artifacts: string[];
   cacheKey: number;
   onNewRun?: () => void;
@@ -86,6 +96,8 @@ function ArtifactCard({
 
 export function ResultsView({
   result,
+  mapData,
+  userPath = [],
   artifacts,
   cacheKey,
   onNewRun,
@@ -99,6 +111,8 @@ export function ResultsView({
   const [internalBatchIndex, setInternalBatchIndex] = useState<number>(0);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const mapCanvasContainerRef = useRef<HTMLDivElement | null>(null);
+  const [mapCellSize, setMapCellSize] = useState<number>(10);
 
   const isBatch = Boolean(batchQueue && batchQueue.length > 1);
   const currentBatchIdx =
@@ -127,6 +141,14 @@ export function ResultsView({
   const currentMapImageUrl = isBatch
     ? activeBatchItem?.mapData?.map_image_url
     : mapImageUrl;
+  const currentMapData = isBatch ? activeBatchItem?.mapData : mapData;
+  const currentUserPath = isBatch
+    ? (activeBatchItem?.userPath ??
+      activeBatchItem?.mapData?.auto_path ??
+      (activeBatchItem?.mapData ? [activeBatchItem.mapData.start] : []))
+    : userPath;
+  const mapHeight = currentMapData?.h;
+  const mapWidth = currentMapData?.w;
   const tacticalArtifacts = currentArtifacts.filter(
     (artifactPath) => artifactPath.split("?")[0].split("/").pop() !== "map.png",
   );
@@ -141,6 +163,32 @@ export function ResultsView({
     (currentStatus === "pending" ||
       currentStatus === "generating_map" ||
       currentStatus === "awaiting_route");
+
+  useEffect(() => {
+    if (mapHeight === undefined || mapWidth === undefined) return;
+    const activeMapHeight = mapHeight;
+    const activeMapWidth = mapWidth;
+
+    function updateCellSize() {
+      const containerWidth = mapCanvasContainerRef.current?.clientWidth ?? 0;
+      const maxAvailableWidth = Math.max(280, containerWidth - 48);
+      const maxAvailableHeight = 460;
+      const sizeW = Math.floor(maxAvailableWidth / activeMapWidth);
+      const sizeH = Math.floor(maxAvailableHeight / activeMapHeight);
+      setMapCellSize(Math.max(4, Math.min(24, Math.min(sizeW, sizeH))));
+    }
+
+    updateCellSize();
+    const resizeObserver = new ResizeObserver(updateCellSize);
+    if (mapCanvasContainerRef.current) {
+      resizeObserver.observe(mapCanvasContainerRef.current);
+    }
+    window.addEventListener("resize", updateCellSize);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateCellSize);
+    };
+  }, [mapHeight, mapWidth]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -165,6 +213,23 @@ export function ResultsView({
 
   const isOptimal = currentResult?.solver_status === "OPTIMAL";
   const isFailed = currentResult?.success === false;
+  const currentModifications = currentResult?.modifications ?? null;
+  const currentModificationCount = currentModifications
+    ? currentModifications.terrain +
+      currentModifications.obstacle +
+      currentModifications.slope
+    : 0;
+  const hasCandidateModifications =
+    currentModificationCount > 0 ||
+    (currentModifications?.terrain_nodes?.length ?? 0) > 0 ||
+    (currentModifications?.obstacle_nodes?.length ?? 0) > 0 ||
+    (currentModifications?.slope_edges?.length ?? 0) > 0;
+  const isInfeasible = currentResult?.solver_status === "INFEASIBLE";
+  const isCandidateSolution =
+    isFailed && !isOptimal && !isInfeasible && hasCandidateModifications;
+  const visibleModifications: SemanticModificationsData | null = isInfeasible
+    ? null
+    : currentModifications;
 
   const runtimeDisplay =
     typeof currentResult?.runtime_sec === "number"
@@ -239,8 +304,8 @@ export function ResultsView({
         <div className="results-title-group">
           <h2>
             {isBatch
-              ? `3. Results & Metrics — Run ${currentBatchIdx + 1} of ${batchQueue!.length}`
-              : "3. Results & Metrics"}
+              ? `Results & Metrics — Run ${currentBatchIdx + 1} of ${batchQueue!.length}`
+              : "Results & Metrics"}
           </h2>
           <span
             className={`status-pill large ${
@@ -272,6 +337,55 @@ export function ResultsView({
           </button>
         )}
       </div>
+
+      {currentResult && currentMapData && (
+        <section className="results-map-card">
+          <div className="results-map-header">
+            <div>
+              <h3>Interactive Tactical Map</h3>
+              <p className="subtitle">
+                Alternative route and semantic ISP modifications rendered from
+                the active map data.
+              </p>
+            </div>
+            {isCandidateSolution && (
+              <span className="candidate-solution-badge">
+                CANDIDATE SOLUTION (NOT GLOBALLY CERTIFIED)
+              </span>
+            )}
+          </div>
+
+          {(isInfeasible || !hasCandidateModifications) && (
+            <p className="results-map-notice">
+              {isInfeasible
+                ? "No valid modifications could be calculated; the alternative route is shown."
+                : isOptimal
+                  ? "The certified solution requires no semantic modifications."
+                  : "No valid semantic modifications were returned; the alternative route is shown."}
+            </p>
+          )}
+          {currentResult.solver_status === "OPTIMAL_INACCURATE" &&
+            currentResult.success && (
+              <p className="solver-guarantee-notice">
+                Global path validation passed, but OPTIMAL_INACCURATE does not
+                certify minimum intervention cardinality.
+              </p>
+            )}
+
+          <div
+            className="canvas-wrapper results-map-canvas-wrapper"
+            ref={mapCanvasContainerRef}
+          >
+            <TacticalMapCanvas
+              mapData={currentMapData}
+              userPath={currentUserPath}
+              modifications={visibleModifications}
+              cellSize={mapCellSize}
+            />
+          </div>
+          <TacticalMapLegend modifications={visibleModifications} />
+        </section>
+      )}
 
       {isBatch && !currentResult && (
         <div className="batch-pending-card">

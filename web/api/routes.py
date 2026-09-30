@@ -22,7 +22,12 @@ from src.planning import plan_path
 from .artifacts import collect_artifacts
 from .config_manager import get_all_configurations, update_configurations
 from .runner import runner
-from .schemas import GenerateMapRequest, RunRequest, SolveISPRequest
+from .schemas import (
+    GenerateMapRequest,
+    RunRequest,
+    SemanticModificationsData,
+    SolveISPRequest,
+)
 
 router = APIRouter(prefix="/api")
 
@@ -120,7 +125,7 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
         update_configurations(payload.config)
 
     p_user = None
-    if payload.user_path:
+    if payload.user_path is not None:
         p_user = [tuple(p) for p in payload.user_path]
 
     try:
@@ -131,13 +136,16 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
                 detail="ISP solver failed to produce a valid path or solution.",
             )
 
-        mod_counts = None
-        if result.modifications:
-            mod_counts = {
-                "terrain": len(result.modifications.terrain_nodes),
-                "obstacle": len(result.modifications.obstacle_nodes),
-                "slope": len(result.modifications.slope_edges),
-            }
+        modifications = None
+        if result.modifications is not None:
+            modifications = SemanticModificationsData(
+                terrain=len(result.modifications.terrain_nodes),
+                obstacle=len(result.modifications.obstacle_nodes),
+                slope=len(result.modifications.slope_edges),
+                terrain_nodes=result.modifications.terrain_nodes,
+                obstacle_nodes=result.modifications.obstacle_nodes,
+                slope_edges=result.modifications.slope_edges,
+            ).model_dump(mode="json")
 
         orig_cost = (
             round(result.original_optimal_cost, 4)
@@ -170,7 +178,7 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
             "final_alternative_cost": final_cost,
             "explanation_text": result.explanation_text,
             "cost_baseline_text": result.cost_baseline_text,
-            "modifications": mod_counts,
+            "modifications": modifications,
         }
 
         artifacts = collect_artifacts(config.OUTPUT_DIR)

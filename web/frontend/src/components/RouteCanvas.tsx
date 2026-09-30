@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -11,6 +12,7 @@ import {
   constrainDirection,
   type GridPoint,
 } from "../utils/geometry";
+import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
 
 interface RouteCanvasProps {
   mapData: MapData;
@@ -24,29 +26,6 @@ interface RouteCanvasProps {
   batchStepper?: React.ReactNode;
 }
 
-type Rgb = [number, number, number];
-
-function rgba([red, green, blue]: Rgb, alpha = 1): string {
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-}
-
-const TERRAIN_RGB: Record<string, Rgb> = {
-  COMPACTED_SOIL: [158, 107, 71],
-  GRASS: [46, 148, 56],
-  DRY_VEGETATION: [191, 194, 51],
-  SAND: [250, 209, 66],
-  MUD: [92, 56, 41],
-  WATER_RIVER: [5, 133, 230],
-};
-
-const OBSTACLE_RGB: Rgb = [20, 20, 23];
-const START_RGB: Rgb = [0, 176, 255];
-const START_EDGE_RGB: Rgb = [0, 51, 102];
-const GOAL_RGB: Rgb = [255, 215, 0];
-const GOAL_EDGE_RGB: Rgb = [102, 68, 0];
-const USER_PATH_RGB: Rgb = [255, 23, 68];
-const GRID_RGB: Rgb = [255, 255, 255];
-
 export function RouteCanvas({
   mapData,
   userPath,
@@ -58,7 +37,6 @@ export function RouteCanvas({
   onPrevMap,
   batchStepper,
 }: RouteCanvasProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
@@ -66,10 +44,13 @@ export function RouteCanvas({
   const [isShiftDown, setIsShiftDown] = useState<boolean>(false);
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [cellSize, setCellSize] = useState<number>(10);
+  const [undoDepth, setUndoDepth] = useState<number>(0);
 
   const strokeBasePathRef = useRef<GridPoint[] | null>(null);
   const dragOriginRef = useRef<GridPoint | null>(null);
   const rawHoveredCellRef = useRef<GridPoint | null>(null);
+  const undoHistoryRef = useRef<GridPoint[][]>([]);
+  const mapDataRef = useRef(mapData);
 
   const { h, w, start, goal, connectivity, terrain, elevation, obstacle } =
     mapData;
@@ -139,6 +120,14 @@ export function RouteCanvas({
     return () => window.removeEventListener("resize", updateCellSize);
   }, [updateCellSize]);
 
+  useLayoutEffect(() => {
+    if (mapDataRef.current !== mapData) {
+      undoHistoryRef.current = [];
+      setUndoDepth(0);
+      mapDataRef.current = mapData;
+    }
+  }, [mapData]);
+
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
@@ -158,227 +147,10 @@ export function RouteCanvas({
     return () => wrapper.removeEventListener("wheel", handleWheel);
   }, []);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const effectiveCellSize = cellSize * zoomLevel;
-    canvas.width = Math.round(w * effectiveCellSize);
-    canvas.height = Math.round(h * effectiveCellSize);
-
-    let minElev = Infinity;
-    let maxElev = -Infinity;
-    for (let i = 0; i < h; i++) {
-      for (let j = 0; j < w; j++) {
-        const val = elevation[i]?.[j] ?? 0;
-        if (val < minElev) minElev = val;
-        if (val > maxElev) maxElev = val;
-      }
-    }
-    const elevRange = maxElev - minElev;
-
-    for (let i = 0; i < h; i++) {
-      for (let j = 0; j < w; j++) {
-        const x = Math.round(j * effectiveCellSize);
-        const y = Math.round(i * effectiveCellSize);
-        const cellW = Math.round((j + 1) * effectiveCellSize) - x;
-        const cellH = Math.round((i + 1) * effectiveCellSize) - y;
-
-        const isObs = obstacle[i]?.[j] === 1;
-        const tName = terrain[i]?.[j] || "GRASS";
-        const cellElev = elevation[i]?.[j] ?? 0;
-
-        const factor =
-          elevRange > 0.0
-            ? 0.82 + 0.36 * ((cellElev - minElev) / elevRange)
-            : 1.0;
-
-        if (tName === "WATER_RIVER") {
-          const [baseR, baseG, baseB] = TERRAIN_RGB["WATER_RIVER"];
-          const r = Math.min(255, Math.max(0, Math.round(baseR * factor)));
-          const g = Math.min(255, Math.max(0, Math.round(baseG * factor)));
-          const b = Math.min(255, Math.max(0, Math.round(baseB * factor)));
-          ctx.fillStyle = `rgb(${r},${g},${b})`;
-          ctx.fillRect(x, y, cellW, cellH);
-        } else if (isObs) {
-          ctx.fillStyle = rgba(OBSTACLE_RGB);
-          ctx.fillRect(x, y, cellW, cellH);
-          if (effectiveCellSize >= 8) {
-            ctx.fillStyle = rgba(OBSTACLE_RGB, 0.34);
-            ctx.fillRect(
-              x + 1,
-              y + 1,
-              Math.max(1, cellW - 2),
-              Math.max(1, cellH - 2),
-            );
-          }
-        } else {
-          const [baseR, baseG, baseB] = TERRAIN_RGB[tName] || [128, 128, 128];
-          const r = Math.min(255, Math.max(0, Math.round(baseR * factor)));
-          const g = Math.min(255, Math.max(0, Math.round(baseG * factor)));
-          const b = Math.min(255, Math.max(0, Math.round(baseB * factor)));
-          ctx.fillStyle = `rgb(${r},${g},${b})`;
-          ctx.fillRect(x, y, cellW, cellH);
-        }
-
-        if (effectiveCellSize >= 10) {
-          ctx.strokeStyle = rgba(GRID_RGB, 0.16);
-          ctx.lineWidth = 0.5;
-          ctx.strokeRect(x, y, cellW, cellH);
-        }
-      }
-    }
-
-    if (userPath.length > 0) {
-      ctx.beginPath();
-      for (let idx = 0; idx < userPath.length; idx++) {
-        const [r, c] = userPath[idx];
-        const cx = c * effectiveCellSize + effectiveCellSize / 2;
-        const cy = r * effectiveCellSize + effectiveCellSize / 2;
-        if (idx === 0) ctx.moveTo(cx, cy);
-        else ctx.lineTo(cx, cy);
-      }
-      ctx.strokeStyle = rgba(USER_PATH_RGB, 0.35);
-      ctx.lineWidth = Math.max(3, effectiveCellSize * 0.7);
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.stroke();
-
-      ctx.beginPath();
-      for (let idx = 0; idx < userPath.length; idx++) {
-        const [r, c] = userPath[idx];
-        const cx = c * effectiveCellSize + effectiveCellSize / 2;
-        const cy = r * effectiveCellSize + effectiveCellSize / 2;
-        if (idx === 0) ctx.moveTo(cx, cy);
-        else ctx.lineTo(cx, cy);
-      }
-      ctx.strokeStyle = rgba(USER_PATH_RGB);
-      ctx.lineWidth = Math.max(2, effectiveCellSize * 0.4);
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.stroke();
-
-      ctx.fillStyle = rgba(USER_PATH_RGB);
-      for (const [r, c] of userPath) {
-        const cx = c * effectiveCellSize + effectiveCellSize / 2;
-        const cy = r * effectiveCellSize + effectiveCellSize / 2;
-        ctx.beginPath();
-        ctx.arc(
-          cx,
-          cy,
-          Math.max(1.5, effectiveCellSize * 0.22),
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
-    }
-
-    const sx = start[1] * effectiveCellSize + effectiveCellSize / 2;
-    const sy = start[0] * effectiveCellSize + effectiveCellSize / 2;
-    const sRadius = Math.max(6, effectiveCellSize * 0.85);
-
-    ctx.save();
-    ctx.translate(sx, sy);
-    ctx.beginPath();
-    ctx.moveTo(0, -sRadius);
-    ctx.lineTo(sRadius, 0);
-    ctx.lineTo(0, sRadius);
-    ctx.lineTo(-sRadius, 0);
-    ctx.closePath();
-    ctx.fillStyle = rgba(START_RGB);
-    ctx.fill();
-    ctx.strokeStyle = rgba(START_EDGE_RGB);
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    if (effectiveCellSize >= 12) {
-      ctx.fillStyle = rgba(GRID_RGB);
-      ctx.font = `bold ${Math.max(8, effectiveCellSize * 0.6)}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("S", 0, 0);
-    }
-    ctx.restore();
-
-    const gx = goal[1] * effectiveCellSize + effectiveCellSize / 2;
-    const gy = goal[0] * effectiveCellSize + effectiveCellSize / 2;
-    const gRadius = Math.max(6, effectiveCellSize * 0.85);
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(gx, gy, gRadius, 0, Math.PI * 2);
-    ctx.fillStyle = rgba(GOAL_RGB);
-    ctx.fill();
-    ctx.strokeStyle = rgba(GOAL_EDGE_RGB);
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    if (effectiveCellSize >= 12) {
-      ctx.fillStyle = rgba(GOAL_EDGE_RGB);
-      ctx.font = `bold ${Math.max(8, effectiveCellSize * 0.6)}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("G", gx, gy);
-    }
-    ctx.restore();
-
-    if (hoveredCell) {
-      const [hr, hc] = hoveredCell;
-      if (hr >= 0 && hr < h && hc >= 0 && hc < w) {
-        ctx.strokeStyle = rgba(START_RGB);
-        ctx.lineWidth = 2;
-        const hx = Math.round(hc * effectiveCellSize);
-        const hy = Math.round(hr * effectiveCellSize);
-        const hw = Math.round((hc + 1) * effectiveCellSize) - hx;
-        const hh = Math.round((hr + 1) * effectiveCellSize) - hy;
-        ctx.strokeRect(hx, hy, hw, hh);
-
-        if (isShiftDown && !isConnectedToGoal) {
-          const origin =
-            dragOriginRef.current ??
-            (userPath.length > 0 ? userPath[userPath.length - 1] : start);
-          const ox = origin[1] * effectiveCellSize + effectiveCellSize / 2;
-          const oy = origin[0] * effectiveCellSize + effectiveCellSize / 2;
-          const targetX = hc * effectiveCellSize + effectiveCellSize / 2;
-          const targetY = hr * effectiveCellSize + effectiveCellSize / 2;
-
-          ctx.save();
-          ctx.beginPath();
-          ctx.setLineDash([4, 4]);
-          ctx.moveTo(ox, oy);
-          ctx.lineTo(targetX, targetY);
-          ctx.strokeStyle = rgba(START_RGB, 0.85);
-          ctx.lineWidth = Math.max(1.5, effectiveCellSize * 0.2);
-          ctx.stroke();
-          ctx.restore();
-        }
-      }
-    }
-  }, [
-    h,
-    w,
-    cellSize,
-    zoomLevel,
-    elevation,
-    terrain,
-    obstacle,
-    start,
-    goal,
-    userPath,
-    hoveredCell,
-    isShiftDown,
-    isConnectedToGoal,
-  ]);
-
   function getCellFromCoordinates(
     event: ReactPointerEvent<HTMLCanvasElement>,
   ): [number, number] | null {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
+    const rect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
@@ -539,6 +311,18 @@ export function RouteCanvas({
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
     } catch {}
+    const previousPath = strokeBasePathRef.current;
+    if (
+      previousPath &&
+      (previousPath.length !== userPath.length ||
+        previousPath.some(
+          ([row, col], index) =>
+            userPath[index]?.[0] !== row || userPath[index]?.[1] !== col,
+        ))
+    ) {
+      undoHistoryRef.current = [...undoHistoryRef.current, previousPath];
+      setUndoDepth(undoHistoryRef.current.length);
+    }
     setIsDrawing(false);
     strokeBasePathRef.current = null;
     dragOriginRef.current = null;
@@ -546,6 +330,8 @@ export function RouteCanvas({
 
   function handleAutoRoute() {
     if (mapData.auto_path && mapData.auto_path.length > 0) {
+      undoHistoryRef.current = [];
+      setUndoDepth(0);
       onPathChange(mapData.auto_path);
       setIsDrawing(false);
     }
@@ -558,21 +344,23 @@ export function RouteCanvas({
     const extension = connectPoints(lastPoint, goal, connectivity);
     const combined =
       userPath.length > 0 ? [...userPath, ...extension.slice(1)] : extension;
+    undoHistoryRef.current = [];
+    setUndoDepth(0);
     onPathChange(combined);
     setIsDrawing(false);
   }
 
   function handleClear() {
+    undoHistoryRef.current = [];
+    setUndoDepth(0);
     onPathChange([start]);
   }
 
   function handleUndo() {
-    if (userPath.length <= 1) {
-      onPathChange([start]);
-    } else {
-      const newLength = Math.max(1, userPath.length - 4);
-      onPathChange(userPath.slice(0, newLength));
-    }
+    const previousPath = undoHistoryRef.current.pop();
+    if (!previousPath) return;
+    setUndoDepth(undoHistoryRef.current.length);
+    onPathChange(previousPath);
   }
 
   const hoveredInfo = hoveredCell ? (
@@ -601,7 +389,8 @@ export function RouteCanvas({
     </span>
   ) : (
     <span>
-      Hover over grid or drag pointer to interact (hold Shift for straight/diagonal lines)
+      Hover over grid or drag pointer to interact (hold Shift for
+      straight/diagonal lines)
     </span>
   );
 
@@ -610,7 +399,7 @@ export function RouteCanvas({
       {batchStepper}
       <div className="canvas-header-card">
         <div className="canvas-title-group">
-          <h2>2. Route Definition</h2>
+          <h2>Route Definition</h2>
           <p className="subtitle">
             Define alternative trajectory from Start (S) to Goal (G).
           </p>
@@ -639,9 +428,9 @@ export function RouteCanvas({
             type="button"
             className="btn btn-ghost"
             onClick={handleUndo}
-            disabled={isSolving || userPath.length <= 1}
+            disabled={isSolving || undoDepth === 0}
           >
-            Undo
+            Undo Last Point
           </button>
 
           <button
@@ -702,7 +491,8 @@ export function RouteCanvas({
 
           {isShiftDown && (
             <span className="node-marker shift-badge">
-              Shift: {connectivity === 4 ? "Orthogonal Snap" : "45° / Orthogonal Snap"}
+              Shift:{" "}
+              {connectivity === 4 ? "Orthogonal Snap" : "45° / Orthogonal Snap"}
             </span>
           )}
 
@@ -748,21 +538,25 @@ export function RouteCanvas({
             onClick={onSolve}
             disabled={isSolving || !isConnectedToGoal}
           >
-            {isSolving ? "Solving ISP..." : solveButtonText || "3. Solve ISP"}
+            {isSolving ? "Solving ISP..." : solveButtonText || "Solve ISP"}
           </button>
         </div>
       </div>
 
       <div className="canvas-wrapper" ref={wrapperRef}>
-        <canvas
-          ref={canvasRef}
-          className={`interactive-canvas ${
-            isConnectedToGoal ? "is-locked" : ""
-          }`}
+        <TacticalMapCanvas
+          mapData={mapData}
+          userPath={userPath}
+          cellSize={cellSize}
+          zoomLevel={zoomLevel}
+          hoveredCell={hoveredCell}
+          isShiftDown={isShiftDown}
+          dragOrigin={dragOriginRef.current}
+          isConnectedToGoal={isConnectedToGoal}
+          interactive
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
           onPointerLeave={() => {
             rawHoveredCellRef.current = null;
             if (!isDrawing) {
@@ -774,54 +568,7 @@ export function RouteCanvas({
 
       <div className="canvas-footer-info">
         <div className="cell-inspector">{hoveredInfo}</div>
-        <div className="canvas-legend" aria-label="Map legend">
-          <div className="legend-group">
-            <span className="legend-group-label">Terrain</span>
-            <span className="legend-item">
-              <span className="legend-color legend-compacted-soil" />
-              Compacted Soil
-            </span>
-            <span className="legend-item">
-              <span className="legend-color legend-grass" />
-              Grass
-            </span>
-            <span className="legend-item">
-              <span className="legend-color legend-dry-vegetation" />
-              Dry Vegetation
-            </span>
-            <span className="legend-item">
-              <span className="legend-color legend-sand" />
-              Sand
-            </span>
-            <span className="legend-item">
-              <span className="legend-color legend-mud" />
-              Mud
-            </span>
-            <span className="legend-item">
-              <span className="legend-color legend-river" />
-              River
-            </span>
-          </div>
-          <div className="legend-group">
-            <span className="legend-group-label">Markers</span>
-            <span className="legend-item">
-              <span className="legend-color legend-obstacle" />
-              Obstacle
-            </span>
-            <span className="legend-item">
-              <span className="legend-color legend-start" />
-              Start (S)
-            </span>
-            <span className="legend-item">
-              <span className="legend-color legend-goal" />
-              Goal (G)
-            </span>
-            <span className="legend-item">
-              <span className="legend-color legend-route" />
-              Alternative Route (p&apos;)
-            </span>
-          </div>
-        </div>
+        <TacticalMapLegend />
       </div>
     </section>
   );

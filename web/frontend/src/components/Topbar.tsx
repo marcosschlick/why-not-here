@@ -69,9 +69,7 @@ export function Topbar({
             }`}
             onClick={() => onSelectStep("config")}
           >
-            <span className="stepper-indicator">
-              {isStep1Done ? "✓" : "1"}
-            </span>
+            <span className="stepper-indicator">{isStep1Done ? "✓" : "1"}</span>
             <span className="stepper-label">Configuration</span>
           </button>
 
@@ -85,9 +83,7 @@ export function Topbar({
             onClick={() => hasMapData && onSelectStep("route_canvas")}
             disabled={!hasMapData}
           >
-            <span className="stepper-indicator">
-              {isStep2Done ? "✓" : "2"}
-            </span>
+            <span className="stepper-indicator">{isStep2Done ? "✓" : "2"}</span>
             <span className="stepper-label">Route Definition</span>
           </button>
 
