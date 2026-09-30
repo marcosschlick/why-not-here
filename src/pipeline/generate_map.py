@@ -1,6 +1,7 @@
 from src import config
 from src.grid.grid import Grid
 from src.map.generator import generate_map as create_map
+from src.planning import plan_path
 from src.visual.plotter import render_tactical_map
 
 from .utils import get_project_path, prepare_endpoints
@@ -24,6 +25,9 @@ def generate_map(verbose: bool = True) -> Grid:
     )
 
     _start, _goal = prepare_endpoints(grid)
+    _p_star, _cost_star, _ = plan_path(
+        grid, _start, _goal, algorithm=config.DEFAULT_PLANNER
+    )
 
     out_base = get_project_path(config.OUTPUT_DIR)
     map_dir = out_base / "map"

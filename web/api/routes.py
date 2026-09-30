@@ -277,7 +277,7 @@ def create_directory(payload: dict[str, str]) -> dict[str, Any]:
 def check_output_dir(path: str = "output") -> dict[str, Any]:
     project_root = Path(__file__).resolve().parents[2]
     clean_path = path.strip() if path else "output"
-    target_path = Path(clean_path)
+    target_path = Path(clean_path).expanduser()
     if not target_path.is_absolute():
         target_path = (project_root / clean_path).resolve()
     else:
@@ -322,7 +322,7 @@ def check_output_dir(path: str = "output") -> dict[str, Any]:
 def clean_output_dir(payload: dict[str, str]) -> dict[str, Any]:
     project_root = Path(__file__).resolve().parents[2]
     raw_path = payload.get("path", "output").strip()
-    target_path = Path(raw_path)
+    target_path = Path(raw_path).expanduser()
     if not target_path.is_absolute():
         target_path = (project_root / raw_path).resolve()
     else:
@@ -390,6 +390,30 @@ def browse_directory() -> dict[str, str]:
                 )
                 if res.returncode == 0:
                     selected_path = res.stdout.strip()
+            if not selected_path:
+                try:
+                    py_code = (
+                        "import gi; "
+                        "gi.require_version('Gtk', '3.0'); "
+                        "from gi.repository import Gtk; "
+                        "dialog = Gtk.FileChooserDialog(title='Select Output Directory', action=Gtk.FileChooserAction.SELECT_FOLDER); "
+                        "dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OPEN, Gtk.ResponseType.OK); "
+                        "resp = dialog.run(); "
+                        "p = dialog.get_filename() if resp == Gtk.ResponseType.OK else ''; "
+                        "dialog.destroy(); "
+                        "print(p or '', end='')"
+                    )
+                    res = subprocess.run(
+                        [sys.executable, "-c", py_code],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        env=env,
+                    )
+                    if res.returncode == 0:
+                        selected_path = res.stdout.strip()
+                except (subprocess.SubprocessError, OSError):
+                    selected_path = ""
         elif system == "Darwin":
             cmd = "osascript -e 'POSIX path of (choose folder with prompt \"Select Output Directory\")'"
             res = subprocess.run(

@@ -270,10 +270,63 @@ def run_isp(
     n_slope = len(mods.slope_edges) if mods else 0
     artifact_skip_note = format_artifact_skip_note(isp_result)
 
+    if isp_result.success and isp_result.solver_status == "OPTIMAL":
+        solution_quality = "OPTIMAL (Certified Global Minimum Intervention)"
+    elif isp_result.solver_status == "OPTIMAL_INACCURATE" and isp_result.success:
+        solution_quality = "OPTIMAL_INACCURATE (Global path valid, minimum intervention cardinality not certified)"
+    elif isp_result.solver_status == "SUBGRAPH_OPTIMAL_ONLY":
+        solution_quality = "SUBGRAPH_OPTIMAL_ONLY (Candidate solution optimal only within reduced subgraph, failed global validation)"
+    elif isp_result.solver_status == "SUBOPTIMAL":
+        solution_quality = "SUBOPTIMAL (Candidate modifications failed global validation)"
+    elif isp_result.solver_status == "INFEASIBLE":
+        solution_quality = "INFEASIBLE (No viable semantic modifications found in intervention domain)"
+    elif isp_result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
+        solution_quality = f"{isp_result.solver_status} (Search stopped at resource limit)"
+    else:
+        solution_quality = f"{isp_result.solver_status}"
+
+    strategy_label = (
+        "INCREMENTAL / ITERATIVE MILP"
+        if config.USE_INCREMENTAL_SOLVER
+        else "STANDARD MONOLITHIC MILP"
+    )
+    reduction_detail = (
+        f"{isp_result.reduction_method} (Margin: {config.BBOX_MARGIN})"
+        if isp_result.reduction_method == "BBOX"
+        else isp_result.reduction_method
+    )
+    scope_detail = (
+        f", A* Scope: {config.INCREMENTAL_ASTAR_SCOPE}"
+        if config.USE_INCREMENTAL_SOLVER and config.DEFAULT_REDUCTION_METHOD != "NONE"
+        else ""
+    )
+    cost_star_str = f"{cost_star:.2f}s" if cost_star is not None else "-"
+    cost_user_orig_str = (
+        f"{cost_user_orig:.2f}s"
+        if cost_user_orig < float("inf")
+        else "Impassable (∞)"
+    )
+    final_alt_cost = isp_result.final_alternative_cost
+    final_cost_str = (
+        f"{final_alt_cost:.2f}s"
+        if final_alt_cost is not None and final_alt_cost < float("inf")
+        else "Impassable (∞)"
+    )
+
     log_lines.append("-" * 60)
     log_lines.append(
         f"ISP Status: {isp_result.solver_status} "
         f"(Method: {isp_result.reduction_method}, Iterations: {isp_result.iterations}, Time: {isp_result.runtime_sec:.3f}s)"
+    )
+    log_lines.append(f"Solution Quality: {solution_quality}")
+    log_lines.append(
+        f"Strategy: {strategy_label} (Solver: {config.DEFAULT_SOLVER}, Reduction: {reduction_detail}{scope_detail}, Max Iterations: {config.MAX_ISP_ITERATIONS})"
+    )
+    log_lines.append(
+        f"Cost Metrics: Initial A* Cost = {cost_star_str} | Original Alt Cost = {cost_user_orig_str} | Final Alt Cost = {final_cost_str}"
+    )
+    log_lines.append(
+        f"Endpoints: Start = [{start[0]}, {start[1]}] | Goal = [{goal[0]}, {goal[1]}]"
     )
     log_lines.append(
         f"Modifications: {n_terrain} terrain, {n_obs} obstacles, {n_slope} slopes"
@@ -298,6 +351,16 @@ def run_isp(
         print(
             f"ISP Status: {isp_result.solver_status} "
             f"(Method: {isp_result.reduction_method}, Iterations: {isp_result.iterations}, Time: {isp_result.runtime_sec:.3f}s)"
+        )
+        print(f"Solution Quality: {solution_quality}")
+        print(
+            f"Strategy: {strategy_label} (Solver: {config.DEFAULT_SOLVER}, Reduction: {reduction_detail}{scope_detail}, Max Iterations: {config.MAX_ISP_ITERATIONS})"
+        )
+        print(
+            f"Cost Metrics: Initial A* Cost = {cost_star_str} | Original Alt Cost = {cost_user_orig_str} | Final Alt Cost = {final_cost_str}"
+        )
+        print(
+            f"Endpoints: Start = [{start[0]}, {start[1]}] | Goal = [{goal[0]}, {goal[1]}]"
         )
         print(
             f"Modifications: {n_terrain} terrain, {n_obs} obstacles, {n_slope} slopes"
