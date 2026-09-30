@@ -8,12 +8,46 @@ from src.incremental import (
     solve_closed_loop,
     validate_global_optimality,
 )
+from src.isp.precheck import validate_alternative_path
 from src.isp.solver import ISPSolver
 from src.planning import plan_path
 from src.reduction import create_reduced_graph
 from src.visual.plotter import render_tactical_map
 
 from .utils import create_alternative_path, get_project_path, prepare_endpoints
+
+
+def format_artifact_skip_note(result: ClosedLoopResult) -> str | None:
+    if result.success:
+        return None
+
+    modifications = result.modifications
+    has_candidates = modifications is not None and any(
+        (
+            modifications.terrain_nodes,
+            modifications.obstacle_nodes,
+            modifications.slope_edges,
+        )
+    )
+
+    if result.solver_status == "INFEASIBLE":
+        return " (Note: Maps 4 and 5 were skipped because no viable modifications were found)"
+
+    if result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
+        return " (Note: Maps 4 and 5 were skipped because the solver reached the limit before certifying a global solution)"
+
+    if has_candidates and result.solver_status in {
+        "SUBGRAPH_OPTIMAL_ONLY",
+        "SUBOPTIMAL",
+        "DISCONNECTED_GRAPH",
+        "STALLED_OR_CYCLE",
+    }:
+        return " (Note: Maps 4 and 5 were skipped because the candidate modifications failed global validation)"
+
+    if has_candidates:
+        return " (Note: Maps 4 and 5 were skipped because candidate modifications were returned without global certification)"
+
+    return " (Note: Maps 4 and 5 were skipped because the solver did not return a usable globally certified solution)"
 
 
 def run_isp(
@@ -44,10 +78,32 @@ def run_isp(
         print("Error: No traversable path found between start and goal.")
         return None
 
-    if user_path:
+    if user_path is not None:
         p_user = [tuple(p) for p in user_path]
     else:
         p_user = create_alternative_path(grid, start, goal)
+
+    validation_started = time.perf_counter()
+    is_valid, invalid_status, invalid_message = validate_alternative_path(
+        grid, start, goal, p_user
+    )
+    if not is_valid:
+        if verbose and invalid_message:
+            print(invalid_message)
+        return ClosedLoopResult(
+            success=False,
+            modifications=None,
+            explanation_text=invalid_message or "The alternative path is invalid.",
+            iterations=0,
+            competing_paths_count=0,
+            original_optimal_path=p_star if p_star else [],
+            original_optimal_cost=cost_star,
+            final_alternative_cost=float("inf"),
+            runtime_sec=time.perf_counter() - validation_started,
+            solver_status=invalid_status or "INVALID_ALTERNATIVE_PATH",
+            reduction_method=config.DEFAULT_REDUCTION_METHOD,
+            cost_baseline_text="",
+        )
 
     cost_user_orig = ISPValidator.compute_path_cost(grid, p_user)
 
@@ -83,9 +139,7 @@ def run_isp(
             solver_name=config.DEFAULT_SOLVER,
             timeout=config.SOLVER_TIMEOUT_SEC,
             max_iterations=config.MAX_ISP_ITERATIONS,
-            rho_terrain=config.RHO_TERRAIN,
-            rho_obstacle=config.RHO_OBSTACLE,
-            rho_slope=config.RHO_SLOPE,
+            tolerance=config.INCREMENTAL_TOLERANCE,
         )
     else:
         start_time = time.perf_counter()
@@ -99,11 +153,9 @@ def run_isp(
         solver = ISPSolver(
             solver_name=config.DEFAULT_SOLVER,
             timeout=config.SOLVER_TIMEOUT_SEC,
-            rho_terrain=config.RHO_TERRAIN,
-            rho_obstacle=config.RHO_OBSTACLE,
-            rho_slope=config.RHO_SLOPE,
+            tolerance=config.INCREMENTAL_TOLERANCE,
         )
-        success, modifications, obj_val = solver.solve(
+        success, modifications, _ = solver.solve(
             grid, start, goal, p_user, reduced_graph=reduced_graph
         )
         elapsed = time.perf_counter() - start_time
@@ -118,16 +170,21 @@ def run_isp(
                 solver_status = "SUBGRAPH_OPTIMAL_ONLY" if reduced_graph is not None else "SUBOPTIMAL"
                 success = False
             else:
-                solver_status = "OPTIMAL"
+                solver_status = solver.last_solver_status or "OPTIMAL"
         else:
-            solver_status = "FAILED"
+            solver_status = solver.last_solver_status or "SOLVER_FAILED"
 
         if success and modifications is not None:
             explanation = ISPValidator.generate_explanation_text(modifications, grid)
+        elif solver_status == "OPTIMAL_INACCURATE":
+            explanation = (
+                "The MILP solver returned OPTIMAL_INACCURATE; the run is inconclusive "
+                "and does not certify minimum intervention cardinality."
+            )
         else:
             explanation = (
-                "A rota alternativa p' não pôde ser tornada ótima pelo planejador "
-                "no domínio de intervenções permitidas."
+                "The alternative path p' could not be made optimal by the planner "
+                "within the allowed intervention domain."
             )
         cost_baseline = ISPValidator.generate_cost_baseline_justification(
             cost_star,
@@ -205,6 +262,7 @@ def run_isp(
     n_terrain = len(mods.terrain_nodes) if mods else 0
     n_obs = len(mods.obstacle_nodes) if mods else 0
     n_slope = len(mods.slope_edges) if mods else 0
+    artifact_skip_note = format_artifact_skip_note(isp_result)
 
     log_lines.append("-" * 60)
     log_lines.append(
@@ -224,10 +282,8 @@ def run_isp(
     log_lines.append("\nSaved artifacts in output/:")
     for img in saved_images:
         log_lines.append(f" - {img.name}")
-    if not isp_result.success:
-        log_lines.append(
-            " (Note: Maps 4 and 5 were skipped because no viable modifications were found)"
-        )
+    if artifact_skip_note:
+        log_lines.append(artifact_skip_note)
     log_lines.append("-" * 60)
 
     log_content = "\n".join(log_lines) + "\n"
@@ -250,10 +306,8 @@ def run_isp(
         print("\nSaved artifacts in output/:")
         for img in saved_images:
             print(f" - {img.name}")
-        if not isp_result.success:
-            print(
-                " (Note: Maps 4 and 5 were skipped because no viable modifications were found)"
-            )
+        if artifact_skip_note:
+            print(artifact_skip_note)
         print("-" * 60)
 
     log_path = results_dir / "log.txt"

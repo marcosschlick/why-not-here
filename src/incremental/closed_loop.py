@@ -5,12 +5,8 @@ from src.config import (
     CLOSED_LOOP_TIMEOUT_SEC,
     DEFAULT_REDUCTION_METHOD,
     DEFAULT_SOLVER,
-    EPSILON_L1,
     INCREMENTAL_TOLERANCE,
     MAX_ISP_ITERATIONS,
-    RHO_OBSTACLE,
-    RHO_SLOPE,
-    RHO_TERRAIN,
     SOLVER_TIMEOUT_SEC,
 )
 from src.grid.grid import Grid
@@ -36,10 +32,6 @@ class ClosedLoopISPSolver:
         global_timeout: float = CLOSED_LOOP_TIMEOUT_SEC,
         max_iterations: int = MAX_ISP_ITERATIONS,
         tolerance: float = INCREMENTAL_TOLERANCE,
-        rho_terrain: float = RHO_TERRAIN,
-        rho_obstacle: float = RHO_OBSTACLE,
-        rho_slope: float = RHO_SLOPE,
-        epsilon_l1: float = EPSILON_L1,
         reduction_method: str = DEFAULT_REDUCTION_METHOD,
         bbox_margin: int = BBOX_MARGIN,
     ) -> None:
@@ -48,10 +40,6 @@ class ClosedLoopISPSolver:
         self.global_timeout = global_timeout
         self.max_iterations = max_iterations
         self.tolerance = tolerance
-        self.rho_terrain = rho_terrain
-        self.rho_obstacle = rho_obstacle
-        self.rho_slope = rho_slope
-        self.epsilon_l1 = epsilon_l1
         self.reduction_method = reduction_method
         self.bbox_margin = bbox_margin
 
@@ -122,7 +110,7 @@ class ClosedLoopISPSolver:
             return make_res(
                 True,
                 SemanticModifications([], [], []),
-                "Origem e destino coincidem; nenhuma alteração necessária.",
+                "Origin and destination coincide; no modifications required.",
                 0,
                 1,
                 0.0,
@@ -148,11 +136,6 @@ class ClosedLoopISPSolver:
         step_solver = IncrementalISPSolver(
             solver_name=self.solver_name,
             timeout=self.timeout,
-            rho_terrain=self.rho_terrain,
-            rho_obstacle=self.rho_obstacle,
-            rho_slope=self.rho_slope,
-            epsilon_l1=self.epsilon_l1,
-            tolerance=self.tolerance,
         )
 
         reduced_graph = create_reduced_graph(
@@ -172,7 +155,7 @@ class ClosedLoopISPSolver:
                 return make_res(
                     False,
                     delta,
-                    "Tempo limite global de execução excedido.",
+                    "Global execution time limit exceeded.",
                     iteration - 1,
                     len(Q),
                     cost_p_prime,
@@ -190,11 +173,15 @@ class ClosedLoopISPSolver:
                 reduced_graph=reduced_graph,
             )
 
-            if time.perf_counter() - start_time >= self.global_timeout and not milp_ok:
+            if (
+                time.perf_counter() - start_time >= self.global_timeout
+                and not milp_ok
+                and step_solver.last_solver_status != "OPTIMAL_INACCURATE"
+            ):
                 return make_res(
                     False,
                     delta,
-                    "Tempo limite global de execução excedido.",
+                    "Global execution time limit exceeded.",
                     iteration,
                     len(Q),
                     cost_p_prime,
@@ -202,14 +189,25 @@ class ClosedLoopISPSolver:
                 )
 
             if not milp_ok or delta is None:
+                solver_status = step_solver.last_solver_status or "SOLVER_FAILED"
+                explanation = (
+                    "The MILP solver did not find a feasible intervention."
+                    if solver_status == "INFEASIBLE"
+                    else (
+                        "The MILP solver returned OPTIMAL_INACCURATE; the run is "
+                        "inconclusive and does not certify minimum intervention cardinality."
+                        if solver_status == "OPTIMAL_INACCURATE"
+                        else "The MILP solver did not return a usable solution."
+                    )
+                )
                 return make_res(
                     False,
                     None,
-                    "Nenhuma intervenção viável encontrada pelo solver MILP.",
+                    explanation,
                     iteration,
                     len(Q),
                     cost_p_prime_init,
-                    "INFEASIBLE_OR_FAILED",
+                    solver_status,
                 )
 
             is_opt, q_viol, cost_p_prime, _ = validate_global_optimality(
@@ -230,14 +228,14 @@ class ClosedLoopISPSolver:
                     iteration,
                     len(Q),
                     cost_p_prime,
-                    "OPTIMAL",
+                    step_solver.last_solver_status or "OPTIMAL",
                 )
 
             if q_viol is None:
                 return make_res(
                     False,
                     delta,
-                    "Não existe caminho conectando a origem ao destino sob as modificações atuais.",
+                    "No valid path connects origin to destination under current modifications.",
                     iteration,
                     len(Q),
                     cost_p_prime,
@@ -248,7 +246,7 @@ class ClosedLoopISPSolver:
                 return make_res(
                     False,
                     delta,
-                    "Convergência estagnada por repetição de caminho competidor.",
+                    "Convergence stalled due to repeated competing path.",
                     iteration,
                     len(Q),
                     cost_p_prime,
@@ -260,7 +258,7 @@ class ClosedLoopISPSolver:
         return make_res(
             False,
             delta,
-            "Limite máximo de iterações atingido sem certificação de otimalidade global.",
+            "Maximum iterations reached without global optimality certification.",
             self.max_iterations,
             len(Q),
             cost_p_prime,
@@ -280,10 +278,6 @@ def solve_closed_loop(
     global_timeout: float = CLOSED_LOOP_TIMEOUT_SEC,
     max_iterations: int = MAX_ISP_ITERATIONS,
     tolerance: float = INCREMENTAL_TOLERANCE,
-    rho_terrain: float = RHO_TERRAIN,
-    rho_obstacle: float = RHO_OBSTACLE,
-    rho_slope: float = RHO_SLOPE,
-    epsilon_l1: float = EPSILON_L1,
 ) -> ClosedLoopResult:
     solver = ClosedLoopISPSolver(
         solver_name=solver_name,
@@ -291,10 +285,6 @@ def solve_closed_loop(
         global_timeout=global_timeout,
         max_iterations=max_iterations,
         tolerance=tolerance,
-        rho_terrain=rho_terrain,
-        rho_obstacle=rho_obstacle,
-        rho_slope=rho_slope,
-        epsilon_l1=epsilon_l1,
         reduction_method=reduction_method,
         bbox_margin=bbox_margin,
     )

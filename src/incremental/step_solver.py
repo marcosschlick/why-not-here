@@ -3,16 +3,12 @@ import numpy as np
 
 from ..config import (
     DEFAULT_SOLVER,
-    EPSILON_L1,
-    INCREMENTAL_TOLERANCE,
     MIP_GAP_TOLERANCE,
-    RHO_OBSTACLE,
-    RHO_SLOPE,
-    RHO_TERRAIN,
     SOLVER_TIMEOUT_SEC,
 )
 from ..grid import Grid
 from ..isp.base import BaseISPSolver
+from ..isp.precheck import validate_alternative_path
 from ..isp.semantics import SemanticModifications
 from ..reduction import ReducedGraph, prepare_subgraph
 
@@ -23,22 +19,12 @@ class IncrementalISPSolver(BaseISPSolver):
         solver_name: str = DEFAULT_SOLVER,
         timeout: float = SOLVER_TIMEOUT_SEC,
         mip_gap: float = MIP_GAP_TOLERANCE,
-        rho_terrain: float = RHO_TERRAIN,
-        rho_obstacle: float = RHO_OBSTACLE,
-        rho_slope: float = RHO_SLOPE,
-        epsilon_l1: float = EPSILON_L1,
-        tolerance: float = INCREMENTAL_TOLERANCE,
     ) -> None:
         super().__init__(
             solver_name=solver_name,
             timeout=timeout,
             mip_gap=mip_gap,
-            rho_terrain=rho_terrain,
-            rho_obstacle=rho_obstacle,
-            rho_slope=rho_slope,
-            epsilon_l1=epsilon_l1,
         )
-        self.tolerance = tolerance
 
     def solve_step(
         self,
@@ -49,13 +35,16 @@ class IncrementalISPSolver(BaseISPSolver):
         competing_paths: list[list[tuple[int, int]]],
         reduced_graph: ReducedGraph | None = None,
     ) -> tuple[bool, SemanticModifications | None, float]:
-        if not alternative_path:
-            return False, None, float("inf")
-
-        if alternative_path[0] != start or alternative_path[-1] != goal:
+        self.last_solver_status = None
+        is_valid, status, _ = validate_alternative_path(
+            grid, start, goal, alternative_path
+        )
+        if not is_valid:
+            self.last_solver_status = status
             return False, None, float("inf")
 
         if start == goal and len(alternative_path) == 1:
+            self.last_solver_status = "OPTIMAL"
             return True, SemanticModifications([], [], []), 0.0
 
         active_nodes, active_edges, costs = prepare_subgraph(
@@ -70,6 +59,7 @@ class IncrementalISPSolver(BaseISPSolver):
             custom_edge_costs=costs,
         )
         if formulation is None:
+            self.last_solver_status = "INVALID_ALTERNATIVE_PATH"
             return False, None, float("inf")
 
         constraints = [

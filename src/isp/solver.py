@@ -1,13 +1,11 @@
 import cvxpy as cp
 import numpy as np
 
-from ..config import (
-    V_MAX,
-)
 from ..grid import Grid
 from ..planning import astar
 from ..reduction import ReducedGraph, prepare_subgraph
 from .base import BaseISPSolver
+from .precheck import check_geometric_feasibility, validate_alternative_path
 from .types import SemanticModifications
 
 
@@ -22,23 +20,25 @@ class ISPSolver(BaseISPSolver):
         | None = None,
         reduced_graph: ReducedGraph | None = None,
     ) -> tuple[bool, SemanticModifications | None, float]:
-        if not alternative_path:
-            return False, None, float("inf")
-
-        if alternative_path[0] != start or alternative_path[-1] != goal:
+        self.last_solver_status = None
+        is_valid, status, _ = validate_alternative_path(
+            grid, start, goal, alternative_path
+        )
+        if not is_valid:
+            self.last_solver_status = status
             return False, None, float("inf")
 
         if start == goal and len(alternative_path) == 1:
+            self.last_solver_status = "OPTIMAL"
             return True, SemanticModifications([], [], []), 0.0
 
         _p_star, cost_p_star, _ = astar(grid, start, goal)
-        if cost_p_star != float("inf"):
-            t_min_prime = sum(
-                grid.get_distance(alternative_path[r], alternative_path[r + 1]) / V_MAX
-                for r in range(len(alternative_path) - 1)
-            )
-            if t_min_prime > cost_p_star:
-                return False, None, float("inf")
+        is_geometrically_feasible, status, _ = check_geometric_feasibility(
+            grid, alternative_path, cost_p_star, self.tolerance
+        )
+        if not is_geometrically_feasible:
+            self.last_solver_status = status
+            return False, None, float("inf")
 
         active_nodes, active_edges, costs = prepare_subgraph(
             grid, alternative_path, reduced_graph, custom_edge_costs
@@ -52,6 +52,7 @@ class ISPSolver(BaseISPSolver):
             custom_edge_costs=costs,
         )
         if formulation is None:
+            self.last_solver_status = "INVALID_ALTERNATIVE_PATH"
             return False, None, float("inf")
 
         num_nodes = len(formulation.isp.nodes)
