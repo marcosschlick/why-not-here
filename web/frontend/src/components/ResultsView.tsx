@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import type {
   LastResult,
   MapData,
@@ -113,12 +114,15 @@ export function ResultsView({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const mapCanvasContainerRef = useRef<HTMLDivElement | null>(null);
   const [mapCellSize, setMapCellSize] = useState<number>(10);
+  const [zoomLevel, setZoomLevel] = useState<number>(1.0);
+  const [hoveredCell, setHoveredCell] = useState<GridPoint | null>(null);
 
   const isBatch = Boolean(batchQueue && batchQueue.length > 1);
   const currentBatchIdx =
     activeBatchIndex !== undefined ? activeBatchIndex : internalBatchIndex;
 
   function handleTabSelect(idx: number) {
+    setHoveredCell(null);
     if (onSelectBatchIndex) {
       onSelectBatchIndex(idx);
     } else {
@@ -190,6 +194,57 @@ export function ResultsView({
     };
   }, [mapHeight, mapWidth]);
 
+  const [prevMapData, setPrevMapData] = useState(currentMapData);
+  if (prevMapData !== currentMapData) {
+    setPrevMapData(currentMapData);
+    setHoveredCell(null);
+  }
+
+  useEffect(() => {
+    const wrapper = mapCanvasContainerRef.current;
+    if (!wrapper) return;
+
+    function handleWheel(e: WheelEvent) {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        if (e.deltaY < 0) {
+          setZoomLevel((z) => Math.min(3.0, +(z + 0.25).toFixed(2)));
+        } else if (e.deltaY > 0) {
+          setZoomLevel((z) => Math.max(1.0, +(z - 0.25).toFixed(2)));
+        }
+      }
+    }
+
+    wrapper.addEventListener("wheel", handleWheel, { passive: false });
+    return () => wrapper.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  function getCellFromCoordinates(
+    event: ReactPointerEvent<HTMLCanvasElement>,
+  ): GridPoint | null {
+    if (!currentMapData) return null;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    const c = Math.floor(x / zoomLevel / mapCellSize);
+    const r = Math.floor(y / zoomLevel / mapCellSize);
+
+    if (r >= 0 && r < currentMapData.h && c >= 0 && c < currentMapData.w) {
+      return [r, c];
+    }
+    return null;
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const cell = getCellFromCoordinates(event);
+    setHoveredCell(cell);
+  }
+
+  function handlePointerLeave() {
+    setHoveredCell(null);
+  }
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -257,6 +312,83 @@ export function ResultsView({
       setTimeout(() => setCopiedKey(null), 2000);
     }
   }
+
+  const isCellTerrainModified = Boolean(
+    hoveredCell &&
+      visibleModifications?.terrain_nodes?.some(
+        ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
+      ),
+  );
+  const isCellObstacleModified = Boolean(
+    hoveredCell &&
+      visibleModifications?.obstacle_nodes?.some(
+        ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
+      ),
+  );
+  const isStart = Boolean(
+    hoveredCell &&
+      currentMapData &&
+      currentMapData.start[0] === hoveredCell[0] &&
+      currentMapData.start[1] === hoveredCell[1],
+  );
+  const isGoal = Boolean(
+    hoveredCell &&
+      currentMapData &&
+      currentMapData.goal[0] === hoveredCell[0] &&
+      currentMapData.goal[1] === hoveredCell[1],
+  );
+
+  const hoveredInfo = hoveredCell && currentMapData ? (
+    <span>
+      Cell [{hoveredCell[0]}, {hoveredCell[1]}] &bull; Terrain{" "}
+      <strong>
+        {currentMapData.terrain[hoveredCell[0]]?.[hoveredCell[1]] ?? "-"}
+      </strong>
+      {isCellTerrainModified && (
+        <strong className="mod-badge terrain" style={{ marginLeft: "0.35rem" }}>
+          ISP Modified
+        </strong>
+      )}{" "}
+      &bull; Elevation{" "}
+      <strong>
+        {currentMapData.elevation[hoveredCell[0]]?.[hoveredCell[1]]?.toFixed(1) ??
+          "-"}
+        m
+      </strong>{" "}
+      &bull; Status{" "}
+      {currentMapData.obstacle[hoveredCell[0]]?.[hoveredCell[1]] === 1 ? (
+        <strong className="cell-status cell-status-obstacle">Obstacle</strong>
+      ) : (
+        <strong className="cell-status cell-status-free">Free</strong>
+      )}
+      {isCellObstacleModified && (
+        <strong
+          className="mod-badge obstacle"
+          style={{ marginLeft: "0.35rem" }}
+        >
+          Cleared
+        </strong>
+      )}
+      {isStart && (
+        <strong
+          className="node-marker start-badge"
+          style={{ marginLeft: "0.35rem" }}
+        >
+          Start
+        </strong>
+      )}
+      {isGoal && (
+        <strong
+          className="node-marker goal-badge"
+          style={{ marginLeft: "0.35rem" }}
+        >
+          Goal
+        </strong>
+      )}
+    </span>
+  ) : (
+    <span>Hover over grid to inspect cell attributes and modifications</span>
+  );
 
   return (
     <section className="results-container">
@@ -348,11 +480,48 @@ export function ResultsView({
                 the active map data.
               </p>
             </div>
-            {isCandidateSolution && (
-              <span className="candidate-solution-badge">
-                CANDIDATE SOLUTION (NOT GLOBALLY CERTIFIED)
-              </span>
-            )}
+            <div className="results-map-controls">
+              {isCandidateSolution && (
+                <span className="candidate-solution-badge">
+                  CANDIDATE SOLUTION (NOT GLOBALLY CERTIFIED)
+                </span>
+              )}
+              <div className="zoom-controls-bar">
+                <span className="zoom-label">Zoom</span>
+                <button
+                  type="button"
+                  className="btn-zoom"
+                  onClick={() =>
+                    setZoomLevel((z) => Math.max(1.0, +(z - 0.25).toFixed(2)))
+                  }
+                  disabled={zoomLevel <= 1.0}
+                  title="Zoom Out (-0.25x)"
+                >
+                  &minus;
+                </button>
+                <span className="zoom-value">{Math.round(zoomLevel * 100)}%</span>
+                <button
+                  type="button"
+                  className="btn-zoom"
+                  onClick={() =>
+                    setZoomLevel((z) => Math.min(3.0, +(z + 0.25).toFixed(2)))
+                  }
+                  disabled={zoomLevel >= 3.0}
+                  title="Zoom In (+0.25x)"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  className="btn-zoom btn-zoom-reset"
+                  onClick={() => setZoomLevel(1.0)}
+                  disabled={zoomLevel === 1.0}
+                  title="Reset Zoom to 100%"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
           </div>
 
           {(isInfeasible || !hasCandidateModifications) && (
@@ -379,11 +548,25 @@ export function ResultsView({
             <TacticalMapCanvas
               mapData={currentMapData}
               userPath={currentUserPath}
+              optimalPath={currentMapData.optimal_path}
               modifications={visibleModifications}
               cellSize={mapCellSize}
+              zoomLevel={zoomLevel}
+              hoveredCell={hoveredCell}
+              onPointerMove={handlePointerMove}
+              onPointerLeave={handlePointerLeave}
             />
           </div>
-          <TacticalMapLegend modifications={visibleModifications} />
+          <div className="canvas-footer-info">
+            <div className="cell-inspector">{hoveredInfo}</div>
+            <TacticalMapLegend
+              modifications={visibleModifications}
+              showOptimalPath={Boolean(
+                currentMapData.optimal_path &&
+                  currentMapData.optimal_path.length > 0,
+              )}
+            />
+          </div>
         </section>
       )}
 
@@ -398,19 +581,26 @@ export function ResultsView({
           {isSolving && activeBatchItem?.config && (
             <div className="loading-params-summary">
               <span className="loading-param-chip">
-                Reduction Method:{" "}
+                Reduction:{" "}
                 {formatReductionMethod(
                   activeBatchItem.config.DEFAULT_REDUCTION_METHOD,
                 )}
+                {activeBatchItem.config.DEFAULT_REDUCTION_METHOD === "BBOX" &&
+                  activeBatchItem.config.BBOX_MARGIN !== undefined &&
+                  ` (Margin: ${activeBatchItem.config.BBOX_MARGIN})`}
               </span>
               <span className="loading-param-chip">
-                Solver Mode:{" "}
+                Solver:{" "}
                 {activeBatchItem.config.USE_INCREMENTAL_SOLVER
-                  ? "Iterative / Incremental MILP"
-                  : "Standard Monolithic MILP"}
+                  ? `Incremental MILP${
+                      activeBatchItem.config.DEFAULT_REDUCTION_METHOD !== "NONE"
+                        ? ` (${activeBatchItem.config.INCREMENTAL_ASTAR_SCOPE === "SUBGRAPH" ? "Subgraph A*" : "Global A*"})`
+                        : ""
+                    }`
+                  : "Monolithic MILP"}
               </span>
               <span className="loading-param-chip">
-                Grid Dimension: {activeBatchItem.config.MAP_W}×
+                Grid: {activeBatchItem.config.MAP_W}×
                 {activeBatchItem.config.MAP_H} (Seed:{" "}
                 {activeBatchItem.config.MAP_DEFAULT_SEED})
               </span>

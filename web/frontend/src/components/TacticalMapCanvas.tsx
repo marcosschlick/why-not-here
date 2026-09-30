@@ -143,12 +143,10 @@ export function TacticalMapCanvas({
   onPointerLeave,
 }: TacticalMapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [deviceScale, setDeviceScale] = useState<number>(1);
+  const [deviceScale] = useState<number>(() =>
+    typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
+  );
   const { h, w, start, goal, terrain, elevation, obstacle } = mapData;
-
-  useEffect(() => {
-    setDeviceScale(window.devicePixelRatio || 1);
-  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -406,18 +404,20 @@ export function TacticalMapCanvas({
       aria-label="Tactical map"
       role={interactive ? undefined : "img"}
       onPointerDown={interactive ? onPointerDown : undefined}
-      onPointerMove={interactive ? onPointerMove : undefined}
+      onPointerMove={onPointerMove}
       onPointerUp={interactive ? onPointerUp : undefined}
       onPointerCancel={interactive ? onPointerUp : undefined}
-      onPointerLeave={interactive ? onPointerLeave : undefined}
+      onPointerLeave={onPointerLeave}
     />
   );
 }
 
 export function TacticalMapLegend({
   modifications,
+  showOptimalPath,
 }: {
   modifications?: SemanticModificationsData | null;
+  showOptimalPath?: boolean;
 }) {
   const hasTerrainChanges = (modifications?.terrain_nodes?.length ?? 0) > 0;
   const hasObstacleChanges = (modifications?.obstacle_nodes?.length ?? 0) > 0;
@@ -466,6 +466,12 @@ export function TacticalMapLegend({
           <span className="legend-color legend-goal" />
           Goal (G)
         </span>
+        {showOptimalPath && (
+          <span className="legend-item">
+            <span className="legend-color legend-optimal-route" />
+            Initial Optimal Route (p*)
+          </span>
+        )}
         <span className="legend-item">
           <span className="legend-color legend-route" />
           Alternative Route (p&apos;)

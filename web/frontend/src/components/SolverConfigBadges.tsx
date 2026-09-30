@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { SystemConfig } from "../types";
-import { formatReductionMethod, formatSolverType } from "../utils/formatters";
+import { formatReductionMethod } from "../utils/formatters";
 
 interface SolverConfigBadgesProps {
   config?: SystemConfig | null;
@@ -46,13 +46,25 @@ export function SolverConfigBadges({
 }: SolverConfigBadgesProps) {
   if (!config) return null;
 
-  const reductionName = formatReductionMethod(config.DEFAULT_REDUCTION_METHOD);
-  const solverName = formatSolverType(
-    config.USE_INCREMENTAL_SOLVER,
-    config.DEFAULT_SOLVER,
-    config.DEFAULT_REDUCTION_METHOD,
-    config.INCREMENTAL_ASTAR_SCOPE,
-  );
+  const isBbox = config.DEFAULT_REDUCTION_METHOD === "BBOX";
+  const reductionLabel = isBbox
+    ? `${formatReductionMethod(config.DEFAULT_REDUCTION_METHOD)} (Margin: ${config.BBOX_MARGIN ?? 2})`
+    : formatReductionMethod(config.DEFAULT_REDUCTION_METHOD);
+
+  const hasReduction =
+    config.DEFAULT_REDUCTION_METHOD &&
+    config.DEFAULT_REDUCTION_METHOD !== "NONE";
+  const astarScopeLabel =
+    config.INCREMENTAL_ASTAR_SCOPE === "SUBGRAPH"
+      ? "Subgraph A*"
+      : "Global A*";
+
+  const solverArchLabel = config.USE_INCREMENTAL_SOLVER
+    ? `Incremental MILP (${config.DEFAULT_SOLVER || "HiGHS"}${
+        hasReduction ? `, ${astarScopeLabel}` : ""
+      }, Max Iter: ${config.MAX_ISP_ITERATIONS ?? 50})`
+    : `Monolithic MILP (${config.DEFAULT_SOLVER || "HiGHS"})`;
+
   const gridSpecs = `${config.MAP_H}×${config.MAP_W} (${config.CONNECTIVITY}-Connected)`;
 
   return (
@@ -71,7 +83,7 @@ export function SolverConfigBadges({
           <div className="solver-param-chip">
             <span className="param-chip-label">Graph Reduction</span>
             <span className="param-chip-value highlight-azure">
-              {reductionName}
+              {reductionLabel}
             </span>
           </div>
 
@@ -84,7 +96,7 @@ export function SolverConfigBadges({
                   : "highlight-yale"
               }`}
             >
-              {solverName}
+              {solverArchLabel}
             </span>
           </div>
 

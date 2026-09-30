@@ -45,6 +45,8 @@ export function RouteCanvas({
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [cellSize, setCellSize] = useState<number>(10);
   const [undoDepth, setUndoDepth] = useState<number>(0);
+  const [showOptimalRoute, setShowOptimalRoute] = useState<boolean>(false);
+  const [dragOrigin, setDragOrigin] = useState<GridPoint | null>(null);
 
   const strokeBasePathRef = useRef<GridPoint[] | null>(null);
   const dragOriginRef = useRef<GridPoint | null>(null);
@@ -167,7 +169,9 @@ export function RouteCanvas({
     if (event.button !== 0 || isConnectedToGoal) return;
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {}
+    } catch (_err) {
+      void _err;
+    }
     const rawCell = getCellFromCoordinates(event);
     if (!rawCell) return;
 
@@ -179,6 +183,7 @@ export function RouteCanvas({
       userPath.length > 0 ? userPath[userPath.length - 1] : start;
 
     dragOriginRef.current = currentOrigin;
+    setDragOrigin(currentOrigin);
     strokeBasePathRef.current = [...userPath];
 
     const cell = isShift
@@ -310,7 +315,9 @@ export function RouteCanvas({
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
-    } catch {}
+    } catch (_err) {
+      void _err;
+    }
     const previousPath = strokeBasePathRef.current;
     if (
       previousPath &&
@@ -326,6 +333,7 @@ export function RouteCanvas({
     setIsDrawing(false);
     strokeBasePathRef.current = null;
     dragOriginRef.current = null;
+    setDragOrigin(null);
   }
 
   function handleAutoRoute() {
@@ -442,6 +450,24 @@ export function RouteCanvas({
             Clear
           </button>
 
+          <button
+            type="button"
+            className={`btn ${showOptimalRoute ? "btn-secondary active" : "btn-ghost"}`}
+            onClick={() => setShowOptimalRoute((prev) => !prev)}
+            disabled={
+              isSolving ||
+              !mapData.optimal_path ||
+              mapData.optimal_path.length === 0
+            }
+            title={
+              showOptimalRoute
+                ? "Hide initial optimal path (p*)"
+                : "Show initial optimal path (p*)"
+            }
+          >
+            {showOptimalRoute ? "Hide Optimal Route" : "Show Optimal Route"}
+          </button>
+
           <div className="zoom-controls-bar">
             <span className="zoom-label">Zoom</span>
             <button
@@ -547,11 +573,12 @@ export function RouteCanvas({
         <TacticalMapCanvas
           mapData={mapData}
           userPath={userPath}
+          optimalPath={showOptimalRoute ? mapData.optimal_path : undefined}
           cellSize={cellSize}
           zoomLevel={zoomLevel}
           hoveredCell={hoveredCell}
           isShiftDown={isShiftDown}
-          dragOrigin={dragOriginRef.current}
+          dragOrigin={dragOrigin}
           isConnectedToGoal={isConnectedToGoal}
           interactive
           onPointerDown={handlePointerDown}
@@ -568,7 +595,12 @@ export function RouteCanvas({
 
       <div className="canvas-footer-info">
         <div className="cell-inspector">{hoveredInfo}</div>
-        <TacticalMapLegend />
+        <TacticalMapLegend
+          showOptimalPath={
+            showOptimalRoute &&
+            Boolean(mapData.optimal_path && mapData.optimal_path.length > 0)
+          }
+        />
       </div>
     </section>
   );
