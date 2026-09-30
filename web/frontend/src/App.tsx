@@ -9,6 +9,33 @@ import { Topbar } from "./components/Topbar";
 import { fetchConfig, generateMap, solveISP } from "./services/api";
 import type { LastResult, MapData, QueueItem, SystemConfig } from "./types";
 
+function isSameMap(a?: SystemConfig | null, b?: SystemConfig | null): boolean {
+  if (!a || !b) return false;
+  return (
+    Number(a.MAP_H) === Number(b.MAP_H) &&
+    Number(a.MAP_W) === Number(b.MAP_W) &&
+    Number(a.CONNECTIVITY) === Number(b.CONNECTIVITY) &&
+    Number(a.MAP_DEFAULT_SEED) === Number(b.MAP_DEFAULT_SEED) &&
+    Number(a.MAP_ELEVATION_SCALE ?? 2.0) ===
+      Number(b.MAP_ELEVATION_SCALE ?? 2.0) &&
+    Number(a.MAP_ELEVATION_FREQ ?? 0.06) ===
+      Number(b.MAP_ELEVATION_FREQ ?? 0.06) &&
+    Number(a.MAP_OBSTACLE_FREQ ?? 0.05) ===
+      Number(b.MAP_OBSTACLE_FREQ ?? 0.05) &&
+    Number(a.MAP_OBSTACLE_THRESHOLD ?? 0.85) ===
+      Number(b.MAP_OBSTACLE_THRESHOLD ?? 0.85)
+  );
+}
+
+function arePathsEqual(
+  p1?: [number, number][],
+  p2?: [number, number][],
+): boolean {
+  if (!p1 || !p2) return false;
+  if (p1.length !== p2.length) return false;
+  return p1.every(([r1, c1], i) => r1 === p2[i][0] && c1 === p2[i][1]);
+}
+
 export function App() {
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<"individual" | "queue">(
@@ -20,6 +47,9 @@ export function App() {
 
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [userPath, setUserPath] = useState<[number, number][]>([]);
+  const [batchRouteFeedback, setBatchRouteFeedback] = useState<string | null>(
+    null,
+  );
   const [lastResult, setLastResult] = useState<LastResult | null>(null);
   const [artifacts, setArtifacts] = useState<string[]>([]);
   const [cacheKey, setCacheKey] = useState<number>(() => Date.now());
@@ -234,6 +264,54 @@ export function App() {
     }
   }
 
+  function handleReuseRouteFrom(sourceIdx: number) {
+    const sourceItem = queue[sourceIdx];
+    const sourcePath = sourceItem?.userPath;
+    if (sourcePath && sourcePath.length > 0) {
+      const copy = [...sourcePath];
+      setUserPath(copy);
+      setQueue((prev) =>
+        prev.map((it, idx) =>
+          idx === batchReviewIndex
+            ? {
+                ...it,
+                userPath: copy,
+                mapData: mapData
+                  ? { ...mapData, config: it.config }
+                  : it.mapData,
+                status: "awaiting_route",
+              }
+            : it,
+        ),
+      );
+      setBatchRouteFeedback(`Route copied from Map #${sourceIdx + 1}`);
+      setTimeout(() => setBatchRouteFeedback(null), 3500);
+    }
+  }
+
+  function handleApplyRouteToAllMatching(targetIndices: number[]) {
+    if (userPath.length === 0) return;
+    const currentPathCopy = [...userPath];
+    setQueue((prev) =>
+      prev.map((it, idx) =>
+        targetIndices.includes(idx) || idx === batchReviewIndex
+          ? {
+              ...it,
+              userPath: currentPathCopy,
+              mapData: mapData
+                ? { ...mapData, config: it.config }
+                : it.mapData,
+              status: "awaiting_route",
+            }
+          : it,
+      ),
+    );
+    setBatchRouteFeedback(
+      `Route applied to all ${targetIndices.length + 1} identical maps`,
+    );
+    setTimeout(() => setBatchRouteFeedback(null), 3500);
+  }
+
   async function handleExecuteBatch() {
     const finalQueue = queue.map((it, idx) =>
       idx === batchReviewIndex ? { ...it, userPath } : it,
@@ -346,7 +424,7 @@ export function App() {
         )}
 
         {currentStep === "config" && (
-          <div className="step-container config-step">
+          <div key="step-config" className="step-container config-step">
             <ConfigForm
               key={config ? "server-config" : "fallback-config"}
               initialConfig={config}
@@ -356,26 +434,29 @@ export function App() {
               activeMode={activeTabMode}
               onSwitchMode={setActiveTabMode}
               queueCount={queue.length}
+              queue={queue}
             />
 
             {activeTabMode === "queue" && (
-              <QueuePanel
-                queue={queue}
-                currentIndex={batchReviewIndex}
-                isProcessing={isSolvingISP || isGeneratingMap}
-                interactiveMode={interactiveQueueMode}
-                onToggleInteractiveMode={setInteractiveQueueMode}
-                onRemoveItem={handleRemoveQueueItem}
-                onClearQueue={handleClearQueue}
-                onStartQueue={handleStartBatchReview}
-                onSelectItem={handleSelectQueueItem}
-              />
+              <div className="queue-tab-content">
+                <QueuePanel
+                  queue={queue}
+                  currentIndex={batchReviewIndex}
+                  isProcessing={isSolvingISP || isGeneratingMap}
+                  interactiveMode={interactiveQueueMode}
+                  onToggleInteractiveMode={setInteractiveQueueMode}
+                  onRemoveItem={handleRemoveQueueItem}
+                  onClearQueue={handleClearQueue}
+                  onStartQueue={handleStartBatchReview}
+                  onSelectItem={handleSelectQueueItem}
+                />
+              </div>
             )}
           </div>
         )}
 
         {currentStep === "route_canvas" && mapData && (
-          <div className="step-container route-step">
+          <div key="step-route_canvas" className="step-container route-step">
             <RouteCanvas
               mapData={mapData}
               userPath={userPath}
@@ -396,73 +477,186 @@ export function App() {
                   : undefined
               }
               batchStepper={
-                isBatchMode && queue.length > 1 ? (
-                  <div className="batch-stepper-bar">
-                    <div className="batch-stepper-label">
-                      <span className="batch-stepper-title">
-                        Batch Route Setup — Map {batchReviewIndex + 1} of{" "}
-                        {queue.length}
-                      </span>
-                      <span className="batch-stepper-sub">
-                        Define custom routes for all maps in the batch before
-                        solving.
-                      </span>
-                    </div>
+                isBatchMode && queue.length > 1 ? (() => {
+                  const currentBatchItem = queue[batchReviewIndex];
+                  const matchingBatchIndices = currentBatchItem
+                    ? queue
+                        .map((item, idx) => ({ item, idx }))
+                        .filter(
+                          ({ idx, item }) =>
+                            idx !== batchReviewIndex &&
+                            isSameMap(item.config, currentBatchItem.config),
+                        )
+                    : [];
 
-                    <div className="batch-steps-list">
-                      {queue.map((item, idx) => {
-                        const isActive = idx === batchReviewIndex;
-                        const isCurrentConnected =
-                          idx === batchReviewIndex
-                            ? userPath.length > 0 &&
-                              userPath[userPath.length - 1][0] ===
-                                mapData.goal[0] &&
-                              userPath[userPath.length - 1][1] ===
-                                mapData.goal[1]
-                            : Boolean(
-                                item.userPath &&
-                                item.mapData &&
-                                item.userPath.length > 0 &&
-                                item.userPath[item.userPath.length - 1][0] ===
-                                  item.mapData.goal[0] &&
-                                item.userPath[item.userPath.length - 1][1] ===
-                                  item.mapData.goal[1],
-                              );
+                  const isCurrentRouteComplete =
+                    userPath.length > 0 &&
+                    userPath[userPath.length - 1][0] === mapData.goal[0] &&
+                    userPath[userPath.length - 1][1] === mapData.goal[1];
 
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            className={`batch-step-btn ${
-                              isActive ? "active" : ""
-                            }`}
-                            onClick={() => handleSwitchBatchMap(idx)}
-                            disabled={isGeneratingMap || isSolvingISP}
-                          >
-                            <span>
-                              Map {idx + 1} ({item.config.MAP_H}x
-                              {item.config.MAP_W})
-                            </span>
-                            <span
-                              className={`batch-step-status-pill ${
-                                isCurrentConnected ? "ready" : "pending"
+                  const matchingRunWithRoute = matchingBatchIndices.find(
+                    ({ item }) => {
+                      const itemGoal = item.mapData?.goal || mapData.goal;
+                      return (
+                        item.userPath &&
+                        item.userPath.length > 0 &&
+                        item.userPath[item.userPath.length - 1][0] ===
+                          itemGoal[0] &&
+                        item.userPath[item.userPath.length - 1][1] ===
+                          itemGoal[1]
+                      );
+                    },
+                  );
+
+                  const areAllMatchingSynced =
+                    matchingBatchIndices.length > 0 &&
+                    isCurrentRouteComplete &&
+                    matchingBatchIndices.every(({ item }) =>
+                      arePathsEqual(userPath, item.userPath),
+                    );
+
+                  const isSyncedWithSource = Boolean(
+                    matchingRunWithRoute &&
+                      arePathsEqual(userPath, matchingRunWithRoute.item.userPath),
+                  );
+
+                  return (
+                    <div className="batch-stepper-bar">
+                      <div className="batch-stepper-label">
+                        <span className="batch-stepper-title">
+                          Batch Route Setup — Map {batchReviewIndex + 1} of{" "}
+                          {queue.length}
+                        </span>
+                        <span className="batch-stepper-sub">
+                          Define custom routes for all maps in the batch before
+                          solving.
+                        </span>
+                      </div>
+
+                      <div className="batch-steps-list">
+                        {queue.map((item, idx) => {
+                          const isActive = idx === batchReviewIndex;
+                          const itemGoal =
+                            item.mapData?.goal ||
+                            (isSameMap(item.config, mapData.config)
+                              ? mapData.goal
+                              : undefined);
+                          const isItemConnected =
+                            idx === batchReviewIndex
+                              ? isCurrentRouteComplete
+                              : Boolean(
+                                  item.userPath &&
+                                    item.userPath.length > 0 &&
+                                    itemGoal &&
+                                    item.userPath[item.userPath.length - 1][0] ===
+                                      itemGoal[0] &&
+                                    item.userPath[item.userPath.length - 1][1] ===
+                                      itemGoal[1],
+                                );
+
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className={`batch-step-btn ${
+                                isActive ? "active" : ""
                               }`}
+                              onClick={() => handleSwitchBatchMap(idx)}
+                              disabled={isGeneratingMap || isSolvingISP}
                             >
-                              {isCurrentConnected ? "Ready" : "Pending"}
-                            </span>
-                          </button>
-                        );
-                      })}
+                              <span>
+                                Map {idx + 1} ({item.config.MAP_H}x
+                                {item.config.MAP_W})
+                              </span>
+                              <span
+                                className={`batch-step-status-pill ${
+                                  isItemConnected ? "ready" : "pending"
+                                }`}
+                              >
+                                {isItemConnected ? "Ready" : "Pending"}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {matchingBatchIndices.length > 0 && (
+                        <div
+                          className={`batch-identical-maps-banner ${
+                            areAllMatchingSynced ? "is-synced" : ""
+                          }`}
+                        >
+                          <div className="identical-maps-top-row">
+                            <div className="identical-maps-info">
+                              <span className="identical-maps-title">
+                                {areAllMatchingSynced
+                                  ? "Route Synchronized Across All Identical Maps"
+                                  : "Identical Map Geometry Detected"}
+                              </span>
+                              <span className="identical-maps-desc">
+                                {areAllMatchingSynced
+                                  ? `All ${matchingBatchIndices.length + 1} identical maps in this batch share this exact verified route (${userPath.length} steps).`
+                                  : matchingRunWithRoute && !isSyncedWithSource
+                                    ? `Map #${matchingRunWithRoute.idx + 1} has a verified route (${matchingRunWithRoute.item.userPath?.length} steps). You can copy it with 1 click, or keep a custom route.`
+                                    : `Maps ${[batchReviewIndex + 1, ...matchingBatchIndices.map((m) => m.idx + 1)].sort().map((n) => `#${n}`).join(", ")} share this exact terrain & obstacles. You can draw once and apply to all.`}
+                              </span>
+                            </div>
+
+                            {batchRouteFeedback && (
+                              <div className="identical-maps-toast">
+                                {batchRouteFeedback}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="identical-maps-actions">
+                            {matchingRunWithRoute && !isSyncedWithSource && (
+                              <button
+                                type="button"
+                                className="btn btn-vibrant btn-sm"
+                                onClick={() =>
+                                  handleReuseRouteFrom(matchingRunWithRoute.idx)
+                                }
+                                title={`Copy route from Map #${matchingRunWithRoute.idx + 1}`}
+                              >
+                                Copy Route from Map #{matchingRunWithRoute.idx + 1}
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              className={`btn ${
+                                areAllMatchingSynced
+                                  ? "btn-ghost"
+                                  : matchingRunWithRoute && !isSyncedWithSource
+                                    ? "btn-secondary"
+                                    : "btn-vibrant"
+                              } btn-sm`}
+                              onClick={() =>
+                                handleApplyRouteToAllMatching(
+                                  matchingBatchIndices.map((m) => m.idx),
+                                )
+                              }
+                              disabled={!isCurrentRouteComplete}
+                              title="Apply current route to all matching runs"
+                            >
+                              {areAllMatchingSynced
+                                ? "Re-apply to All Identical Maps"
+                                : `Apply Route to All ${matchingBatchIndices.length + 1} Identical Maps`}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ) : undefined
+                  );
+                })() : undefined
               }
             />
           </div>
         )}
 
         {currentStep === "results" && (
-          <div className="step-container results-step">
+          <div key="step-results" className="step-container results-step">
             <ResultsView
               result={lastResult}
               mapData={

@@ -50,7 +50,7 @@ export function Topbar({
             <span className="context-chip-dot" />
             <span className="context-chip-label">
               {formatReductionMethod(activeReductionMethod)}
-              {isIncrementalActive ? " &bull; Incremental" : ""}
+              {isIncrementalActive ? " \u2022 Incremental" : ""}
             </span>
           </div>
         )}

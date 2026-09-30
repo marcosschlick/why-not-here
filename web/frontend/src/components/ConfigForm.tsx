@@ -4,7 +4,7 @@ import {
   checkOutputDir,
   cleanOutputDir,
 } from "../services/api";
-import type { SystemConfig } from "../types";
+import type { QueueItem, SystemConfig } from "../types";
 
 interface ConfigFormProps {
   initialConfig: SystemConfig | null;
@@ -14,6 +14,7 @@ interface ConfigFormProps {
   activeMode: "individual" | "queue";
   onSwitchMode: (mode: "individual" | "queue") => void;
   queueCount: number;
+  queue?: QueueItem[];
 }
 
 const MAP_SIZE_OPTIONS = [
@@ -41,6 +42,7 @@ export function ConfigForm({
   activeMode,
   onSwitchMode,
   queueCount,
+  queue,
 }: ConfigFormProps) {
   const initialMapSize = resolveMapSize(
     initialConfig?.MAP_H,
@@ -57,9 +59,8 @@ export function ConfigForm({
   const [useIncremental, setUseIncremental] = useState<boolean>(
     initialConfig?.USE_INCREMENTAL_SOLVER ?? false,
   );
-  const [outputDir, setOutputDir] = useState<string>(
-    initialConfig?.OUTPUT_DIR ?? "output",
-  );
+  const [outputDir, setOutputDir] = useState<string>("");
+  const [outputDirError, setOutputDirError] = useState<string | null>(null);
   const [isBrowsing, setIsBrowsing] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -107,6 +108,7 @@ export function ConfigForm({
     onConfirm: () => void;
   } | null>(null);
   const [isCleaning, setIsCleaning] = useState<boolean>(false);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState<boolean>(false);
 
   function handleMapSizeChange(value: string) {
     const selectedSize = MAP_SIZE_OPTIONS.find(
@@ -125,7 +127,7 @@ export function ConfigForm({
       CONNECTIVITY: Number(connectivity),
       DEFAULT_REDUCTION_METHOD: reductionMethod,
       USE_INCREMENTAL_SOLVER: useIncremental,
-      OUTPUT_DIR: outputDir.trim() || "output",
+      OUTPUT_DIR: outputDir.trim(),
       MAP_DEFAULT_SEED: Number(mapSeed),
       DEFAULT_PLANNER: planner,
       DEFAULT_SOLVER: solver,
@@ -140,6 +142,7 @@ export function ConfigForm({
       MAP_OBSTACLE_THRESHOLD: Number(mapObstacleThreshold),
     };
   }
+
 
   async function ensureCleanDirectoryAndExecute(
     targetDir: string,
@@ -165,20 +168,54 @@ export function ConfigForm({
         });
         return;
       }
-    } catch {}
+    } catch (err) {
+      void err;
+    }
     action();
   }
 
-  function handleDirectRun() {
+  async function handleDirectRun() {
+    const trimmed = outputDir.trim();
+    if (!trimmed) {
+      setOutputDirError(
+        "Output directory is required. Please specify a directory.",
+      );
+      setFeedback("Please specify an output directory");
+      setTimeout(() => setFeedback(null), 3000);
+      return;
+    }
+    setOutputDirError(null);
     const current = getCurrentConfig();
-    ensureCleanDirectoryAndExecute(current.OUTPUT_DIR, () => {
+    await ensureCleanDirectoryAndExecute(current.OUTPUT_DIR, () => {
       onGenerateMap(current);
     });
   }
 
-  function handleAddQueue() {
+  async function handleAddQueue() {
+    const trimmed = outputDir.trim();
+    if (!trimmed) {
+      setOutputDirError(
+        "Output directory is required. Please specify a directory.",
+      );
+      setFeedback("Please specify an output directory");
+      setTimeout(() => setFeedback(null), 3000);
+      return;
+    }
+    const isDuplicate = queue?.some(
+      (item) =>
+        item.config.OUTPUT_DIR.trim().toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (isDuplicate) {
+      setOutputDirError(
+        `Output directory "${trimmed}" is already in the batch queue. Please specify a unique directory.`,
+      );
+      setFeedback(`Directory "${trimmed}" already in queue`);
+      setTimeout(() => setFeedback(null), 4000);
+      return;
+    }
+    setOutputDirError(null);
     const current = getCurrentConfig();
-    ensureCleanDirectoryAndExecute(current.OUTPUT_DIR, () => {
+    await ensureCleanDirectoryAndExecute(current.OUTPUT_DIR, () => {
       onAddToQueue(current);
       setFeedback("Configuration added to queue");
       setTimeout(() => setFeedback(null), 2500);
@@ -192,42 +229,13 @@ export function ConfigForm({
       if (selected && selected.trim()) {
         const cleanPath = selected.trim();
         setOutputDir(cleanPath);
-        const check = await checkOutputDir(cleanPath);
-        if (check.exists && check.file_count > 0) {
-          setCleaningDirInfo({
-            dir: cleanPath,
-            fileCount: check.file_count,
-            files: check.files,
-            onConfirm: () => {
-              setFeedback(`Cleaned output directory: ${cleanPath}`);
-              setTimeout(() => setFeedback(null), 3000);
-            },
-          });
-        }
+        setOutputDirError(null);
       }
     } catch {
+      void 0;
     } finally {
       setIsBrowsing(false);
     }
-  }
-
-  async function handleOutputDirBlur() {
-    const trimmed = outputDir.trim();
-    if (!trimmed) return;
-    try {
-      const check = await checkOutputDir(trimmed);
-      if (check.exists && check.file_count > 0) {
-        setCleaningDirInfo({
-          dir: trimmed,
-          fileCount: check.file_count,
-          files: check.files,
-          onConfirm: () => {
-            setFeedback(`Cleaned output directory: ${trimmed}`);
-            setTimeout(() => setFeedback(null), 3000);
-          },
-        });
-      }
-    } catch {}
   }
 
   async function handleConfirmClean() {
@@ -272,174 +280,204 @@ export function ConfigForm({
       <fieldset className="config-fieldset">
         <legend>Pipeline Configuration</legend>
 
-        <div className="form-grid">
-          <div className="form-group">
-            <label htmlFor="mapSize">
-              <span>Map Size</span>
-              <span className="form-group-hint">Approved resolutions</span>
-            </label>
-            <select
-              id="mapSize"
-              value={`${mapH}x${mapW}`}
-              onChange={(e) => handleMapSizeChange(e.target.value)}
-            >
-              {MAP_SIZE_OPTIONS.map((option) => (
-                <option
-                  key={`${option.height}x${option.width}`}
-                  value={`${option.height}x${option.width}`}
-                >
-                  {option.height}×{option.width}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="connectivity">
-              <span>Connectivity</span>
-              <span className="form-group-hint">Neighborhood</span>
-            </label>
-            <select
-              id="connectivity"
-              value={connectivity}
-              onChange={(e) => setConnectivity(Number(e.target.value))}
-            >
-              <option value={8}>8-Connected (Chebyshev / Diagonal)</option>
-              <option value={4}>4-Connected (Manhattan / Orthogonal)</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="reductionMethod">
-              <span>Graph Reduction</span>
-              <span className="form-group-hint">Pruning strategy</span>
-            </label>
-            <select
-              id="reductionMethod"
-              value={reductionMethod}
-              onChange={(e) => setReductionMethod(e.target.value)}
-            >
-              <option value="NONE">None (Full Grid Graph)</option>
-              <option value="BBOX">BBOX (Bounding Box)</option>
-              <option value="FLOODFILL">Floodfill (Reachable Subgraph)</option>
-              <option value="SPARSIFIED">Sparsified (Corridor Graph)</option>
-              <option value="PATH_ONLY">
-                Path Only (Strict Path Corridor)
-              </option>
-            </select>
-          </div>
-
-          {reductionMethod === "BBOX" && (
+        <div className="config-form-section">
+          <div className="config-form-grid-pair">
             <div className="form-group">
-              <label htmlFor="bboxMargin">
-                <span>BBox Margin</span>
-                <span className="form-group-hint">Min 1 cell buffer</span>
-              </label>
-              <input
-                id="bboxMargin"
-                type="number"
-                min={1}
-                step={1}
-                value={bboxMargin}
-                onChange={(e) => setBboxMargin(Number(e.target.value))}
-                required
-              />
-            </div>
-          )}
-
-          <div className="form-group">
-            <label htmlFor="incrementalToggle">
-              <span>Incremental Solver</span>
-              <span className="form-group-hint">Cutting-plane method</span>
-            </label>
-            <div className="toggle-container">
-              <button
-                type="button"
-                id="incrementalToggle"
-                role="switch"
-                aria-checked={useIncremental}
-                className={`toggle-btn ${useIncremental ? "active" : ""}`}
-                onClick={() => setUseIncremental(!useIncremental)}
-              >
-                <span className="switch-pill">
-                  <span className="switch-knob" />
-                </span>
-                <span className="toggle-label">
-                  {useIncremental
-                    ? "Active (Incremental)"
-                    : "Inactive (Monolithic)"}
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {useIncremental && (
-            <div className="form-group">
-              <label htmlFor="maxIspIterations">
-                <span>Max ISP Iterations</span>
-                <span className="form-group-hint">1–100 cutting planes</span>
-              </label>
-              <input
-                id="maxIspIterations"
-                type="number"
-                min={1}
-                max={100}
-                step={1}
-                value={maxIspIterations}
-                onChange={(e) =>
-                  setMaxIspIterations(Number(e.target.value))
-                }
-                required
-              />
-            </div>
-          )}
-
-          {useIncremental && reductionMethod !== "NONE" && (
-            <div className="form-group">
-              <label htmlFor="incrementalAstarScope">
-                <span>Incremental A* Scope</span>
-                <span className="form-group-hint">Competing paths search</span>
+              <label htmlFor="mapSize">
+                <span>Map Size</span>
+                <span className="form-group-hint">Approved resolutions</span>
               </label>
               <select
-                id="incrementalAstarScope"
-                value={incrementalAstarScope}
-                onChange={(e) => setIncrementalAstarScope(e.target.value)}
+                id="mapSize"
+                value={`${mapH}x${mapW}`}
+                onChange={(e) => handleMapSizeChange(e.target.value)}
               >
-                <option value="GLOBAL">Global Grid</option>
-                <option value="SUBGRAPH">Reduced Subgraph</option>
+                {MAP_SIZE_OPTIONS.map((option) => (
+                  <option
+                    key={`${option.height}x${option.width}`}
+                    value={`${option.height}x${option.width}`}
+                  >
+                    {option.height}×{option.width}
+                  </option>
+                ))}
               </select>
             </div>
-          )}
 
-          <div className="form-group">
-            <label htmlFor="outputDir">
-              <span>Output Directory</span>
-              <span className="form-group-hint">Filesystem path</span>
-            </label>
-            <div className="input-with-button">
-              <input
-                id="outputDir"
-                type="text"
-                value={outputDir}
-                onChange={(e) => setOutputDir(e.target.value)}
-                onBlur={handleOutputDirBlur}
-                placeholder="output"
-                required
-              />
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={handleBrowse}
-                disabled={isGenerating || isBrowsing}
+            <div className="form-group">
+              <label htmlFor="connectivity">
+                <span>Connectivity</span>
+                <span className="form-group-hint">Neighborhood</span>
+              </label>
+              <select
+                id="connectivity"
+                value={connectivity}
+                onChange={(e) => setConnectivity(Number(e.target.value))}
               >
-                {isBrowsing ? "Opening..." : "Browse..."}
-              </button>
+                <option value={8}>8-Connected (Chebyshev / Diagonal)</option>
+                <option value={4}>4-Connected (Manhattan / Orthogonal)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="config-strategy-grid">
+            <div className="strategy-column">
+              <div className="form-group">
+                <label htmlFor="reductionMethod">
+                  <span>Graph Reduction</span>
+                  <span className="form-group-hint">Pruning strategy</span>
+                </label>
+                <select
+                  id="reductionMethod"
+                  value={reductionMethod}
+                  onChange={(e) => setReductionMethod(e.target.value)}
+                >
+                  <option value="NONE">None (Full Grid Graph)</option>
+                  <option value="BBOX">BBOX (Bounding Box)</option>
+                  <option value="FLOODFILL">Floodfill (Reachable Subgraph)</option>
+                  <option value="SPARSIFIED">Sparsified (Corridor Graph)</option>
+                  <option value="PATH_ONLY">
+                    Path Only (Strict Path Corridor)
+                  </option>
+                </select>
+              </div>
+
+              {reductionMethod === "BBOX" && (
+                <div className="conditional-field-wrapper">
+                  <div className="form-group">
+                    <label htmlFor="bboxMargin">
+                      <span>BBox Margin</span>
+                      <span className="form-group-hint">Min 1 cell buffer</span>
+                    </label>
+                    <input
+                      id="bboxMargin"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={bboxMargin}
+                      onChange={(e) => setBboxMargin(Number(e.target.value))}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="strategy-column">
+              <div className="form-group">
+                <label htmlFor="incrementalToggle">
+                  <span>Incremental Solver</span>
+                  <span className="form-group-hint">Cutting-plane method</span>
+                </label>
+                <div className="toggle-container">
+                  <button
+                    type="button"
+                    id="incrementalToggle"
+                    role="switch"
+                    aria-checked={useIncremental}
+                    className={`toggle-btn ${useIncremental ? "active" : ""}`}
+                    onClick={() => setUseIncremental(!useIncremental)}
+                  >
+                    <span className="toggle-label">
+                      {useIncremental
+                        ? "Active (Incremental)"
+                        : "Inactive (Monolithic)"}
+                    </span>
+                    <span className="switch-pill">
+                      <span className="switch-knob" />
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {useIncremental && (
+                <div className="conditional-field-wrapper">
+                  <div className={`conditional-inner-grid ${reductionMethod !== "NONE" ? "has-scope" : ""}`}>
+                    <div className="form-group">
+                      <label htmlFor="maxIspIterations">
+                        <span>Max ISP Iterations</span>
+                        <span className="form-group-hint">1–100 cutting planes</span>
+                      </label>
+                      <input
+                        id="maxIspIterations"
+                        type="number"
+                        min={1}
+                        max={100}
+                        step={1}
+                        value={maxIspIterations}
+                        onChange={(e) =>
+                          setMaxIspIterations(Number(e.target.value))
+                        }
+                        required
+                      />
+                    </div>
+
+                    {reductionMethod !== "NONE" && (
+                      <div className="form-group">
+                        <label htmlFor="incrementalAstarScope">
+                          <span>Incremental A* Scope</span>
+                          <span className="form-group-hint">Competing paths search</span>
+                        </label>
+                        <select
+                          id="incrementalAstarScope"
+                          value={incrementalAstarScope}
+                          onChange={(e) => setIncrementalAstarScope(e.target.value)}
+                        >
+                          <option value="GLOBAL">Global Grid</option>
+                          <option value="SUBGRAPH">Reduced Subgraph</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="config-output-group">
+            <div className={`form-group ${outputDirError ? "has-error" : ""}`}>
+              <label htmlFor="outputDir">
+                <span>Output Directory</span>
+                <span className="form-group-hint">Required filesystem path</span>
+              </label>
+              <div className="input-with-button">
+                <input
+                  id="outputDir"
+                  type="text"
+                  readOnly
+                  value={outputDir}
+                  onClick={handleBrowse}
+                  placeholder="Click Browse... to select output directory"
+                  required
+                  aria-invalid={Boolean(outputDirError)}
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={handleBrowse}
+                  disabled={isGenerating || isBrowsing}
+                >
+                  {isBrowsing ? "Opening..." : "Browse..."}
+                </button>
+              </div>
+              {outputDirError && (
+                <span className="field-error-message" role="alert">
+                  {outputDirError}
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        <details className="advanced-settings-section">
-          <summary className="advanced-settings-summary">
+        <div
+          className={`advanced-settings-section ${isAdvancedOpen ? "is-open" : ""}`}
+        >
+          <button
+            type="button"
+            className="advanced-settings-summary"
+            onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+            aria-expanded={isAdvancedOpen}
+            aria-controls="advanced-settings-collapse-region"
+          >
             <div className="advanced-summary-title-row">
               <span className="advanced-summary-icon" aria-hidden="true">
                 ▶
@@ -455,181 +493,189 @@ export function ConfigForm({
               </div>
             </div>
             <span className="advanced-settings-badge">9 Parameters</span>
-          </summary>
+          </button>
 
-          <div className="advanced-settings-body">
-            <div className="advanced-group">
-              <h4 className="advanced-group-title">Planning &amp; Solver</h4>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label htmlFor="defaultPlanner">
-                    <span>Default Planner</span>
-                    <span className="form-group-hint">Shortest path</span>
-                  </label>
-                  <select
-                    id="defaultPlanner"
-                    value={planner}
-                    onChange={(e) => setPlanner(e.target.value)}
-                  >
-                    <option value="ASTAR">ASTAR</option>
-                    <option value="DIJKSTRA">DIJKSTRA</option>
-                  </select>
+          <div
+            id="advanced-settings-collapse-region"
+            className={`advanced-settings-collapse ${isAdvancedOpen ? "is-expanded" : ""}`}
+            aria-hidden={!isAdvancedOpen}
+          >
+            <div className="advanced-settings-collapse-inner">
+              <div className="advanced-settings-body">
+                <div className="advanced-group">
+                  <h4 className="advanced-group-title">Planning &amp; Solver</h4>
+                  <div className="form-grid">
+                    <div className="form-group">
+                      <label htmlFor="defaultPlanner">
+                        <span>Default Planner</span>
+                        <span className="form-group-hint">Shortest path</span>
+                      </label>
+                      <select
+                        id="defaultPlanner"
+                        value={planner}
+                        onChange={(e) => setPlanner(e.target.value)}
+                      >
+                        <option value="ASTAR">ASTAR</option>
+                        <option value="DIJKSTRA">DIJKSTRA</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="defaultSolver">
+                        <span>MILP Solver</span>
+                        <span className="form-group-hint">Optimization engine</span>
+                      </label>
+                      <select
+                        id="defaultSolver"
+                        value={solver}
+                        onChange={(e) => setSolver(e.target.value)}
+                      >
+                        <option value="HIGHS">HIGHS</option>
+                        <option value="SCIP">SCIP</option>
+                        <option value="CBC">CBC</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="solverTimeout">
+                        <span>Solver Timeout (sec)</span>
+                        <span className="form-group-hint">
+                          Per-solve time limit
+                        </span>
+                      </label>
+                      <input
+                        id="solverTimeout"
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={solverTimeout}
+                        onChange={(e) => setSolverTimeout(Number(e.target.value))}
+                        required
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label htmlFor="defaultSolver">
-                    <span>MILP Solver</span>
-                    <span className="form-group-hint">Optimization engine</span>
-                  </label>
-                  <select
-                    id="defaultSolver"
-                    value={solver}
-                    onChange={(e) => setSolver(e.target.value)}
-                  >
-                    <option value="HIGHS">HIGHS</option>
-                    <option value="SCIP">SCIP</option>
-                    <option value="CBC">CBC</option>
-                  </select>
+                <div className="advanced-group">
+                  <h4 className="advanced-group-title">ISP Objective</h4>
+                  <div className="form-grid">
+                    <div className="form-group">
+                      <label htmlFor="targetTerrain">
+                        <span>Target Terrain</span>
+                        <span className="form-group-hint">Modification target</span>
+                      </label>
+                      <select
+                        id="targetTerrain"
+                        value={targetTerrain}
+                        onChange={(e) => setTargetTerrain(e.target.value)}
+                      >
+                        <option value="COMPACTED_SOIL">COMPACTED_SOIL</option>
+                        <option value="GRASSLAND">GRASSLAND</option>
+                        <option value="UNPAVED_TRACK">UNPAVED_TRACK</option>
+                        <option value="SAND">SAND</option>
+                        <option value="FOREST">FOREST</option>
+                        <option value="ROCKY">ROCKY</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label htmlFor="solverTimeout">
-                    <span>Solver Timeout (sec)</span>
-                    <span className="form-group-hint">
-                      Per-solve time limit
-                    </span>
-                  </label>
-                  <input
-                    id="solverTimeout"
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={solverTimeout}
-                    onChange={(e) => setSolverTimeout(Number(e.target.value))}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
+                <div className="advanced-group">
+                  <h4 className="advanced-group-title">Map Generation Tuning</h4>
+                  <div className="form-grid">
+                    <div className="form-group">
+                      <label htmlFor="mapSeed">
+                        <span>Map Default Seed</span>
+                        <span className="form-group-hint">Noise RNG seed</span>
+                      </label>
+                      <input
+                        id="mapSeed"
+                        type="number"
+                        value={mapSeed}
+                        onChange={(e) => setMapSeed(Number(e.target.value))}
+                        required
+                      />
+                    </div>
 
-            <div className="advanced-group">
-              <h4 className="advanced-group-title">ISP Objective</h4>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label htmlFor="targetTerrain">
-                    <span>Target Terrain</span>
-                    <span className="form-group-hint">Modification target</span>
-                  </label>
-                  <select
-                    id="targetTerrain"
-                    value={targetTerrain}
-                    onChange={(e) => setTargetTerrain(e.target.value)}
-                  >
-                    <option value="COMPACTED_SOIL">COMPACTED_SOIL</option>
-                    <option value="GRASSLAND">GRASSLAND</option>
-                    <option value="UNPAVED_TRACK">UNPAVED_TRACK</option>
-                    <option value="SAND">SAND</option>
-                    <option value="FOREST">FOREST</option>
-                    <option value="ROCKY">ROCKY</option>
-                  </select>
-                </div>
-              </div>
-            </div>
+                    <div className="form-group">
+                      <label htmlFor="mapElevationScale">
+                        <span>Elevation Scale</span>
+                        <span className="form-group-hint">Height multiplier</span>
+                      </label>
+                      <input
+                        id="mapElevationScale"
+                        type="number"
+                        step={0.1}
+                        value={mapElevationScale}
+                        onChange={(e) =>
+                          setMapElevationScale(Number(e.target.value))
+                        }
+                        required
+                      />
+                    </div>
 
-            <div className="advanced-group">
-              <h4 className="advanced-group-title">Map Generation Tuning</h4>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label htmlFor="mapSeed">
-                    <span>Map Default Seed</span>
-                    <span className="form-group-hint">Noise RNG seed</span>
-                  </label>
-                  <input
-                    id="mapSeed"
-                    type="number"
-                    value={mapSeed}
-                    onChange={(e) => setMapSeed(Number(e.target.value))}
-                    required
-                  />
-                </div>
+                    <div className="form-group">
+                      <label htmlFor="mapElevationFreq">
+                        <span>Elevation Frequency</span>
+                        <span className="form-group-hint">
+                          Perlin terrain frequency
+                        </span>
+                      </label>
+                      <input
+                        id="mapElevationFreq"
+                        type="number"
+                        step={0.01}
+                        value={mapElevationFreq}
+                        onChange={(e) =>
+                          setMapElevationFreq(Number(e.target.value))
+                        }
+                        required
+                      />
+                    </div>
 
-                <div className="form-group">
-                  <label htmlFor="mapElevationScale">
-                    <span>Elevation Scale</span>
-                    <span className="form-group-hint">Height multiplier</span>
-                  </label>
-                  <input
-                    id="mapElevationScale"
-                    type="number"
-                    step={0.1}
-                    value={mapElevationScale}
-                    onChange={(e) =>
-                      setMapElevationScale(Number(e.target.value))
-                    }
-                    required
-                  />
-                </div>
+                    <div className="form-group">
+                      <label htmlFor="mapObstacleFreq">
+                        <span>Obstacle Frequency</span>
+                        <span className="form-group-hint">
+                          Cluster distribution scale
+                        </span>
+                      </label>
+                      <input
+                        id="mapObstacleFreq"
+                        type="number"
+                        step={0.01}
+                        value={mapObstacleFreq}
+                        onChange={(e) => setMapObstacleFreq(Number(e.target.value))}
+                        required
+                      />
+                    </div>
 
-                <div className="form-group">
-                  <label htmlFor="mapElevationFreq">
-                    <span>Elevation Frequency</span>
-                    <span className="form-group-hint">
-                      Perlin terrain frequency
-                    </span>
-                  </label>
-                  <input
-                    id="mapElevationFreq"
-                    type="number"
-                    step={0.01}
-                    value={mapElevationFreq}
-                    onChange={(e) =>
-                      setMapElevationFreq(Number(e.target.value))
-                    }
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="mapObstacleFreq">
-                    <span>Obstacle Frequency</span>
-                    <span className="form-group-hint">
-                      Cluster distribution scale
-                    </span>
-                  </label>
-                  <input
-                    id="mapObstacleFreq"
-                    type="number"
-                    step={0.01}
-                    value={mapObstacleFreq}
-                    onChange={(e) => setMapObstacleFreq(Number(e.target.value))}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="mapObstacleThreshold">
-                    <span>Obstacle Threshold</span>
-                    <span className="form-group-hint">
-                      Threshold cutoff (0–1)
-                    </span>
-                  </label>
-                  <input
-                    id="mapObstacleThreshold"
-                    type="number"
-                    step={0.05}
-                    min={0}
-                    max={1}
-                    value={mapObstacleThreshold}
-                    onChange={(e) =>
-                      setMapObstacleThreshold(Number(e.target.value))
-                    }
-                    required
-                  />
+                    <div className="form-group">
+                      <label htmlFor="mapObstacleThreshold">
+                        <span>Obstacle Threshold</span>
+                        <span className="form-group-hint">
+                          Threshold cutoff (0–1)
+                        </span>
+                      </label>
+                      <input
+                        id="mapObstacleThreshold"
+                        type="number"
+                        step={0.05}
+                        min={0}
+                        max={1}
+                        value={mapObstacleThreshold}
+                        onChange={(e) =>
+                          setMapObstacleThreshold(Number(e.target.value))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </details>
+        </div>
 
         <div className="form-actions-row">
           <div className="primary-actions">
@@ -658,7 +704,7 @@ export function ConfigForm({
 
       {cleaningDirInfo && (
         <div
-          className="modal-backdrop"
+          className="modal-backdrop is-visible"
           onClick={() => !isCleaning && setCleaningDirInfo(null)}
           role="dialog"
           aria-modal="true"
@@ -724,6 +770,7 @@ export function ConfigForm({
           </div>
         </div>
       )}
+
     </div>
   );
 }

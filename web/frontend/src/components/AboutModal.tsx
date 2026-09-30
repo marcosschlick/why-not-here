@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -6,6 +6,36 @@ interface AboutModalProps {
 }
 
 export function AboutModal({ isOpen, onClose }: AboutModalProps) {
+  const [isRendered, setIsRendered] = useState<boolean>(isOpen);
+  const [isVisible, setIsVisible] = useState<boolean>(isOpen);
+
+  if (isOpen && !isRendered) {
+    setIsRendered(true);
+  }
+  if (!isOpen && isVisible) {
+    setIsVisible(false);
+  }
+
+  useEffect(() => {
+    let timer: number | undefined;
+    let animFrame: number | undefined;
+
+    if (isOpen) {
+      animFrame = window.requestAnimationFrame(() => {
+        setIsVisible(true);
+      });
+    } else if (isRendered) {
+      timer = window.setTimeout(() => {
+        setIsRendered(false);
+      }, 160);
+    }
+
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      if (animFrame !== undefined) window.cancelAnimationFrame(animFrame);
+    };
+  }, [isOpen, isRendered]);
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -18,18 +48,18 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isRendered) return null;
 
   return (
     <div
-      className="modal-backdrop"
+      className={`modal-backdrop ${isVisible ? "is-visible" : "is-closing"}`}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="about-modal-title"
     >
       <div
-        className="modal-content about-modal-content"
+        className={`modal-content about-modal-content ${isVisible ? "is-visible" : "is-closing"}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="about-modal-header">
