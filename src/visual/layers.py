@@ -4,8 +4,6 @@ import numpy as np
 from ..grid import Grid
 from ..isp import SemanticModifications
 from .style import (
-    BASE_TERRAIN_COLORS,
-    DEFAULT_TERRAIN_COLOR,
     GOAL_COLOR,
     GOAL_EDGE_COLOR,
     ISP_OBSTACLE_COLOR,
@@ -16,6 +14,7 @@ from .style import (
     START_EDGE_COLOR,
     STEEP_SLOPE_EDGE_COLOR,
     STEEP_SLOPE_FACE_COLOR,
+    terrain_color_rgb,
 )
 
 
@@ -30,11 +29,11 @@ def create_grid_rgb_matrix(grid: Grid) -> np.ndarray:
         for j in range(grid.w):
             cell = grid.cells[i][j]
             if cell.terrain == "WATER_RIVER":
-                base = BASE_TERRAIN_COLORS["WATER_RIVER"]
+                base = terrain_color_rgb(cell.terrain)
             elif cell.obstacle != 0:
                 base = OBSTACLE_COLOR
             else:
-                base = BASE_TERRAIN_COLORS.get(cell.terrain, DEFAULT_TERRAIN_COLOR)
+                base = terrain_color_rgb(cell.terrain)
 
             if elev_range > 0.0:
                 factor = 0.82 + 0.36 * ((cell.elevation - min_elev) / elev_range)

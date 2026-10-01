@@ -15,10 +15,25 @@ TERRAINS = {
     "WATER_RIVER": 0.0,
 }
 
+# Colors are stored as CSS-style hexadecimal values so the Web canvas and the
+# Python renderers can consume the same palette.
+TERRAIN_COLORS = {
+    "COMPACTED_SOIL": "#9E6B47",
+    "GRASSLAND": "#52A45B",
+    "GRASS": "#2E9438",
+    "UNPAVED_TRACK": "#B98457",
+    "DRY_VEGETATION": "#BFC233",
+    "SAND": "#FAD142",
+    "FOREST": "#2F653A",
+    "MUD": "#5C3829",
+    "ROCKY": "#777B80",
+    "WATER_RIVER": "#0585E6",
+}
+
 # Default base terrain for nominal traversability
 BASE_TERRAIN = "GRASS"
 
-# Automatically derived impassable terrains (zero or negative nominal speed)
+# Automatically derived impassable terrains (zero or negative nominal speed).
 IMPASSABLE_TERRAINS = {name for name, speed in TERRAINS.items() if speed <= 0.0}
 
 # Maximum nominal speed derived automatically from the fastest terrain

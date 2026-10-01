@@ -2,13 +2,11 @@ import json
 import math
 from pathlib import Path
 
+from .. import config
 from ..config import (
-    CELL_SIZE,
     CONNECTIVITY,
     MAP_H,
     MAP_W,
-    MAX_SLOPE_DEG,
-    TERRAINS,
 )
 from .cell import Cell
 
@@ -18,16 +16,18 @@ class Grid:
         self,
         h: int = MAP_H,
         w: int = MAP_W,
-        cell_size: float = CELL_SIZE,
+        cell_size: float | None = None,
         connectivity: int = CONNECTIVITY,
-        max_slope_deg: float = MAX_SLOPE_DEG,
+        max_slope_deg: float | None = None,
     ) -> None:
         self.h = h
         self.w = w
-        self.cell_size = cell_size
+        self.cell_size = config.CELL_SIZE if cell_size is None else cell_size
         self.connectivity = connectivity
-        self.max_slope_deg = max_slope_deg
-        self.speeds = dict(TERRAINS)
+        self.max_slope_deg = (
+            config.MAX_SLOPE_DEG if max_slope_deg is None else max_slope_deg
+        )
+        self.speeds = dict(config.TERRAINS)
 
         self.cells = []
         for i in range(h):

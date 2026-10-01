@@ -17,9 +17,12 @@ def generate_map(verbose: bool = True, persist_artifacts: bool = True) -> Grid:
         h=config.MAP_H,
         w=config.MAP_W,
         seed=config.MAP_DEFAULT_SEED,
+        cell_size=config.CELL_SIZE,
         connectivity=config.CONNECTIVITY,
+        max_slope_deg=config.MAX_SLOPE_DEG,
         elevation_scale=config.MAP_ELEVATION_SCALE,
         elevation_freq=config.MAP_ELEVATION_FREQ,
+        biome_freq=config.MAP_BIOME_FREQ,
         obstacle_freq=config.MAP_OBSTACLE_FREQ,
         obstacle_threshold=config.MAP_OBSTACLE_THRESHOLD,
     )

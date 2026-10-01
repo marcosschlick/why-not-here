@@ -3,6 +3,7 @@ import numpy as np
 from ..config import (
     CELL_SIZE,
     CONNECTIVITY,
+    DEFAULT_TERRAIN,
     IMPASSABLE_TERRAINS,
     MAP_BIOME_FREQ,
     MAP_BIOME_OCTAVES,
@@ -16,6 +17,7 @@ from ..config import (
     MAP_OBSTACLE_THRESHOLD,
     MAP_W,
     MAX_SLOPE_DEG,
+    TERRAINS,
 )
 from ..grid import Grid
 from .noise import perlin_noise_2d
@@ -55,22 +57,21 @@ def _generate_terrain(
         octaves=octaves,
     )
 
+    biome_order = (
+        "WATER_RIVER",
+        "MUD",
+        "SAND",
+        "DRY_VEGETATION",
+        "GRASS",
+        "COMPACTED_SOIL",
+    )
     ordered_terrains = [
         (
-            "WATER_RIVER",
-            thresholds.get("WATER_RIVER", MAP_BIOME_THRESHOLDS["WATER_RIVER"]),
-        ),
-        ("MUD", thresholds.get("MUD", MAP_BIOME_THRESHOLDS["MUD"])),
-        ("SAND", thresholds.get("SAND", MAP_BIOME_THRESHOLDS["SAND"])),
-        (
-            "DRY_VEGETATION",
-            thresholds.get("DRY_VEGETATION", MAP_BIOME_THRESHOLDS["DRY_VEGETATION"]),
-        ),
-        ("GRASS", thresholds.get("GRASS", MAP_BIOME_THRESHOLDS["GRASS"])),
-        (
-            "COMPACTED_SOIL",
-            thresholds.get("COMPACTED_SOIL", MAP_BIOME_THRESHOLDS["COMPACTED_SOIL"]),
-        ),
+            name,
+            thresholds.get(name, MAP_BIOME_THRESHOLDS.get(name, 1.0)),
+        )
+        for name in biome_order
+        if name in TERRAINS
     ]
 
     terrain_matrix: list[list[str]] = []
@@ -78,7 +79,7 @@ def _generate_terrain(
         row_terrain: list[str] = []
         for j in range(cols):
             b_val = biome_noise[i, j]
-            chosen = "GRASS"
+            chosen = DEFAULT_TERRAIN
             for t_name, th in ordered_terrains:
                 if b_val <= th:
                     chosen = t_name
@@ -120,13 +121,13 @@ def generate_map(
     *,
     width: int | None = None,
     height: int | None = None,
-    cell_size: float = CELL_SIZE,
+    cell_size: float | None = None,
     connectivity: int = CONNECTIVITY,
-    max_slope_deg: float = MAX_SLOPE_DEG,
+    max_slope_deg: float | None = None,
     elevation_scale: float = MAP_ELEVATION_SCALE,
     elevation_freq: float = MAP_ELEVATION_FREQ,
     elevation_octaves: int = MAP_ELEVATION_OCTAVES,
-    biome_freq: float = MAP_BIOME_FREQ,
+    biome_freq: float | None = None,
     biome_octaves: int = MAP_BIOME_OCTAVES,
     biome_thresholds: dict[str, float] | None = None,
     obstacle_freq: float = MAP_OBSTACLE_FREQ,
@@ -135,6 +136,9 @@ def generate_map(
     rows = h if h is not None else (height if height is not None else MAP_H)
     cols = w if w is not None else (width if width is not None else MAP_W)
     seed_val = seed if seed is not None else MAP_DEFAULT_SEED
+    cell_size_val = CELL_SIZE if cell_size is None else cell_size
+    max_slope_val = MAX_SLOPE_DEG if max_slope_deg is None else max_slope_deg
+    biome_freq_val = MAP_BIOME_FREQ if biome_freq is None else biome_freq
     thresholds = (
         biome_thresholds if biome_thresholds is not None else MAP_BIOME_THRESHOLDS
     )
@@ -151,7 +155,7 @@ def generate_map(
         rows=rows,
         cols=cols,
         seed=seed_val,
-        freq=biome_freq,
+        freq=biome_freq_val,
         octaves=biome_octaves,
         thresholds=thresholds,
     )
@@ -167,9 +171,9 @@ def generate_map(
     grid = Grid(
         h=rows,
         w=cols,
-        cell_size=cell_size,
+        cell_size=cell_size_val,
         connectivity=connectivity,
-        max_slope_deg=max_slope_deg,
+        max_slope_deg=max_slope_val,
     )
     grid.load_elevation_matrix(elevation_matrix)
     grid.load_terrain_matrix(terrain_matrix)

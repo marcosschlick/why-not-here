@@ -152,6 +152,7 @@ def run_isp(
             bbox_margin=config.BBOX_MARGIN,
             solver_name=config.DEFAULT_SOLVER,
             timeout=config.SOLVER_TIMEOUT_SEC,
+            global_timeout=config.CLOSED_LOOP_TIMEOUT_SEC,
             max_iterations=config.MAX_ISP_ITERATIONS,
             tolerance=config.INCREMENTAL_TOLERANCE,
             astar_scope=config.INCREMENTAL_ASTAR_SCOPE,

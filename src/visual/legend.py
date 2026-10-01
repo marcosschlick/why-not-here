@@ -1,18 +1,10 @@
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 
+from .. import config
 from ..grid import Grid
 from ..isp import SemanticModifications
-from .style import BASE_TERRAIN_COLORS, OBSTACLE_COLOR
-
-BASE_TERRAIN_LABELS: list[tuple[str, str]] = [
-    ("COMPACTED_SOIL", "COMPACTED_SOIL (1.2 m/s)"),
-    ("GRASS", "GRASS (1.0 m/s)"),
-    ("DRY_VEGETATION", "DRY_VEG (0.8 m/s)"),
-    ("SAND", "SAND (0.6 m/s)"),
-    ("MUD", "MUD (0.4 m/s)"),
-    ("WATER_RIVER", "WATER_RIVER (0.0 m/s)"),
-]
+from .style import OBSTACLE_COLOR, terrain_color_rgb
 
 
 def build_tactical_legend(
@@ -22,8 +14,11 @@ def build_tactical_legend(
     modifications: SemanticModifications | None,
 ) -> None:
     legend_handles: list[mpatches.Patch] = [
-        mpatches.Patch(color=BASE_TERRAIN_COLORS[name], label=label)
-        for name, label in BASE_TERRAIN_LABELS
+        mpatches.Patch(
+            color=terrain_color_rgb(name),
+            label=f"{name} ({speed:g} m/s)",
+        )
+        for name, speed in config.TERRAINS.items()
     ]
     legend_handles.append(mpatches.Patch(color=OBSTACLE_COLOR, label="Obstacle"))
 

@@ -1,6 +1,9 @@
+import copy
 import json
-from pathlib import Path
+import math
+import re
 import sys
+from pathlib import Path
 from typing import Any
 
 from src import config
@@ -12,20 +15,27 @@ CONFIG_REGISTRY = {
     "MAP_W": "config_grid.py",
     "MAP_H": "config_grid.py",
     "CELL_SIZE": "config_grid.py",
+    "DEFAULT_TERRAIN": "config_grid.py",
     "CONNECTIVITY": "config_grid.py",
     "MAP_DEFAULT_SEED": "config_map.py",
     "MAP_ELEVATION_SCALE": "config_map.py",
     "MAP_ELEVATION_FREQ": "config_map.py",
+    "MAP_BIOME_FREQ": "config_map.py",
     "MAP_OBSTACLE_FREQ": "config_map.py",
     "MAP_OBSTACLE_THRESHOLD": "config_map.py",
     "DEFAULT_PLANNER": "config_planning.py",
     "TARGET_TERRAIN": "config_isp.py",
+    "BASE_TERRAIN": "config_terrain.py",
+    "TERRAINS": "config_terrain.py",
+    "TERRAIN_COLORS": "config_terrain.py",
+    "MAX_SLOPE_DEG": "config_terrain.py",
     "DEFAULT_SOLVER": "config_solver.py",
     "SOLVER_TIMEOUT_SEC": "config_solver.py",
     "DEFAULT_REDUCTION_METHOD": "config_reduction.py",
     "BBOX_MARGIN": "config_reduction.py",
     "USE_INCREMENTAL_SOLVER": "config_incremental.py",
     "MAX_ISP_ITERATIONS": "config_incremental.py",
+    "CLOSED_LOOP_TIMEOUT_SEC": "config_incremental.py",
     "INCREMENTAL_ASTAR_SCOPE": "config_incremental.py",
     "OUTPUT_DIR": "config_storage.py",
 }
@@ -33,52 +43,147 @@ CONFIG_REGISTRY = {
 
 def get_all_configurations() -> dict[str, Any]:
     return {
-        key: getattr(config, key) for key in CONFIG_REGISTRY if hasattr(config, key)
+        key: copy.deepcopy(getattr(config, key))
+        for key in CONFIG_REGISTRY
+        if hasattr(config, key)
     }
+
+
+DEFAULT_CONFIGURATIONS = get_all_configurations()
 
 
 def cast_parameter_value(current_value: Any, new_value: Any) -> Any:
     if isinstance(current_value, bool) and not isinstance(new_value, bool):
-        return str(new_value).lower() in ("true", "1", "yes")
+        normalized = str(new_value).lower()
+        if normalized not in ("true", "1", "yes", "false", "0", "no"):
+            raise ValueError(f"Invalid boolean configuration value: {new_value!r}")
+        return normalized in ("true", "1", "yes")
     if isinstance(current_value, int) and not isinstance(new_value, int):
         return int(new_value)
     if isinstance(current_value, float) and not isinstance(new_value, float):
-        return float(new_value)
-    return new_value
+        converted = float(new_value)
+        if not math.isfinite(converted):
+            raise ValueError("Numeric configuration values must be finite.")
+        return converted
+    return copy.deepcopy(new_value)
+
+
+def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
+    solver = str(candidate["DEFAULT_SOLVER"]).strip().upper()
+    if solver not in {"HIGHS", "GUROBI"}:
+        raise ValueError("DEFAULT_SOLVER must be either 'HIGHS' or 'GUROBI'.")
+    candidate["DEFAULT_SOLVER"] = solver
+
+    for key in ("CELL_SIZE", "CLOSED_LOOP_TIMEOUT_SEC", "MAP_BIOME_FREQ"):
+        value = float(candidate[key])
+        if not math.isfinite(value) or value <= 0.0:
+            raise ValueError(f"{key} must be a finite number greater than zero.")
+        candidate[key] = value
+
+    max_slope = float(candidate["MAX_SLOPE_DEG"])
+    if not math.isfinite(max_slope) or not 0.0 <= max_slope <= 90.0:
+        raise ValueError("MAX_SLOPE_DEG must be between 0 and 90 degrees.")
+    candidate["MAX_SLOPE_DEG"] = max_slope
+
+    raw_terrains = candidate.get("TERRAINS")
+    if not isinstance(raw_terrains, dict) or not raw_terrains:
+        raise ValueError("TERRAINS must contain at least one terrain.")
+
+    terrains: dict[str, float] = {}
+    normalized_names: set[str] = set()
+    for raw_name, raw_speed in raw_terrains.items():
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            raise ValueError("Terrain names must be non-empty strings.")
+        name = raw_name.strip()
+        normalized_name = name.casefold()
+        if normalized_name in normalized_names:
+            raise ValueError(f"Terrain names must be unique: {name!r}.")
+        normalized_names.add(normalized_name)
+        try:
+            speed = float(raw_speed)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Terrain speed for {name!r} must be numeric.") from exc
+        if not math.isfinite(speed):
+            raise ValueError(f"Terrain speed for {name!r} must be finite.")
+        terrains[name] = speed
+
+    traversable = {name for name, speed in terrains.items() if speed > 0.0}
+    if not traversable:
+        raise ValueError("At least one terrain must have a speed greater than zero.")
+
+    raw_colors = candidate.get("TERRAIN_COLORS")
+    if not isinstance(raw_colors, dict):
+        raw_colors = {}
+    colors: dict[str, str] = {}
+    for name in terrains:
+        color = raw_colors.get(name, "#808080")
+        if not isinstance(color, str) or re.fullmatch(r"#[0-9A-Fa-f]{6}", color) is None:
+            raise ValueError(f"Terrain color for {name!r} must use #RRGGBB format.")
+        colors[name] = color.upper()
+
+    default_terrain = candidate.get("DEFAULT_TERRAIN")
+    target_terrain = candidate.get("TARGET_TERRAIN")
+    base_terrain = candidate.get("BASE_TERRAIN")
+    if default_terrain not in terrains:
+        raise ValueError("DEFAULT_TERRAIN must exist in TERRAINS.")
+    if target_terrain not in traversable:
+        raise ValueError("TARGET_TERRAIN must exist and have a speed greater than zero.")
+    if base_terrain not in traversable:
+        raise ValueError("BASE_TERRAIN must exist and have a speed greater than zero.")
+
+    candidate["TERRAINS"] = terrains
+    candidate["TERRAIN_COLORS"] = colors
+    return candidate
+
+
+def _build_configuration_candidate(
+    updates: dict[str, Any],
+    base: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    candidate = copy.deepcopy(base if base is not None else get_all_configurations())
+    for key, raw_value in updates.items():
+        if key not in CONFIG_REGISTRY:
+            continue
+        candidate[key] = cast_parameter_value(candidate[key], raw_value)
+    return _validate_configuration(candidate)
+
+
+def _publish_configuration_value(key: str, value: Any) -> None:
+    value = copy.deepcopy(value)
+    setattr(config, key, value)
+
+    submodule_name = CONFIG_REGISTRY.get(key, "")[:-3]
+    if submodule_name and hasattr(config, submodule_name):
+        setattr(getattr(config, submodule_name), key, copy.deepcopy(value))
+
+    for module_name, module in list(sys.modules.items()):
+        if (module_name == "src.config" or module_name.startswith("src.")) and hasattr(module, key):
+            setattr(module, key, copy.deepcopy(value))
+
+
+def _publish_derived_configuration() -> None:
+    terrains = config.TERRAINS
+    derived_values = {
+        "IMPASSABLE_TERRAINS": {
+            name for name, speed in terrains.items() if speed <= 0.0
+        },
+        "V_MAX": max(terrains.values()),
+        "TARGET_SPEED": terrains[config.TARGET_TERRAIN],
+    }
+    for key, value in derived_values.items():
+        setattr(config, key, copy.deepcopy(value))
+        for module_name, module in list(sys.modules.items()):
+            if (module_name == "src.config" or module_name.startswith("src.")) and hasattr(module, key):
+                setattr(module, key, copy.deepcopy(value))
 
 
 def update_configurations(updates: dict[str, Any]) -> dict[str, Any]:
-    applied = {}
-    for key, raw_val in updates.items():
-        if key not in CONFIG_REGISTRY or not hasattr(config, key):
-            continue
-        current_val = getattr(config, key)
-        casted_val = cast_parameter_value(current_val, raw_val)
-        setattr(config, key, casted_val)
-
-        submodule_name = CONFIG_REGISTRY[key][:-3]
-        if hasattr(config, submodule_name):
-            setattr(getattr(config, submodule_name), key, casted_val)
-
-        for mod_name, mod in list(sys.modules.items()):
-            if (mod_name == "src.config" or mod_name.startswith("src.")) and hasattr(mod, key):
-                setattr(mod, key, casted_val)
-
-        if (
-            key == "TARGET_TERRAIN"
-            and hasattr(config, "TERRAINS")
-            and casted_val in config.TERRAINS
-        ):
-            target_speed = config.TERRAINS[casted_val]
-            config.TARGET_SPEED = target_speed
-            if hasattr(config, "config_isp"):
-                config.config_isp.TARGET_SPEED = target_speed
-            for mod_name, mod in list(sys.modules.items()):
-                if (mod_name == "src.config" or mod_name.startswith("src.")) and hasattr(mod, "TARGET_SPEED"):
-                    mod.TARGET_SPEED = target_speed
-
-        applied[key] = casted_val
-    return applied
+    candidate = _build_configuration_candidate(updates)
+    applied = {key: candidate[key] for key in updates if key in CONFIG_REGISTRY}
+    for key, value in candidate.items():
+        _publish_configuration_value(key, value)
+    _publish_derived_configuration()
+    return copy.deepcopy(applied)
 
 
 def build_experiment_config(
@@ -87,35 +192,17 @@ def build_experiment_config(
     goal: tuple[int, int] | list[int] | None = None,
     user_path: list[tuple[int, int]] | list[list[int]] | None = None,
 ) -> dict[str, Any]:
-    current_system = get_all_configurations()
-    if config_dict:
-        for k, v in config_dict.items():
-            if k in CONFIG_REGISTRY:
-                current_system[k] = cast_parameter_value(current_system.get(k), v)
+    current_system = _build_configuration_candidate(
+        config_dict or {}, base=get_all_configurations()
+    )
 
     raw_start = start if start is not None else getattr(config, "START_COORD", None)
     raw_goal = goal if goal is not None else getattr(config, "GOAL_COORD", None)
 
     export_dict: dict[str, Any] = {
-        "MAP_H": int(current_system.get("MAP_H", 64)),
-        "MAP_W": int(current_system.get("MAP_W", 128)),
-        "CELL_SIZE": float(current_system.get("CELL_SIZE", 1.0)),
-        "CONNECTIVITY": int(current_system.get("CONNECTIVITY", 8)),
-        "MAP_DEFAULT_SEED": int(current_system.get("MAP_DEFAULT_SEED", 42)),
-        "MAP_ELEVATION_SCALE": float(current_system.get("MAP_ELEVATION_SCALE", 2.0)),
-        "MAP_ELEVATION_FREQ": float(current_system.get("MAP_ELEVATION_FREQ", 0.06)),
-        "MAP_OBSTACLE_FREQ": float(current_system.get("MAP_OBSTACLE_FREQ", 0.05)),
-        "MAP_OBSTACLE_THRESHOLD": float(current_system.get("MAP_OBSTACLE_THRESHOLD", 0.85)),
-        "DEFAULT_SOLVER": str(current_system.get("DEFAULT_SOLVER", "HIGHS")),
-        "SOLVER_TIMEOUT_SEC": float(current_system.get("SOLVER_TIMEOUT_SEC", 6000.0)),
-        "USE_INCREMENTAL_SOLVER": bool(current_system.get("USE_INCREMENTAL_SOLVER", False)),
-        "MAX_ISP_ITERATIONS": int(current_system.get("MAX_ISP_ITERATIONS", 50)),
-        "INCREMENTAL_ASTAR_SCOPE": str(current_system.get("INCREMENTAL_ASTAR_SCOPE", "GLOBAL")),
-        "DEFAULT_REDUCTION_METHOD": str(current_system.get("DEFAULT_REDUCTION_METHOD", "NONE")),
-        "BBOX_MARGIN": int(current_system.get("BBOX_MARGIN", 2)),
-        "TARGET_TERRAIN": str(current_system.get("TARGET_TERRAIN", "COMPACTED_SOIL")),
-        "DEFAULT_PLANNER": str(current_system.get("DEFAULT_PLANNER", "ASTAR")),
-        "OUTPUT_DIR": str(current_system.get("OUTPUT_DIR", "")),
+        key: copy.deepcopy(current_system[key])
+        for key in CONFIG_REGISTRY
+        if key in current_system
     }
 
     if raw_start is not None:
@@ -196,7 +283,7 @@ def validate_experiment_config(
     data: dict[str, Any],
 ) -> tuple[dict[str, Any], tuple[int, int], tuple[int, int], list[tuple[int, int]]]:
     if not isinstance(data, dict):
-        raise ValueError("Configuration payload must be a JSON object dictionary.")
+        raise TypeError("Configuration payload must be a JSON object dictionary.")
 
     flattened = dict(data)
     if "config" in data and isinstance(data["config"], dict):
@@ -236,14 +323,16 @@ def validate_experiment_config(
             f"Alternative route 'p_user' endpoint {p_user[-1]} does not match defined goal coordinate {goal}."
         )
 
-    params: dict[str, Any] = {}
-    current_defaults = get_all_configurations()
-    for key in CONFIG_REGISTRY:
-        if key in flattened:
-            params[key] = cast_parameter_value(current_defaults.get(key), flattened[key])
+    supplied_config = {
+        key: value for key, value in flattened.items() if key in CONFIG_REGISTRY
+    }
+    params = _build_configuration_candidate(
+        supplied_config,
+        base=copy.deepcopy(DEFAULT_CONFIGURATIONS),
+    )
 
-    map_h = params.get("MAP_H", current_defaults.get("MAP_H", 64))
-    map_w = params.get("MAP_W", current_defaults.get("MAP_W", 128))
+    map_h = params["MAP_H"]
+    map_w = params["MAP_W"]
 
     for node in (start, goal):
         if not (0 <= node[0] < map_h and 0 <= node[1] < map_w):

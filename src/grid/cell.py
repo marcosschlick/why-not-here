@@ -1,22 +1,17 @@
-from ..config import (
-    DEFAULT_ELEVATION,
-    DEFAULT_OBSTACLE,
-    DEFAULT_TERRAIN,
-    IMPASSABLE_TERRAINS,
-)
+from .. import config
 
 
 class Cell:
     def __init__(
         self,
-        terrain: str = DEFAULT_TERRAIN,
-        elevation: float = DEFAULT_ELEVATION,
-        obstacle: int = DEFAULT_OBSTACLE,
+        terrain: str | None = None,
+        elevation: float | None = None,
+        obstacle: int | None = None,
     ) -> None:
-        self.terrain = terrain
-        self.elevation = elevation
-        self.obstacle = obstacle
+        self.terrain = terrain if terrain is not None else config.DEFAULT_TERRAIN
+        self.elevation = elevation if elevation is not None else config.DEFAULT_ELEVATION
+        self.obstacle = obstacle if obstacle is not None else config.DEFAULT_OBSTACLE
 
     @property
     def is_blocked(self) -> bool:
-        return self.obstacle != 0 or self.terrain in IMPASSABLE_TERRAINS
+        return self.obstacle != 0 or self.terrain in config.IMPASSABLE_TERRAINS

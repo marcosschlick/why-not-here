@@ -1,16 +1,22 @@
 import numpy as np
 
-BASE_TERRAIN_COLORS: dict[str, np.ndarray] = {
-    "COMPACTED_SOIL": np.array([0.62, 0.42, 0.28]),
-    "GRASS": np.array([0.18, 0.58, 0.22]),
-    "DRY_VEGETATION": np.array([0.75, 0.76, 0.20]),
-    "SAND": np.array([0.98, 0.82, 0.26]),
-    "MUD": np.array([0.36, 0.22, 0.16]),
-    "WATER_RIVER": np.array([0.02, 0.52, 0.90]),
-}
+from .. import config
 
 OBSTACLE_COLOR = np.array([0.08, 0.08, 0.09])
 DEFAULT_TERRAIN_COLOR = np.array([0.5, 0.5, 0.5])
+
+
+def terrain_color_rgb(terrain_name: str) -> np.ndarray:
+    color = config.TERRAIN_COLORS.get(terrain_name)
+    if not isinstance(color, str) or len(color) != 7 or not color.startswith("#"):
+        return DEFAULT_TERRAIN_COLOR.copy()
+    try:
+        return np.array(
+            [int(color[index : index + 2], 16) / 255.0 for index in (1, 3, 5)],
+            dtype=np.float64,
+        )
+    except ValueError:
+        return DEFAULT_TERRAIN_COLOR.copy()
 
 START_COLOR = "#00B0FF"
 START_EDGE_COLOR = "#003366"

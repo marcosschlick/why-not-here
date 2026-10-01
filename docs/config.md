@@ -30,7 +30,7 @@ Controls pseudorandom seed, Perlin noise scales, and biome thresholds for terrai
 | `MAP_ELEVATION_SCALE`    | `float`            | `2.0`                                                                                                             | Maximum elevation amplitude in meters.                               |
 | `MAP_ELEVATION_FREQ`     | `float`            | `0.06`                                                                                                            | Spatial frequency for Perlin noise elevation.                        |
 | `MAP_ELEVATION_OCTAVES`  | `int`              | `3`                                                                                                               | Number of noise octaves for elevation detail.                        |
-| `MAP_BIOME_FREQ`         | `float`            | `0.02`                                                                                                            | Spatial frequency for biome noise distribution.                      |
+| `MAP_BIOME_FREQ`         | `float`            | `0.03`                                                                                                            | Spatial frequency for biome noise distribution.                      |
 | `MAP_BIOME_OCTAVES`      | `int`              | `2`                                                                                                               | Number of noise octaves for biome distribution.                      |
 | `MAP_BIOME_THRESHOLDS`   | `dict[str, float]` | `{"WATER_RIVER": 0.20, "MUD": 0.32, "SAND": 0.45, "DRY_VEGETATION": 0.60, "GRASS": 0.80, "COMPACTED_SOIL": 1.00}` | Normalized cumulative thresholds for terrain classification.         |
 | `MAP_OBSTACLE_FREQ`      | `float`            | `0.05`                                                                                                            | Spatial frequency for obstacle cluster Perlin noise.                 |
@@ -45,7 +45,8 @@ Defines traversability speeds, slope thresholds, and mechanical limits based on 
 | Parameter             | Type               | Default Value                                                                                               | Description                                                                       |
 | :-------------------- | :----------------- | :---------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------- |
 | `MAX_SLOPE_DEG`       | `float`            | `20.0`                                                                                                      | Maximum traversable slope in degrees ($\alpha_{\max} = 20.0^\circ$).              |
-| `TERRAINS`            | `dict[str, float]` | `{"COMPACTED_SOIL": 1.2, "GRASS": 1.0, "DRY_VEGETATION": 0.8, "SAND": 0.6, "MUD": 0.4, "WATER_RIVER": 0.0}` | Nominal traversal speeds in m/s for each terrain type.                            |
+| `TERRAINS`            | `dict[str, float]` | Ten built-in terrain speeds                                                                                      | Nominal traversal speeds in m/s for each terrain type.                            |
+| `TERRAIN_COLORS`      | `dict[str, str]`   | Hex colors for all built-in terrains                                                                              | User-editable `#RRGGBB` map palette shared by the Web canvas and Python renderers. |
 | `BASE_TERRAIN`        | `str`              | `"GRASS"`                                                                                                   | Reference terrain type for base traversability calculations.                      |
 | `IMPASSABLE_TERRAINS` | `set[str]`         | `{"WATER_RIVER"}`                                                                                           | Dynamically derived set of terrain types with nominal speed $\le 0.0\text{ m/s}$. |
 | `V_MAX`               | `float`            | `1.2`                                                                                                       | Dynamically derived maximum nominal speed across all terrains in m/s.             |
@@ -76,6 +77,10 @@ Defines the semantic target used by terrain interventions in the MILP formulatio
 
 The MILP objective assigns unit cost to each binary terrain, obstacle, and slope intervention. Its prohibitive transition penalty is derived from the active graph and is not a user configuration parameter.
 
+The Web terrain registry keeps the `TERRAINS` and `TERRAIN_COLORS` keys in sync. Terrain names must be unique, colors use `#RRGGBB`, and speeds at or below `0.0` are impassable. `DEFAULT_TERRAIN` must exist in the registry. `BASE_TERRAIN` and `TARGET_TERRAIN` must reference terrains with positive speeds. `IMPASSABLE_TERRAINS`, `V_MAX`, and `TARGET_SPEED` are recalculated whenever the registry or selected terrains change. The current default, base, and target terrains cannot be removed until another terrain is selected.
+
+Procedural biome assignment continues to use the built-in biome threshold order. Removed biome names are skipped, and the selected `DEFAULT_TERRAIN` is used when no remaining biome threshold matches. Custom terrains are available as defaults and ISP targets, and their chosen colors are used whenever they appear in map data.
+
 ---
 
 ## 6. Optimization Solver Backend (`src/config/config_solver.py`)
@@ -84,7 +89,7 @@ Specifies the mathematical programming solver backend and runtime limits.
 
 | Parameter            | Type    | Default Value | Description                                                                |
 | :------------------- | :------ | :------------ | :------------------------------------------------------------------------- |
-| `DEFAULT_SOLVER`     | `str`   | `"HIGHS"`     | Primary MIP solver backend for CVXPY (`"HIGHS"`, `"GUROBI"`, `"CBC"`).     |
+| `DEFAULT_SOLVER`     | `str`   | `"HIGHS"`     | Primary MIP solver backend for CVXPY (`"HIGHS"` or optional `"GUROBI"`).     |
 | `SOLVER_TIMEOUT_SEC` | `float` | `6000.0`      | Single-run solver timeout in seconds.                                      |
 | `MIP_GAP_TOLERANCE`  | `float` | `1e-4`        | Relative optimality gap tolerance between dual bound and integer solution. |
 
@@ -110,7 +115,7 @@ Controls subgraph pruning heuristics to reduce problem dimension before optimiza
 
 | Parameter                  | Type  | Default Value  | Description                                                                                   |
 | :------------------------- | :---- | :------------- | :-------------------------------------------------------------------------------------------- |
-| `DEFAULT_REDUCTION_METHOD` | `str` | `"SPARSIFIED"` | Active reduction strategy (`"NONE"`, `"BBOX"`, `"FLOODFILL"`, `"SPARSIFIED"`, `"PATH_ONLY"`). |
+| `DEFAULT_REDUCTION_METHOD` | `str` | `"NONE"` | Active reduction strategy (`"NONE"`, `"BBOX"`, `"FLOODFILL"`, `"SPARSIFIED"`, `"PATH_ONLY"`). |
 | `BBOX_MARGIN`              | `int` | `2`            | Cell margin padding applied around bounding box boundaries.                                   |
 
 ---
@@ -124,7 +129,7 @@ Standardizes persistence paths for map definitions, output visuals, and executio
 | `MAPS_DIR`         | `str` | `"maps"`          | Relative directory path for serialized procedural map files.                                                                                                                                             |
 | `DEFAULT_MAP_FILE` | `str` | `"maps/map.json"` | Default file path for serialized map JSON definitions.                                                                                                                                                   |
 | `DEFAULT_MAP_IMG`  | `str` | `"maps/map.png"`  | Default file path for rendered map preview images.                                                                                                                                                       |
-| `OUTPUT_DIR`       | `str` | `"output"`        | Root directory path for generated visual artifacts, reports, and solutions. Output runs are organized into `map/` (`map.png`, `map.json`) and `results/` (solution plots `1_...` to `5_...`, `log.txt`). |
+| `OUTPUT_DIR`       | `str` | `""`        | Must be explicitly selected before generating persisted artifacts. Output runs are organized into `map/` (`map.png`, `map.json`) and `results/` (solution plots `1_...` to `5_...`, `log.txt`). |
 
 ---
 
@@ -136,11 +141,14 @@ Standardizes export, import, and reproduction of experiments across both the Web
 | :---- | :--- | :---------- |
 | `MAP_H`, `MAP_W` | `int` | Matrix dimensions (rows, columns). |
 | `CELL_SIZE` | `float` | Metric resolution per cell. |
+| `MAX_SLOPE_DEG` | `float` | Maximum traversable slope in degrees. |
+| `CLOSED_LOOP_TIMEOUT_SEC` | `float` | Overall timeout for closed-loop ISP execution in seconds. |
+| `MAP_BIOME_FREQ` | `float` | Spatial frequency used to distribute procedural biomes. |
 | `CONNECTIVITY` | `int` | Grid neighborhood model (`4` or `8`). |
 | `MAP_DEFAULT_SEED` | `int` | Procedural map seed. |
 | `MAP_ELEVATION_SCALE`, `MAP_ELEVATION_FREQ` | `float` | Perlin noise amplitude and frequency for elevation. |
 | `MAP_OBSTACLE_FREQ`, `MAP_OBSTACLE_THRESHOLD` | `float` | Obstacle cluster noise frequency and threshold. |
-| `DEFAULT_SOLVER` | `str` | MIP solver backend (`"HIGHS"`, `"GUROBI"`, `"CBC"`). |
+| `DEFAULT_SOLVER` | `str` | MIP solver backend (`"HIGHS"` or `"GUROBI"`). HiGHS is the default; Gurobi is the backend alternative. SCIP and CBC are not supported. |
 | `SOLVER_TIMEOUT_SEC` | `float` | Solver time limit in seconds. |
 | `USE_INCREMENTAL_SOLVER` | `bool` | `True` for iterative cutting-plane, `False` for monolithic MILP. |
 | `MAX_ISP_ITERATIONS` | `int` | Maximum cutting-plane iterations. |
@@ -148,9 +156,13 @@ Standardizes export, import, and reproduction of experiments across both the Web
 | `DEFAULT_REDUCTION_METHOD` | `str` | Active reduction method (`"NONE"`, `"BBOX"`, `"FLOODFILL"`, `"SPARSIFIED"`, `"PATH_ONLY"`). |
 | `BBOX_MARGIN` | `int` | Cell padding around bounding box. |
 | `TARGET_TERRAIN` | `str` | Semantic target terrain for soil upgrades. |
+| `DEFAULT_TERRAIN` | `str` | Terrain assigned to uninitialized cells and used as the procedural biome fallback. |
+| `BASE_TERRAIN` | `str` | Traversable reference terrain for ISP traversability calculations. |
+| `TERRAINS`, `TERRAIN_COLORS` | `dict` | Terrain speeds and `#RRGGBB` colors, included in each exported experiment. |
 | `DEFAULT_PLANNER` | `str` | Path planner algorithm (`"ASTAR"` or `"DIJKSTRA"`). |
 | `OUTPUT_DIR` | `str` | Directory path for generated artifacts. |
 | `start` | `[row, col]` | Origin coordinate pair. |
 | `goal` | `[row, col]` | Destination coordinate pair. |
 | `p_user` | `[[row, col], ...]` | Full alternative trajectory from start to goal. |
 
+Experiment JSON files include the terrain registry and all active terrain parameters so a custom terrain setup can be reproduced. Legacy JSON files without these fields remain valid and use the built-in defaults. Runtime edits are held in memory and do not rewrite Python configuration modules. The `OUTPUT_DIR` field must contain a user-selected path whenever an API request persists artifacts.
