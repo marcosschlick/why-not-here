@@ -66,11 +66,13 @@ export interface SolveResponse {
 export interface QueueItem {
   id: string;
   config: SystemConfig;
+  configurationName?: string;
   status:
     | "pending"
     | "generating_map"
     | "awaiting_route"
     | "solving"
+    | "saved"
     | "completed"
     | "failed";
   mapData?: MapData;
@@ -103,4 +105,24 @@ export interface CheckDirResult {
   file_count: number;
   has_artifacts: boolean;
   files: string[];
+}
+
+export interface ExportConfigPayload {
+  config?: Partial<SystemConfig>;
+  start: [number, number];
+  goal: [number, number];
+  user_path: [number, number][];
+}
+
+export interface SaveConfigurationItem extends ExportConfigPayload {
+  name: string;
+}
+
+export interface SaveConfigurationsPayload {
+  destination_dir: string;
+  configurations: SaveConfigurationItem[];
+}
+
+export interface ImportConfigResponse extends MapData {
+  user_path: [number, number][];
 }

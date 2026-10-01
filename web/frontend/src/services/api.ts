@@ -1,7 +1,10 @@
 import type {
   DirectoryListing,
   ExecutionStatus,
+  ExportConfigPayload,
+  ImportConfigResponse,
   MapData,
+  SaveConfigurationsPayload,
   SolveResponse,
   SystemConfig,
 } from "../types";
@@ -31,13 +34,14 @@ export async function saveConfig(
 
 export async function generateMap(
   config: Partial<SystemConfig>,
+  persistArtifacts = true,
 ): Promise<MapData> {
   const response = await fetch("/api/map/generate", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(config),
+    body: JSON.stringify({ ...config, persist_artifacts: persistArtifacts }),
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
@@ -103,14 +107,49 @@ export async function createDirectory(
 
 export async function browseDirectory(): Promise<string | null> {
   try {
-    const response = await fetch("/api/browse-directory", {
+    const response = await fetch("/api/browse", {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ mode: "directory" }),
     });
     if (!response.ok) {
       return null;
     }
     const data = await response.json();
     return data.path || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function browseFiles(
+  multiple = false,
+): Promise<
+  | { name: string; data: Record<string, unknown> }[]
+  | { name: string; data: Record<string, unknown> }
+  | null
+> {
+  try {
+    const response = await fetch("/api/browse", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ mode: multiple ? "files" : "file" }),
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const data = await response.json();
+    if (multiple) {
+      return data.files || [];
+    }
+    if (data.data) {
+      return { name: data.name, data: data.data };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -160,6 +199,67 @@ export async function cleanOutputDir(
   });
   if (!response.ok) {
     throw new Error(`Failed to clean output directory: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function exportConfig(
+  payload: ExportConfigPayload,
+): Promise<Record<string, unknown>> {
+  const response = await fetch("/api/config/export", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(
+      errorData?.detail ||
+        `Failed to export configuration: ${response.statusText}`,
+    );
+  }
+  return response.json();
+}
+
+export async function saveConfigurations(
+  payload: SaveConfigurationsPayload,
+): Promise<{ status: string; saved_files: string[] }> {
+  const response = await fetch("/api/config/save", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(
+      errorData?.detail ||
+        `Failed to save configuration: ${response.statusText}`,
+    );
+  }
+  return response.json();
+}
+
+export async function importConfig(
+  payload: Record<string, unknown>,
+  persistArtifacts = true,
+): Promise<ImportConfigResponse> {
+  const response = await fetch("/api/config/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ...payload, persist_artifacts: persistArtifacts }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(
+      errorData?.detail ||
+        `Failed to import configuration: ${response.statusText}`,
+    );
   }
   return response.json();
 }

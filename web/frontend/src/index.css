@@ -608,6 +608,7 @@ kbd,
 }
 .config-output-group .form-group {
   width: 100%;
+  max-width: 32rem;
 }
 .queue-tab-content {
   animation: tabContentEnter var(--duration-normal) var(--ease-out);
@@ -693,7 +694,23 @@ kbd,
 }
 .input-with-button {
   display: flex;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  max-width: 32rem;
+}
+.input-with-button input {
+  flex: 1;
+  min-width: 0;
+}
+.input-with-button .btn {
+  flex-shrink: 0;
+  min-width: 8rem;
+  min-height: 2.625rem;
+  padding: 0.55rem 1.35rem;
+  font-size: 0.84rem;
+  font-weight: 750;
+  white-space: nowrap;
 }
 .toggle-container,
 .queue-options-row,

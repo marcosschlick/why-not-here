@@ -2,6 +2,7 @@ import type { QueueItem } from "../types";
 
 interface QueuePanelProps {
   queue: QueueItem[];
+  workflowMode: "run" | "create";
   currentIndex: number;
   isProcessing: boolean;
   interactiveMode: boolean;
@@ -14,6 +15,7 @@ interface QueuePanelProps {
 
 export function QueuePanel({
   queue,
+  workflowMode,
   currentIndex,
   isProcessing,
   interactiveMode,
@@ -27,9 +29,9 @@ export function QueuePanel({
     return (
       <div className="queue-empty-card">
         <p className="queue-empty-text">
-          The execution queue is empty. Configure the parameters above and click{" "}
-          <strong>&quot;+ Add to Queue&quot;</strong> to enqueue batch
-          configurations.
+          {workflowMode === "create"
+            ? "The configuration queue is empty. Configure the parameters above and add named configurations to the batch."
+            : "The execution queue is empty. Configure the parameters above and click + Add to Queue to enqueue batch configurations."}
         </p>
       </div>
     );
@@ -45,11 +47,13 @@ export function QueuePanel({
       <div className="queue-panel-header">
         <div>
           <h3>
-            Batch Execution Queue ({queue.length}{" "}
+            {workflowMode === "create" ? "Configuration Queue" : "Batch Execution Queue"} ({queue.length}{" "}
             {queue.length === 1 ? "item" : "items"})
           </h3>
           <p className="subtitle">
-            Sequential pipeline execution across parameterized runs.
+            {workflowMode === "create"
+              ? "Review each route, then save the named configuration files."
+              : "Sequential pipeline execution across parameterized runs."}
           </p>
         </div>
 
@@ -70,34 +74,40 @@ export function QueuePanel({
             disabled={isProcessing || queue.length === 0}
           >
             {isProcessing
-              ? `Running Queue (${currentIndex + 1}/${queue.length})...`
-              : `Run Queue (${queue.length} ${queue.length === 1 ? "item" : "items"})`}
+              ? workflowMode === "create"
+                ? `Preparing Routes (${currentIndex + 1}/${queue.length})...`
+                : `Running Queue (${currentIndex + 1}/${queue.length})...`
+              : workflowMode === "create"
+                ? `Review Routes (${queue.length} ${queue.length === 1 ? "item" : "items"})`
+                : `Run Queue (${queue.length} ${queue.length === 1 ? "item" : "items"})`}
           </button>
         </div>
       </div>
 
-      <div className="queue-options-row">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={interactiveMode}
-          className={`toggle-btn ${interactiveMode ? "active" : ""}`}
-          onClick={() =>
-            !isProcessing && onToggleInteractiveMode(!interactiveMode)
-          }
-          disabled={isProcessing}
-        >
-          <span className="switch-pill">
-            <span className="switch-knob" />
-          </span>
-          <span className="toggle-label">
-            Interactive Verification:{" "}
-            {interactiveMode
-              ? "Enabled (pause per run to inspect/modify route)"
-              : "Disabled (automatic execution)"}
-          </span>
-        </button>
-      </div>
+      {workflowMode === "run" && (
+        <div className="queue-options-row">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={interactiveMode}
+            className={`toggle-btn ${interactiveMode ? "active" : ""}`}
+            onClick={() =>
+              !isProcessing && onToggleInteractiveMode(!interactiveMode)
+            }
+            disabled={isProcessing}
+          >
+            <span className="switch-pill">
+              <span className="switch-knob" />
+            </span>
+            <span className="toggle-label">
+              Interactive Verification:{" "}
+              {interactiveMode
+                ? "Enabled (pause per run to inspect/modify route)"
+                : "Disabled (automatic execution)"}
+            </span>
+          </button>
+        </div>
+      )}
 
       {isProcessing && (
         <div className="queue-progress-bar-container">
@@ -130,6 +140,7 @@ export function QueuePanel({
             generating_map: "Generating map...",
             awaiting_route: "Awaiting route",
             solving: "Solving ISP...",
+            saved: "Saved",
             completed: "Completed",
             failed: "Failed",
           };
@@ -148,6 +159,9 @@ export function QueuePanel({
               </div>
 
               <div className="queue-item-params">
+                {workflowMode === "create" && item.configurationName && (
+                  <span className="param-tag">Name: {item.configurationName}</span>
+                )}
                 <span className="param-tag">
                   {item.config.MAP_H}x{item.config.MAP_W}
                 </span>

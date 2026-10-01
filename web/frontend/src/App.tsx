@@ -6,8 +6,20 @@ import { ResultsView } from "./components/ResultsView";
 import { RouteCanvas } from "./components/RouteCanvas";
 import { formatReductionMethod } from "./utils/formatters";
 import { Topbar } from "./components/Topbar";
-import { fetchConfig, generateMap, solveISP } from "./services/api";
-import type { LastResult, MapData, QueueItem, SystemConfig } from "./types";
+import {
+  fetchConfig,
+  generateMap,
+  importConfig,
+  saveConfigurations,
+  solveISP,
+} from "./services/api";
+import type {
+  LastResult,
+  MapData,
+  QueueItem,
+  SaveConfigurationItem,
+  SystemConfig,
+} from "./types";
 
 function isSameMap(a?: SystemConfig | null, b?: SystemConfig | null): boolean {
   if (!a || !b) return false;
@@ -41,6 +53,14 @@ export function App() {
   const [activeTabMode, setActiveTabMode] = useState<"individual" | "queue">(
     "individual",
   );
+  const [workflowMode, setWorkflowMode] = useState<"run" | "create">("run");
+  const [configurationName, setConfigurationName] = useState<string>("");
+  const [configurationDestination, setConfigurationDestination] =
+    useState<string>("");
+  const [pendingConfiguration, setPendingConfiguration] = useState<{
+    name: string;
+    destinationDir: string;
+  } | null>(null);
   const [currentStep, setCurrentStep] = useState<
     "config" | "route_canvas" | "results"
   >("config");
@@ -58,8 +78,17 @@ export function App() {
   const [isSolvingISP, setIsSolvingISP] = useState<boolean>(false);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [runQueue, setRunQueue] = useState<QueueItem[]>([]);
+  const [configurationQueue, setConfigurationQueue] = useState<QueueItem[]>([]);
+  const queue = workflowMode === "create" ? configurationQueue : runQueue;
+  function setQueue(
+    update: QueueItem[] | ((previous: QueueItem[]) => QueueItem[]),
+  ) {
+    const updateQueue = workflowMode === "create" ? setConfigurationQueue : setRunQueue;
+    updateQueue(update);
+  }
   const [isBatchMode, setIsBatchMode] = useState<boolean>(false);
   const [batchReviewIndex, setBatchReviewIndex] = useState<number>(0);
   const [activeBatchResultIndex, setActiveBatchResultIndex] =
@@ -92,23 +121,129 @@ export function App() {
     loadInitial();
   }, []);
 
-  const handleGenerateMap = useCallback(async (targetConfig: SystemConfig) => {
-    setIsBatchMode(false);
-    setIsGeneratingMap(true);
-    setErrorMessage(null);
-    try {
-      const generated = await generateMap(targetConfig);
-      setMapData(generated);
-      setUserPath(generated.auto_path || [generated.start]);
-      setCurrentStep("route_canvas");
-    } catch (err) {
-      setErrorMessage(
-        err instanceof Error ? err.message : "Error generating map",
+  const handleGenerateMap = useCallback(
+    async (
+      targetConfig: SystemConfig,
+      targetName?: string,
+      destinationDir?: string,
+    ) => {
+      setIsBatchMode(false);
+      setIsGeneratingMap(true);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      setPendingConfiguration(
+        workflowMode === "create" && targetName && destinationDir
+          ? { name: targetName, destinationDir }
+          : null,
       );
-    } finally {
+      try {
+        const generated = await generateMap(
+          targetConfig,
+          workflowMode === "run",
+        );
+        setMapData(generated);
+        setUserPath(generated.auto_path || [generated.start]);
+        setCurrentStep("route_canvas");
+      } catch (err) {
+        setErrorMessage(
+          err instanceof Error ? err.message : "Error generating map",
+        );
+      } finally {
+        setIsGeneratingMap(false);
+      }
+    },
+    [workflowMode],
+  );
+
+  const handleImportConfig = useCallback(
+    async (
+      parsedJson: Record<string, unknown>,
+      targetName?: string,
+      destinationDir?: string,
+    ) => {
+      setIsBatchMode(false);
+      setIsGeneratingMap(true);
+      setErrorMessage(null);
+      setPendingConfiguration(
+        workflowMode === "create" && targetName && destinationDir
+          ? { name: targetName, destinationDir }
+          : null,
+      );
+      try {
+        const imported = await importConfig(
+          parsedJson,
+          workflowMode === "run",
+        );
+        setMapData(imported);
+        setUserPath(
+          imported.user_path || imported.auto_path || [imported.start],
+        );
+        setConfig(imported.config);
+        setCurrentStep("route_canvas");
+      } catch (err) {
+        setErrorMessage(
+          err instanceof Error ? err.message : "Error importing configuration",
+        );
+      } finally {
+        setIsGeneratingMap(false);
+      }
+    },
+    [workflowMode],
+  );
+
+  const handleImportBatchConfigs = useCallback(
+    async (
+      items: { name: string; data: Record<string, unknown> }[],
+    ) => {
+      if (items.length === 0) return;
+      setIsGeneratingMap(true);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+
+      let importedCount = 0;
+      const errors: string[] = [];
+      const newQueueItems: QueueItem[] = [];
+
+      for (const item of items) {
+        try {
+          const imported = await importConfig(item.data, false);
+          const queueItem: QueueItem = {
+            id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            config: imported.config,
+            configurationName:
+              workflowMode === "create" ? item.name : undefined,
+            status: "awaiting_route",
+            mapData: imported,
+            userPath:
+              imported.user_path || imported.auto_path || [imported.start],
+          };
+          newQueueItems.push(queueItem);
+          importedCount++;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          errors.push(`${item.name}.json: ${msg}`);
+        }
+      }
+
+      if (newQueueItems.length > 0) {
+        const updateQueue =
+          workflowMode === "create" ? setConfigurationQueue : setRunQueue;
+        updateQueue((prev) => [...prev, ...newQueueItems]);
+        setSuccessMessage(
+          `Imported ${importedCount} configuration${importedCount > 1 ? "s" : ""} to batch queue.`,
+        );
+      }
+
+      if (errors.length > 0) {
+        setErrorMessage(
+          `Failed to import ${errors.length} file(s): ${errors.slice(0, 3).join("; ")}${errors.length > 3 ? "..." : ""}`,
+        );
+      }
+
       setIsGeneratingMap(false);
-    }
-  }, []);
+    },
+    [workflowMode],
+  );
 
   const handleSingleSolve = useCallback(async () => {
     if (!mapData) return;
@@ -131,10 +266,18 @@ export function App() {
     }
   }, [mapData, userPath]);
 
-  function handleAddToQueue(newConfig: SystemConfig) {
+  function handleAddToQueue(
+    newConfig: SystemConfig,
+    targetName?: string,
+    destinationDir?: string,
+  ) {
+    if (workflowMode === "create" && destinationDir) {
+      setConfigurationDestination(destinationDir);
+    }
     const newItem: QueueItem = {
       id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       config: newConfig,
+      configurationName: workflowMode === "create" ? targetName : undefined,
       status: "pending",
     };
     setQueue((prev) => [...prev, newItem]);
@@ -163,7 +306,7 @@ export function App() {
       let initialPath = firstItem.userPath;
 
       if (!firstMap) {
-        firstMap = await generateMap(firstItem.config);
+        firstMap = await generateMap(firstItem.config, workflowMode === "run");
         initialPath = initialPath || firstMap.auto_path || [firstMap.start];
         setQueue((prev) =>
           prev.map((it, idx) =>
@@ -220,7 +363,10 @@ export function App() {
     } else {
       setIsGeneratingMap(true);
       try {
-        const newMap = await generateMap(targetItem.config);
+        const newMap = await generateMap(
+          targetItem.config,
+          workflowMode === "run",
+        );
         const initialPath = targetItem.userPath ||
           newMap.auto_path || [newMap.start];
 
@@ -250,9 +396,107 @@ export function App() {
     }
   }
 
-  function handleNextBatchMap() {
+  async function handleSaveSingleConfiguration() {
+    if (!mapData || !pendingConfiguration) return;
+    setIsGeneratingMap(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      const result = await saveConfigurations({
+        destination_dir: pendingConfiguration.destinationDir,
+        configurations: [
+          {
+            name: pendingConfiguration.name,
+            config: mapData.config,
+            start: mapData.start,
+            goal: mapData.goal,
+            user_path: userPath,
+          },
+        ],
+      });
+      setSuccessMessage(`Configuration saved to ${result.saved_files[0]}`);
+      setPendingConfiguration(null);
+      setCurrentStep("config");
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : "Error saving configuration",
+      );
+    } finally {
+      setIsGeneratingMap(false);
+    }
+  }
+
+  async function handleSaveBatchConfigurations(finalQueue: QueueItem[]) {
+    if (!configurationDestination.trim()) {
+      setErrorMessage("Configuration directory is required.");
+      return;
+    }
+    if (
+      finalQueue.some(
+        (item) =>
+          !item.configurationName?.trim() ||
+          !item.mapData ||
+          !item.userPath?.length,
+      )
+    ) {
+      setErrorMessage("Every batch item must have a name, map, and route.");
+      return;
+    }
+
+    setIsGeneratingMap(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      const configurations: SaveConfigurationItem[] = finalQueue.map((item) => ({
+        name: item.configurationName as string,
+        config: item.config,
+        start: (item.mapData as MapData).start,
+        goal: (item.mapData as MapData).goal,
+        user_path: item.userPath as [number, number][],
+      }));
+      const result = await saveConfigurations({
+        destination_dir: configurationDestination,
+        configurations,
+      });
+      setQueue((previous) =>
+        previous.map((item) => ({ ...item, status: "saved" })),
+      );
+      setSuccessMessage(
+        `Saved ${result.saved_files.length} configurations to ${configurationDestination}`,
+      );
+      setIsBatchMode(false);
+      setCurrentStep("config");
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : "Error saving batch configurations",
+      );
+    } finally {
+      setIsGeneratingMap(false);
+    }
+  }
+
+  async function handleNextBatchMap() {
+    if (workflowMode === "create") {
+      const finalQueue = queue.map((item, index) =>
+        index === batchReviewIndex
+          ? {
+              ...item,
+              mapData: mapData ? { ...mapData, config: item.config } : item.mapData,
+              userPath,
+              status: "awaiting_route" as const,
+            }
+          : item,
+      );
+      setQueue(finalQueue);
+      if (batchReviewIndex < queue.length - 1) {
+        await handleSwitchBatchMap(batchReviewIndex + 1);
+      } else {
+        await handleSaveBatchConfigurations(finalQueue);
+      }
+      return;
+    }
     if (batchReviewIndex < queue.length - 1) {
-      handleSwitchBatchMap(batchReviewIndex + 1);
+      await handleSwitchBatchMap(batchReviewIndex + 1);
     } else {
       handleExecuteBatch();
     }
@@ -422,6 +666,19 @@ export function App() {
             </button>
           </div>
         )}
+        {successMessage && (
+          <div className="queue-banner" role="status">
+            <span className="alert-text">{successMessage}</span>
+            <button
+              type="button"
+              className="alert-close"
+              onClick={() => setSuccessMessage(null)}
+              aria-label="Dismiss success message"
+            >
+              &times;
+            </button>
+          </div>
+        )}
 
         {currentStep === "config" && (
           <div key="step-config" className="step-container config-step">
@@ -430,17 +687,30 @@ export function App() {
               initialConfig={config}
               onGenerateMap={handleGenerateMap}
               onAddToQueue={handleAddToQueue}
+              onImportConfig={handleImportConfig}
+              onImportBatchConfigs={handleImportBatchConfigs}
               isGenerating={isGeneratingMap}
+              workflowMode={workflowMode}
+              onSwitchWorkflowMode={(mode) => {
+                setWorkflowMode(mode);
+                setIsBatchMode(false);
+                setErrorMessage(null);
+              }}
               activeMode={activeTabMode}
               onSwitchMode={setActiveTabMode}
               queueCount={queue.length}
               queue={queue}
+              configurationName={configurationName}
+              onConfigurationNameChange={setConfigurationName}
+              configurationDestination={configurationDestination}
+              onConfigurationDestinationChange={setConfigurationDestination}
             />
 
             {activeTabMode === "queue" && (
               <div className="queue-tab-content">
                 <QueuePanel
                   queue={queue}
+                  workflowMode={workflowMode}
                   currentIndex={batchReviewIndex}
                   isProcessing={isSolvingISP || isGeneratingMap}
                   interactiveMode={interactiveQueueMode}
@@ -461,15 +731,38 @@ export function App() {
               mapData={mapData}
               userPath={userPath}
               onPathChange={setUserPath}
-              onSolve={isBatchMode ? handleNextBatchMap : handleSingleSolve}
+              onSolve={
+                workflowMode === "create"
+                  ? isBatchMode
+                    ? handleNextBatchMap
+                    : handleSaveSingleConfiguration
+                  : isBatchMode
+                    ? handleNextBatchMap
+                    : handleSingleSolve
+              }
               isSolving={isSolvingISP || isGeneratingMap}
-              onCancel={() => setCurrentStep("config")}
+              onCancel={() => {
+                setIsBatchMode(false);
+                setCurrentStep("config");
+              }}
+              workflowMode={workflowMode}
+              busyButtonText={
+                workflowMode === "create"
+                  ? "Saving Configuration..."
+                  : "Solving ISP..."
+              }
               solveButtonText={
-                isBatchMode
-                  ? batchReviewIndex < queue.length - 1
-                    ? `Save Route & Next Map (${batchReviewIndex + 2}/${queue.length}) →`
-                    : `Solve Batch (${queue.length} Runs)`
-                  : "Solve ISP"
+                workflowMode === "create"
+                  ? isBatchMode
+                    ? batchReviewIndex < queue.length - 1
+                      ? `Save Route & Next Item (${batchReviewIndex + 2}/${queue.length})`
+                      : "Save Batch Configurations"
+                    : "Save Configuration"
+                  : isBatchMode
+                    ? batchReviewIndex < queue.length - 1
+                      ? `Save Route & Next Map (${batchReviewIndex + 2}/${queue.length}) →`
+                      : `Solve Batch (${queue.length} Runs)`
+                    : "Solve ISP"
               }
               onPrevMap={
                 isBatchMode && batchReviewIndex > 0
@@ -524,12 +817,14 @@ export function App() {
                     <div className="batch-stepper-bar">
                       <div className="batch-stepper-label">
                         <span className="batch-stepper-title">
-                          Batch Route Setup — Map {batchReviewIndex + 1} of{" "}
-                          {queue.length}
+                          {workflowMode === "create"
+                            ? `Configuration Route Setup, Item ${batchReviewIndex + 1} of ${queue.length}`
+                            : `Batch Route Setup - Map ${batchReviewIndex + 1} of ${queue.length}`}
                         </span>
                         <span className="batch-stepper-sub">
-                          Define custom routes for all maps in the batch before
-                          solving.
+                          {workflowMode === "create"
+                            ? "Define a route for each configuration before saving the batch."
+                            : "Define custom routes for all maps in the batch before solving."}
                         </span>
                       </div>
 
@@ -565,8 +860,9 @@ export function App() {
                               disabled={isGeneratingMap || isSolvingISP}
                             >
                               <span>
-                                Map {idx + 1} ({item.config.MAP_H}x
-                                {item.config.MAP_W})
+                                {workflowMode === "create"
+                                  ? `${item.configurationName || `Item ${idx + 1}`} (${item.config.MAP_H}x${item.config.MAP_W})`
+                                  : `Map ${idx + 1} (${item.config.MAP_H}x${item.config.MAP_W})`}
                               </span>
                               <span
                                 className={`batch-step-status-pill ${
@@ -697,6 +993,7 @@ export function App() {
               <div className="queue-results-summary">
                 <QueuePanel
                   queue={queue}
+                  workflowMode={workflowMode}
                   currentIndex={batchReviewIndex}
                   isProcessing={isSolvingISP}
                   interactiveMode={interactiveQueueMode}

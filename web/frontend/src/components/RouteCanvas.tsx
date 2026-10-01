@@ -6,6 +6,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { exportConfig } from "../services/api";
 import type { MapData } from "../types";
 import {
   connectPoints,
@@ -22,6 +23,8 @@ interface RouteCanvasProps {
   isSolving: boolean;
   onCancel?: () => void;
   solveButtonText?: string;
+  busyButtonText?: string;
+  workflowMode: "run" | "create";
   onPrevMap?: () => void;
   batchStepper?: React.ReactNode;
 }
@@ -34,6 +37,8 @@ export function RouteCanvas({
   isSolving,
   onCancel,
   solveButtonText,
+  busyButtonText,
+  workflowMode,
   onPrevMap,
   batchStepper,
 }: RouteCanvasProps) {
@@ -47,6 +52,7 @@ export function RouteCanvas({
   const [undoDepth, setUndoDepth] = useState<number>(0);
   const [showOptimalRoute, setShowOptimalRoute] = useState<boolean>(false);
   const [dragOrigin, setDragOrigin] = useState<GridPoint | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
   const strokeBasePathRef = useRef<GridPoint[] | null>(null);
   const dragOriginRef = useRef<GridPoint | null>(null);
@@ -61,6 +67,35 @@ export function RouteCanvas({
     userPath.length > 0 &&
     userPath[userPath.length - 1][0] === goal[0] &&
     userPath[userPath.length - 1][1] === goal[1];
+
+  const handleExportConfig = useCallback(async () => {
+    if (!isConnectedToGoal || userPath.length === 0) return;
+    setIsExporting(true);
+    try {
+      const exported = await exportConfig({
+        config: mapData.config,
+        start,
+        goal,
+        user_path: userPath,
+      });
+      const blob = new Blob([JSON.stringify(exported, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const seed = mapData.config?.MAP_DEFAULT_SEED ?? "custom";
+      a.href = url;
+      a.download = `isp-config-${seed}-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export configuration error:", err);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [isConnectedToGoal, userPath, mapData.config, start, goal]);
 
   useEffect(() => {
     function updateHoverWithShift(shiftState: boolean) {
@@ -422,7 +457,6 @@ export function RouteCanvas({
           >
             Automatic Route
           </button>
-
           <button
             type="button"
             className="btn btn-ghost"
@@ -449,6 +483,27 @@ export function RouteCanvas({
           >
             Clear
           </button>
+
+          {workflowMode === "run" && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={handleExportConfig}
+              disabled={
+                isSolving ||
+                isExporting ||
+                !isConnectedToGoal ||
+                userPath.length === 0
+              }
+              title={
+                isConnectedToGoal
+                  ? "Export experiment configuration and route to JSON file"
+                  : "Route must connect Start to Goal to export configuration"
+              }
+            >
+              {isExporting ? "Exporting..." : "Export Configuration"}
+            </button>
+          )}
 
           <button
             type="button"
@@ -558,13 +613,36 @@ export function RouteCanvas({
             </button>
           )}
 
+          {workflowMode === "run" && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleExportConfig}
+              disabled={
+                isSolving ||
+                isExporting ||
+                !isConnectedToGoal ||
+                userPath.length === 0
+              }
+              title={
+                isConnectedToGoal
+                  ? "Export experiment configuration and route to JSON file"
+                  : "Route must connect Start to Goal to export configuration"
+              }
+            >
+              {isExporting ? "Exporting..." : "Export Config"}
+            </button>
+          )}
+
           <button
             type="button"
             className="btn btn-vibrant btn-large"
             onClick={onSolve}
             disabled={isSolving || !isConnectedToGoal}
           >
-            {isSolving ? "Solving ISP..." : solveButtonText || "Solve ISP"}
+            {isSolving
+              ? busyButtonText || "Solving ISP..."
+              : solveButtonText || "Solve ISP"}
           </button>
         </div>
       </div>

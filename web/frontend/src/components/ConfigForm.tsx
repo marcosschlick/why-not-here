@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   browseDirectory,
+  browseFiles,
   checkOutputDir,
   cleanOutputDir,
 } from "../services/api";
@@ -8,13 +9,35 @@ import type { QueueItem, SystemConfig } from "../types";
 
 interface ConfigFormProps {
   initialConfig: SystemConfig | null;
-  onGenerateMap: (config: SystemConfig) => void;
-  onAddToQueue: (config: SystemConfig) => void;
+  onGenerateMap: (
+    config: SystemConfig,
+    configurationName?: string,
+    destinationDir?: string,
+  ) => void;
+  onAddToQueue: (
+    config: SystemConfig,
+    configurationName?: string,
+    destinationDir?: string,
+  ) => void;
+  onImportConfig?: (
+    data: Record<string, unknown>,
+    configurationName?: string,
+    destinationDir?: string,
+  ) => void;
+  onImportBatchConfigs?: (
+    configs: { name: string; data: Record<string, unknown> }[],
+  ) => void;
   isGenerating: boolean;
+  workflowMode: "run" | "create";
+  onSwitchWorkflowMode: (mode: "run" | "create") => void;
   activeMode: "individual" | "queue";
   onSwitchMode: (mode: "individual" | "queue") => void;
   queueCount: number;
   queue?: QueueItem[];
+  configurationName: string;
+  onConfigurationNameChange: (name: string) => void;
+  configurationDestination: string;
+  onConfigurationDestinationChange: (path: string) => void;
 }
 
 const MAP_SIZE_OPTIONS = [
@@ -38,11 +61,19 @@ export function ConfigForm({
   initialConfig,
   onGenerateMap,
   onAddToQueue,
+  onImportConfig,
+  onImportBatchConfigs,
   isGenerating,
+  workflowMode,
+  onSwitchWorkflowMode,
   activeMode,
   onSwitchMode,
   queueCount,
   queue,
+  configurationName,
+  onConfigurationNameChange,
+  configurationDestination,
+  onConfigurationDestinationChange,
 }: ConfigFormProps) {
   const initialMapSize = resolveMapSize(
     initialConfig?.MAP_H,
@@ -59,7 +90,9 @@ export function ConfigForm({
   const [useIncremental, setUseIncremental] = useState<boolean>(
     initialConfig?.USE_INCREMENTAL_SOLVER ?? false,
   );
-  const [outputDir, setOutputDir] = useState<string>("");
+  const [outputDir, setOutputDir] = useState<string>(
+    initialConfig?.OUTPUT_DIR ?? "",
+  );
   const [outputDirError, setOutputDirError] = useState<string | null>(null);
   const [isBrowsing, setIsBrowsing] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -127,7 +160,10 @@ export function ConfigForm({
       CONNECTIVITY: Number(connectivity),
       DEFAULT_REDUCTION_METHOD: reductionMethod,
       USE_INCREMENTAL_SOLVER: useIncremental,
-      OUTPUT_DIR: outputDir.trim(),
+      OUTPUT_DIR:
+        workflowMode === "run"
+          ? outputDir.trim()
+          : initialConfig?.OUTPUT_DIR || "output",
       MAP_DEFAULT_SEED: Number(mapSeed),
       DEFAULT_PLANNER: planner,
       DEFAULT_SOLVER: solver,
@@ -175,46 +211,104 @@ export function ConfigForm({
   }
 
   async function handleDirectRun() {
-    const trimmed = outputDir.trim();
+    const trimmed =
+      workflowMode === "create"
+        ? configurationDestination.trim()
+        : outputDir.trim();
     if (!trimmed) {
       setOutputDirError(
-        "Output directory is required. Please specify a directory.",
+        workflowMode === "create"
+          ? "Configuration directory is required. Please select a directory."
+          : "Output directory is required. Please specify a directory.",
       );
-      setFeedback("Please specify an output directory");
+      setFeedback(
+        workflowMode === "create"
+          ? "Please select a configuration directory"
+          : "Please specify an output directory",
+      );
       setTimeout(() => setFeedback(null), 3000);
       return;
     }
+
+    if (workflowMode === "create" && !configurationName.trim()) {
+      setOutputDirError("Configuration name is required.");
+      setFeedback("Please enter a configuration name");
+      setTimeout(() => setFeedback(null), 3000);
+      return;
+    }
+
     setOutputDirError(null);
     const current = getCurrentConfig();
+    if (workflowMode === "create") {
+      onGenerateMap(current, configurationName.trim(), trimmed);
+      return;
+    }
     await ensureCleanDirectoryAndExecute(current.OUTPUT_DIR, () => {
       onGenerateMap(current);
     });
   }
 
   async function handleAddQueue() {
-    const trimmed = outputDir.trim();
+    const trimmed =
+      workflowMode === "create"
+        ? configurationDestination.trim()
+        : outputDir.trim();
     if (!trimmed) {
       setOutputDirError(
-        "Output directory is required. Please specify a directory.",
+        workflowMode === "create"
+          ? "Configuration directory is required. Please select a directory."
+          : "Output directory is required. Please specify a directory.",
       );
-      setFeedback("Please specify an output directory");
+      setFeedback(
+        workflowMode === "create"
+          ? "Please select a configuration directory"
+          : "Please specify an output directory",
+      );
       setTimeout(() => setFeedback(null), 3000);
       return;
     }
-    const isDuplicate = queue?.some(
-      (item) =>
-        item.config.OUTPUT_DIR.trim().toLowerCase() === trimmed.toLowerCase(),
+
+    if (workflowMode === "create" && !configurationName.trim()) {
+      setOutputDirError("Configuration name is required.");
+      setFeedback("Please enter a configuration name");
+      setTimeout(() => setFeedback(null), 3000);
+      return;
+    }
+
+    const normalizedName = configurationName
+      .trim()
+      .replace(/\.json$/i, "")
+      .toLowerCase();
+    const isDuplicate = queue?.some((item) =>
+      workflowMode === "create"
+        ? item.configurationName
+            ?.trim()
+            .replace(/\.json$/i, "")
+            .toLowerCase() === normalizedName
+        : item.config.OUTPUT_DIR.trim().toLowerCase() === trimmed.toLowerCase(),
     );
     if (isDuplicate) {
       setOutputDirError(
-        `Output directory "${trimmed}" is already in the batch queue. Please specify a unique directory.`,
+        workflowMode === "create"
+          ? `Configuration name "${configurationName.trim()}" is already in the batch queue.`
+          : `Output directory "${trimmed}" is already in the batch queue. Please specify a unique directory.`,
       );
-      setFeedback(`Directory "${trimmed}" already in queue`);
+      setFeedback(
+        workflowMode === "create"
+          ? "Configuration name already in queue"
+          : `Directory "${trimmed}" already in queue`,
+      );
       setTimeout(() => setFeedback(null), 4000);
       return;
     }
     setOutputDirError(null);
     const current = getCurrentConfig();
+    if (workflowMode === "create") {
+      onAddToQueue(current, configurationName.trim(), trimmed);
+      setFeedback("Configuration added to queue");
+      setTimeout(() => setFeedback(null), 2500);
+      return;
+    }
     await ensureCleanDirectoryAndExecute(current.OUTPUT_DIR, () => {
       onAddToQueue(current);
       setFeedback("Configuration added to queue");
@@ -228,7 +322,11 @@ export function ConfigForm({
       const selected = await browseDirectory();
       if (selected && selected.trim()) {
         const cleanPath = selected.trim();
-        setOutputDir(cleanPath);
+        if (workflowMode === "create") {
+          onConfigurationDestinationChange(cleanPath);
+        } else {
+          setOutputDir(cleanPath);
+        }
         setOutputDirError(null);
       }
     } catch {
@@ -253,8 +351,74 @@ export function ConfigForm({
     }
   }
 
+  async function handleImportBrowse() {
+    setIsBrowsing(true);
+    try {
+      if (activeMode === "queue") {
+        const result = await browseFiles(true);
+        if (Array.isArray(result) && result.length > 0) {
+          if (onImportBatchConfigs) {
+            onImportBatchConfigs(result);
+          }
+        }
+      } else {
+        const result = await browseFiles(false);
+        if (result && !Array.isArray(result) && result.data) {
+          if (onImportConfig) {
+            if (workflowMode === "create") {
+              const destination = configurationDestination.trim();
+              const name = configurationName.trim();
+              if (!destination || !name) {
+                setOutputDirError(
+                  !destination
+                    ? "Configuration directory is required. Please select a directory."
+                    : "Configuration name is required.",
+                );
+                return;
+              }
+              onImportConfig(result.data, name, destination);
+            } else {
+              onImportConfig(result.data);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      setFeedback(
+        err instanceof Error ? err.message : "Failed to import configuration",
+      );
+      setTimeout(() => setFeedback(null), 3000);
+    } finally {
+      setIsBrowsing(false);
+    }
+  }
+
+  const isConfigurationDestinationLocked =
+    workflowMode === "create" && activeMode === "queue" && queueCount > 0;
+
   return (
     <div className="config-card">
+      <div className="mode-tabs" role="tablist" aria-label="Operational Mode">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={workflowMode === "run"}
+          className={`mode-tab ${workflowMode === "run" ? "active" : ""}`}
+          onClick={() => onSwitchWorkflowMode("run")}
+        >
+          Run Experiment
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={workflowMode === "create"}
+          className={`mode-tab ${workflowMode === "create" ? "active" : ""}`}
+          onClick={() => onSwitchWorkflowMode("create")}
+        >
+          Create Configuration
+        </button>
+      </div>
+
       <div className="mode-tabs" role="tablist" aria-label="Execution Mode">
         <button
           type="button"
@@ -434,19 +598,58 @@ export function ConfigForm({
           </div>
 
           <div className="config-output-group">
+            {workflowMode === "create" && (
+              <div className={`form-group ${outputDirError && !configurationName.trim() ? "has-error" : ""}`}>
+                <label htmlFor="configurationName">
+                  <span>Configuration Name</span>
+                  <span className="form-group-hint">
+                    Saved with a .json extension
+                  </span>
+                </label>
+                <input
+                  id="configurationName"
+                  type="text"
+                  value={configurationName}
+                  onChange={(event) => {
+                    onConfigurationNameChange(event.target.value);
+                    setOutputDirError(null);
+                  }}
+                  placeholder="Example: north-route-study"
+                  required
+                  aria-invalid={Boolean(
+                    outputDirError && !configurationName.trim(),
+                  )}
+                />
+              </div>
+            )}
+
             <div className={`form-group ${outputDirError ? "has-error" : ""}`}>
-              <label htmlFor="outputDir">
-                <span>Output Directory</span>
+              <label htmlFor="destinationDir">
+                <span>
+                  {workflowMode === "create"
+                    ? "Configuration Directory"
+                    : "Output Directory"}
+                </span>
                 <span className="form-group-hint">Required filesystem path</span>
               </label>
               <div className="input-with-button">
                 <input
-                  id="outputDir"
+                  id="destinationDir"
                   type="text"
                   readOnly
-                  value={outputDir}
-                  onClick={handleBrowse}
-                  placeholder="Click Browse... to select output directory"
+                  value={
+                    workflowMode === "create"
+                      ? configurationDestination
+                      : outputDir
+                  }
+                  onClick={
+                    isConfigurationDestinationLocked ? undefined : handleBrowse
+                  }
+                  placeholder={
+                    workflowMode === "create"
+                      ? "Click Browse... to select configuration directory"
+                      : "Click Browse... to select output directory"
+                  }
                   required
                   aria-invalid={Boolean(outputDirError)}
                 />
@@ -454,7 +657,7 @@ export function ConfigForm({
                   type="button"
                   className="btn btn-ghost"
                   onClick={handleBrowse}
-                  disabled={isGenerating || isBrowsing}
+                  disabled={isGenerating || isBrowsing || isConfigurationDestinationLocked}
                 >
                   {isBrowsing ? "Opening..." : "Browse..."}
                 </button>
@@ -679,23 +882,45 @@ export function ConfigForm({
 
         <div className="form-actions-row">
           <div className="primary-actions">
-            <button
-              type="button"
-              className="btn btn-vibrant"
-              onClick={handleDirectRun}
-              disabled={isGenerating}
-            >
-              {isGenerating ? "Generating Map..." : "Generate Map"}
-            </button>
+            {activeMode === "individual" && (
+              <button
+                type="button"
+                className="btn btn-vibrant"
+                onClick={handleDirectRun}
+                disabled={isGenerating}
+              >
+                {isGenerating
+                  ? "Generating Map..."
+                  : "Generate Map"}
+              </button>
+            )}
 
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleAddQueue}
-              disabled={isGenerating}
-            >
-              + Add to Queue
-            </button>
+            {activeMode === "queue" && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleAddQueue}
+                disabled={isGenerating}
+              >
+                {workflowMode === "create" ? "+ Add Configuration" : "+ Add to Queue"}
+              </button>
+            )}
+
+            {workflowMode !== "create" && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={handleImportBrowse}
+                disabled={isGenerating || isBrowsing}
+                title={
+                  activeMode === "queue"
+                    ? "Import one or more configuration JSON files into the queue"
+                    : "Import configuration JSON and load alternative route"
+                }
+              >
+                {isBrowsing ? "Opening..." : "Import Configuration"}
+              </button>
+            )}
           </div>
 
           {feedback && <span className="action-feedback">{feedback}</span>}
