@@ -60,18 +60,18 @@ def find_closest_traversable_cell(
 
 
 def prepare_endpoints(grid: Grid) -> tuple[tuple[int, int], tuple[int, int]]:
-    raw_start = (
-        config.START_COORD
-        if config.START_COORD is not None
-        else (max(1, int(grid.h * 0.1)), max(1, int(grid.w * 0.1)))
-    )
-    raw_goal = (
-        config.GOAL_COORD
-        if config.GOAL_COORD is not None
-        else (min(grid.h - 2, int(grid.h * 0.9)), min(grid.w - 2, int(grid.w * 0.9)))
-    )
-    start = find_closest_traversable_cell(grid, raw_start)
-    goal = find_closest_traversable_cell(grid, raw_goal)
+    if config.START_COORD is not None:
+        start = (int(config.START_COORD[0]), int(config.START_COORD[1]))
+    else:
+        raw_start = (max(1, int(grid.h * 0.1)), max(1, int(grid.w * 0.1)))
+        start = find_closest_traversable_cell(grid, raw_start)
+
+    if config.GOAL_COORD is not None:
+        goal = (int(config.GOAL_COORD[0]), int(config.GOAL_COORD[1]))
+    else:
+        raw_goal = (min(grid.h - 2, int(grid.h * 0.9)), min(grid.w - 2, int(grid.w * 0.9)))
+        goal = find_closest_traversable_cell(grid, raw_goal)
+
     grid.get_cell(start).obstacle = 0
     grid.get_cell(goal).obstacle = 0
     return start, goal

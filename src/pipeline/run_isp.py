@@ -51,7 +51,10 @@ def format_artifact_skip_note(result: ClosedLoopResult) -> str | None:
 
 
 def run_isp(
-    verbose: bool = True, user_path: list[tuple[int, int]] | None = None
+    verbose: bool = True,
+    user_path: list[tuple[int, int]] | None = None,
+    start: tuple[int, int] | None = None,
+    goal: tuple[int, int] | None = None,
 ) -> ClosedLoopResult | None:
     map_dir = get_project_path(config.OUTPUT_DIR) / "map"
     map_json_path = map_dir / "map.json"
@@ -69,7 +72,13 @@ def run_isp(
     log_lines.append(msg_load)
 
     grid = Grid.load(map_json_path)
-    start, goal = prepare_endpoints(grid)
+    if start is not None and goal is not None:
+        start = (int(start[0]), int(start[1]))
+        goal = (int(goal[0]), int(goal[1]))
+        grid.get_cell(start).obstacle = 0
+        grid.get_cell(goal).obstacle = 0
+    else:
+        start, goal = prepare_endpoints(grid)
 
     p_star, cost_star, expanded = plan_path(
         grid, start, goal, algorithm=config.DEFAULT_PLANNER

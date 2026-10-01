@@ -1,6 +1,6 @@
+import json
 import math
 import os
-import platform
 import shutil
 import subprocess
 import sys
@@ -10,6 +10,13 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from src import config
+from src.isp.precheck import validate_alternative_path
+from src.pipeline.experiment_config import (
+    apply_experiment_config,
+    build_experiment_config,
+    save_experiment_configurations,
+    validate_experiment_config,
+)
 from src.pipeline.generate_map import generate_map
 from src.pipeline.run_isp import run_isp
 from src.pipeline.utils import (
@@ -23,8 +30,12 @@ from .artifacts import collect_artifacts
 from .config_manager import get_all_configurations, update_configurations
 from .runner import runner
 from .schemas import (
+    BrowseRequest,
+    ExportConfigRequest,
     GenerateMapRequest,
+    ImportConfigRequest,
     RunRequest,
+    SaveConfigurationsRequest,
     SemanticModificationsData,
     SolveISPRequest,
 )
@@ -55,9 +66,119 @@ def modify_config(payload: dict[str, Any]) -> dict[str, Any]:
     return {"status": "success", "updated": updated_items}
 
 
+@router.post("/config/export")
+def export_configuration_endpoint(payload: ExportConfigRequest) -> dict[str, Any]:
+    config_dict = payload.config or {}
+    start = (int(payload.start[0]), int(payload.start[1]))
+    goal = (int(payload.goal[0]), int(payload.goal[1]))
+    user_path = [(int(pt[0]), int(pt[1])) for pt in payload.user_path]
+    return build_experiment_config(
+        config_dict=config_dict,
+        start=start,
+        goal=goal,
+        user_path=user_path,
+    )
+
+
+@router.post("/config/save")
+def save_configurations_endpoint(
+    payload: SaveConfigurationsRequest,
+) -> dict[str, Any]:
+    configurations = [item.model_dump() for item in payload.configurations]
+    try:
+        saved_files = save_experiment_configurations(
+            destination_dir=payload.destination_dir,
+            configurations=configurations,
+        )
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save configuration files: {exc!s}",
+        ) from exc
+    return {"status": "success", "saved_files": saved_files}
+
+
+@router.post("/config/import")
+def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any]:
+    raw_data = payload.model_dump(exclude_unset=False, exclude_none=True)
+    try:
+        params, start, goal, p_user = validate_experiment_config(raw_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    apply_experiment_config(params, start=start, goal=goal)
+
+    try:
+        grid = generate_map(
+            verbose=False,
+            persist_artifacts=payload.persist_artifacts,
+        )
+        is_valid, _, invalid_message = validate_alternative_path(grid, start, goal, p_user)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail=invalid_message or "Alternative route is invalid for the imported map.",
+            )
+
+        optimal_path, optimal_cost, _ = plan_path(
+            grid, start, goal, algorithm=config.DEFAULT_PLANNER
+        )
+
+        map_image_in_out = get_project_path(config.OUTPUT_DIR) / "map" / "map.png"
+        if payload.persist_artifacts and map_image_in_out.exists():
+            dir_query = (
+                f"?dir={config.OUTPUT_DIR}" if config.OUTPUT_DIR != "output" else ""
+            )
+            map_image_url = f"/output/map/map.png{dir_query}"
+        else:
+            map_img_path = Path(config.DEFAULT_MAP_IMG)
+            map_image_url = f"/maps/{map_img_path.name}"
+
+        safe_optimal_cost = (
+            round(optimal_cost, 4)
+            if optimal_cost is not None
+            and not math.isinf(optimal_cost)
+            and not math.isnan(optimal_cost)
+            else None
+        )
+
+        auto_path = create_alternative_path(grid, start, goal)
+
+        response_data = {
+            "status": "success",
+            "h": grid.h,
+            "w": grid.w,
+            "connectivity": grid.connectivity,
+            "start": list(start),
+            "goal": list(goal),
+            "elevation": grid.elevation,
+            "terrain": grid.terrain,
+            "obstacle": grid.obstacle,
+            "auto_path": auto_path,
+            "optimal_path": optimal_path if optimal_path else [],
+            "optimal_cost": safe_optimal_cost,
+            "map_image_url": map_image_url,
+            "config": get_all_configurations(),
+            "user_path": [list(pt) for pt in p_user],
+        }
+        return sanitize_floats(response_data)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to import configuration: {exc!s}"
+        ) from exc
+
+
 @router.post("/map/generate")
 def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
+    persist_artifacts = payload.persist_artifacts
     updates: dict[str, Any] = payload.model_dump(exclude_unset=False, exclude_none=True)
+    updates.pop("persist_artifacts", None)
     if "extra_config" in updates:
         extra = updates.pop("extra_config")
         if isinstance(extra, dict):
@@ -66,7 +187,10 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
     update_configurations(updates)
 
     try:
-        grid = generate_map(verbose=False)
+        grid = generate_map(
+            verbose=False,
+            persist_artifacts=persist_artifacts,
+        )
         start, goal = prepare_endpoints(grid)
         auto_path = create_alternative_path(grid, start, goal)
         optimal_path, optimal_cost, _ = plan_path(
@@ -74,7 +198,7 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
         )
 
         map_image_in_out = get_project_path(config.OUTPUT_DIR) / "map" / "map.png"
-        if map_image_in_out.exists():
+        if persist_artifacts and map_image_in_out.exists():
             dir_query = (
                 f"?dir={config.OUTPUT_DIR}" if config.OUTPUT_DIR != "output" else ""
             )
@@ -358,118 +482,78 @@ def clean_output_dir(payload: dict[str, str]) -> dict[str, Any]:
     return {"status": "success", "deleted_count": deleted_count}
 
 
-@router.post("/browse-directory")
-def browse_directory() -> dict[str, str]:
-    system = platform.system()
-    selected_path = ""
+@router.post("/browse")
+def browse_system_dialog(payload: BrowseRequest) -> dict[str, Any]:
     env = os.environ.copy()
+    mode = payload.mode
+    title = payload.title or (
+        "Select Output Directory"
+        if mode == "directory"
+        else "Import Configuration File"
+    )
+
+    py_code = (
+        "import sys, json\n"
+        "from PyQt6.QtWidgets import QApplication, QFileDialog\n"
+        "app = QApplication(sys.argv)\n"
+    )
+    if mode == "directory":
+        py_code += (
+            f"res = QFileDialog.getExistingDirectory(None, {json.dumps(title)})\n"
+            "print(json.dumps({'path': res or ''}), end='')\n"
+        )
+    elif mode == "files":
+        py_code += (
+            f"res, _ = QFileDialog.getOpenFileNames(None, {json.dumps(title)}, '', 'JSON Files (*.json);;All Files (*)')\n"
+            "print(json.dumps({'files': res or []}), end='')\n"
+        )
+    else:
+        py_code += (
+            f"res, _ = QFileDialog.getOpenFileName(None, {json.dumps(title)}, '', 'JSON Files (*.json);;All Files (*)')\n"
+            "print(json.dumps({'file': res or ''}), end='')\n"
+        )
+
     try:
-        if system == "Linux":
-            if shutil.which("zenity"):
-                res = subprocess.run(
-                    [
-                        "zenity",
-                        "--file-selection",
-                        "--directory",
-                        "--title=Select Output Directory",
-                    ],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    env=env,
-                )
-                if res.returncode == 0:
-                    selected_path = res.stdout.strip()
-            elif shutil.which("kdialog"):
-                res = subprocess.run(
-                    ["kdialog", "--getexistingdirectory", "."],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    env=env,
-                )
-                if res.returncode == 0:
-                    selected_path = res.stdout.strip()
-            if not selected_path:
+        proc = subprocess.run(
+            [sys.executable, "-c", py_code],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return {"path": "", "files": [], "file": ""}
+        result = json.loads(proc.stdout.strip())
+    except (subprocess.SubprocessError, OSError, json.JSONDecodeError):
+        return {"path": "", "files": [], "file": ""}
+
+    if mode == "directory":
+        return {"path": result.get("path", "")}
+
+    if mode == "files":
+        raw_files = result.get("files", [])
+        parsed_files = []
+        for file_path in raw_files:
+            fp = Path(file_path)
+            if fp.exists() and fp.is_file():
                 try:
-                    py_code = (
-                        "import gi; "
-                        "gi.require_version('Gtk', '3.0'); "
-                        "from gi.repository import Gtk; "
-                        "dialog = Gtk.FileChooserDialog(title='Select Output Directory', action=Gtk.FileChooserAction.SELECT_FOLDER); "
-                        "dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OPEN, Gtk.ResponseType.OK); "
-                        "resp = dialog.run(); "
-                        "p = dialog.get_filename() if resp == Gtk.ResponseType.OK else ''; "
-                        "dialog.destroy(); "
-                        "print(p or '', end='')"
+                    with fp.open("r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    parsed_files.append(
+                        {"path": str(fp), "name": fp.stem, "data": data}
                     )
-                    res = subprocess.run(
-                        [sys.executable, "-c", py_code],
-                        check=False,
-                        capture_output=True,
-                        text=True,
-                        env=env,
-                    )
-                    if res.returncode == 0:
-                        selected_path = res.stdout.strip()
-                except (subprocess.SubprocessError, OSError):
-                    selected_path = ""
-        elif system == "Darwin":
-            cmd = "osascript -e 'POSIX path of (choose folder with prompt \"Select Output Directory\")'"
-            res = subprocess.run(
-                cmd, check=False, shell=True, capture_output=True, text=True, env=env
-            )
-            if res.returncode == 0:
-                selected_path = res.stdout.strip()
-        elif system == "Windows":
-            cmd = 'powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }"'
-            res = subprocess.run(
-                cmd, check=False, shell=True, capture_output=True, text=True, env=env
-            )
-            if res.returncode == 0:
-                selected_path = res.stdout.strip()
+                except (OSError, json.JSONDecodeError):
+                    continue
+        return {"files": parsed_files}
 
-        if not selected_path:
+    raw_file = result.get("file", "")
+    if raw_file:
+        fp = Path(raw_file)
+        if fp.exists() and fp.is_file():
             try:
-                py_code = (
-                    "import sys; "
-                    "from PyQt6.QtWidgets import QApplication, QFileDialog; "
-                    "app = QApplication(sys.argv); "
-                    "p = QFileDialog.getExistingDirectory(None, 'Select Output Directory'); "
-                    "print(p or '', end='')"
-                )
-                res = subprocess.run(
-                    [sys.executable, "-c", py_code],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    env=env,
-                )
-                if res.returncode == 0:
-                    selected_path = res.stdout.strip()
-            except (subprocess.SubprocessError, OSError):
-                selected_path = ""
-
-        if not selected_path:
-            try:
-                py_code = (
-                    "import tkinter as tk, tkinter.filedialog as fd; "
-                    "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True); "
-                    "p = fd.askdirectory(title='Select Output Directory'); "
-                    "r.destroy(); print(p or '', end='')"
-                )
-                res = subprocess.run(
-                    [sys.executable, "-c", py_code],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    env=env,
-                )
-                if res.returncode == 0:
-                    selected_path = res.stdout.strip()
-            except (subprocess.SubprocessError, OSError):
-                selected_path = ""
-    except (subprocess.SubprocessError, OSError):
-        selected_path = ""
-
-    return {"path": selected_path}
+                with fp.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return {"path": str(fp), "name": fp.stem, "data": data}
+            except (OSError, json.JSONDecodeError):
+                return {"path": str(fp), "name": fp.stem, "data": None}
+    return {"path": "", "name": "", "data": None}
