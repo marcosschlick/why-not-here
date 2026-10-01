@@ -428,7 +428,7 @@ export function App() {
 
   async function handleSaveBatchConfigurations(finalQueue: QueueItem[]) {
     if (!configurationDestination.trim()) {
-      setErrorMessage("Configuration directory is required.");
+      setErrorMessage("Output directory is required.");
       return;
     }
     if (

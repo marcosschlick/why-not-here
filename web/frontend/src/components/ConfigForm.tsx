@@ -163,7 +163,7 @@ export function ConfigForm({
       OUTPUT_DIR:
         workflowMode === "run"
           ? outputDir.trim()
-          : initialConfig?.OUTPUT_DIR || "output",
+          : initialConfig?.OUTPUT_DIR || "",
       MAP_DEFAULT_SEED: Number(mapSeed),
       DEFAULT_PLANNER: planner,
       DEFAULT_SOLVER: solver,
@@ -217,14 +217,10 @@ export function ConfigForm({
         : outputDir.trim();
     if (!trimmed) {
       setOutputDirError(
-        workflowMode === "create"
-          ? "Configuration directory is required. Please select a directory."
-          : "Output directory is required. Please specify a directory.",
+        "Output directory is required. Please specify a directory.",
       );
       setFeedback(
-        workflowMode === "create"
-          ? "Please select a configuration directory"
-          : "Please specify an output directory",
+        "Please specify an output directory",
       );
       setTimeout(() => setFeedback(null), 3000);
       return;
@@ -255,14 +251,10 @@ export function ConfigForm({
         : outputDir.trim();
     if (!trimmed) {
       setOutputDirError(
-        workflowMode === "create"
-          ? "Configuration directory is required. Please select a directory."
-          : "Output directory is required. Please specify a directory.",
+        "Output directory is required. Please specify a directory.",
       );
       setFeedback(
-        workflowMode === "create"
-          ? "Please select a configuration directory"
-          : "Please specify an output directory",
+        "Please specify an output directory",
       );
       setTimeout(() => setFeedback(null), 3000);
       return;
@@ -371,7 +363,7 @@ export function ConfigForm({
               if (!destination || !name) {
                 setOutputDirError(
                   !destination
-                    ? "Configuration directory is required. Please select a directory."
+                    ? "Output directory is required. Please specify a directory."
                     : "Configuration name is required.",
                 );
                 return;
@@ -505,25 +497,29 @@ export function ConfigForm({
                 </select>
               </div>
 
-              {reductionMethod === "BBOX" && (
-                <div className="conditional-field-wrapper">
-                  <div className="form-group">
-                    <label htmlFor="bboxMargin">
-                      <span>BBox Margin</span>
-                      <span className="form-group-hint">Min 1 cell buffer</span>
-                    </label>
-                    <input
-                      id="bboxMargin"
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={bboxMargin}
-                      onChange={(e) => setBboxMargin(Number(e.target.value))}
-                      required
-                    />
-                  </div>
+              <div
+                className={
+                  "conditional-field-wrapper " +
+                  (reductionMethod === "BBOX" ? "is-active" : "is-inactive")
+                }
+              >
+                <div className="form-group">
+                  <label htmlFor="bboxMargin">
+                    <span>BBox Margin</span>
+                    <span className="form-group-hint">Min 1 cell buffer</span>
+                  </label>
+                  <input
+                    id="bboxMargin"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={bboxMargin}
+                    onChange={(e) => setBboxMargin(Number(e.target.value))}
+                    required
+                    disabled={reductionMethod !== "BBOX"}
+                  />
                 </div>
-              )}
+              </div>
             </div>
 
             <div className="strategy-column">
@@ -553,83 +549,97 @@ export function ConfigForm({
                 </div>
               </div>
 
-              {useIncremental && (
-                <div className="conditional-field-wrapper">
-                  <div className={`conditional-inner-grid ${reductionMethod !== "NONE" ? "has-scope" : ""}`}>
-                    <div className="form-group">
-                      <label htmlFor="maxIspIterations">
-                        <span>Max ISP Iterations</span>
-                        <span className="form-group-hint">1–100 cutting planes</span>
-                      </label>
-                      <input
-                        id="maxIspIterations"
-                        type="number"
-                        min={1}
-                        max={100}
-                        step={1}
-                        value={maxIspIterations}
-                        onChange={(e) =>
-                          setMaxIspIterations(Number(e.target.value))
-                        }
-                        required
-                      />
-                    </div>
+              <div
+                className={
+                  "conditional-field-wrapper " +
+                  (useIncremental ? "is-active" : "is-inactive")
+                }
+              >
+                <div className="conditional-inner-grid has-scope">
+                  <div className="form-group">
+                    <label htmlFor="maxIspIterations">
+                      <span>Max ISP Iterations</span>
+                      <span className="form-group-hint">1–100 cutting planes</span>
+                    </label>
+                    <input
+                      id="maxIspIterations"
+                      type="number"
+                      min={1}
+                      max={100}
+                      step={1}
+                      value={maxIspIterations}
+                      onChange={(e) =>
+                        setMaxIspIterations(Number(e.target.value))
+                      }
+                      required
+                      disabled={!useIncremental}
+                    />
+                  </div>
 
-                    {reductionMethod !== "NONE" && (
-                      <div className="form-group">
-                        <label htmlFor="incrementalAstarScope">
-                          <span>Incremental A* Scope</span>
-                          <span className="form-group-hint">Competing paths search</span>
-                        </label>
-                        <select
-                          id="incrementalAstarScope"
-                          value={incrementalAstarScope}
-                          onChange={(e) => setIncrementalAstarScope(e.target.value)}
-                        >
-                          <option value="GLOBAL">Global Grid</option>
-                          <option value="SUBGRAPH">Reduced Subgraph</option>
-                        </select>
-                      </div>
-                    )}
+                  <div className="form-group">
+                    <label htmlFor="incrementalAstarScope">
+                      <span>Incremental A* Scope</span>
+                      <span className="form-group-hint">Competing paths search</span>
+                    </label>
+                    <select
+                      id="incrementalAstarScope"
+                      value={incrementalAstarScope}
+                      onChange={(e) => setIncrementalAstarScope(e.target.value)}
+                      disabled={!useIncremental || reductionMethod === "NONE"}
+                    >
+                      <option value="GLOBAL">Global Grid</option>
+                      <option value="SUBGRAPH">Reduced Subgraph</option>
+                    </select>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
           <div className="config-output-group">
-            {workflowMode === "create" && (
-              <div className={`form-group ${outputDirError && !configurationName.trim() ? "has-error" : ""}`}>
-                <label htmlFor="configurationName">
-                  <span>Configuration Name</span>
-                  <span className="form-group-hint">
-                    Saved with a .json extension
-                  </span>
-                </label>
-                <input
-                  id="configurationName"
-                  type="text"
-                  value={configurationName}
-                  onChange={(event) => {
-                    onConfigurationNameChange(event.target.value);
-                    setOutputDirError(null);
-                  }}
-                  placeholder="Example: north-route-study"
-                  required
-                  aria-invalid={Boolean(
-                    outputDirError && !configurationName.trim(),
-                  )}
-                />
-              </div>
-            )}
-
-            <div className={`form-group ${outputDirError ? "has-error" : ""}`}>
-              <label htmlFor="destinationDir">
-                <span>
-                  {workflowMode === "create"
-                    ? "Configuration Directory"
-                    : "Output Directory"}
+            <div
+              className={`form-group ${
+                workflowMode === "create" ? "is-active" : "is-inactive"
+              } ${
+                workflowMode === "create" &&
+                outputDirError &&
+                !configurationName.trim()
+                  ? "has-error"
+                  : ""
+              }`}
+            >
+              <label htmlFor="configurationName">
+                <span>Configuration Name</span>
+                <span className="form-group-hint">
+                  Saved with a .json extension
                 </span>
+              </label>
+              <input
+                id="configurationName"
+                type="text"
+                value={configurationName}
+                onChange={(event) => {
+                  onConfigurationNameChange(event.target.value);
+                  setOutputDirError(null);
+                }}
+                placeholder="Example: north-route-study"
+                required
+                disabled={workflowMode !== "create"}
+                aria-invalid={Boolean(
+                  workflowMode === "create" &&
+                    outputDirError &&
+                    !configurationName.trim(),
+                )}
+              />
+            </div>
+
+            <div
+              className={`form-group is-active ${
+                outputDirError ? "has-error" : ""
+              }`}
+            >
+              <label id="destinationDirLabel">
+                <span>Output Directory</span>
                 <span className="form-group-hint">Required filesystem path</span>
               </label>
               <div className="input-with-button">
@@ -637,20 +647,15 @@ export function ConfigForm({
                   id="destinationDir"
                   type="text"
                   readOnly
+                  tabIndex={-1}
                   value={
                     workflowMode === "create"
                       ? configurationDestination
                       : outputDir
                   }
-                  onClick={
-                    isConfigurationDestinationLocked ? undefined : handleBrowse
-                  }
-                  placeholder={
-                    workflowMode === "create"
-                      ? "Click Browse... to select configuration directory"
-                      : "Click Browse... to select output directory"
-                  }
+                  placeholder="Click Browse... to select output directory"
                   required
+                  aria-labelledby="destinationDirLabel"
                   aria-invalid={Boolean(outputDirError)}
                 />
                 <button

@@ -14,7 +14,7 @@ class GenerateMapRequest(BaseModel):
     MAP_W: int = Field(default=128, ge=4, le=1024)
     CONNECTIVITY: int = Field(default=8)
     DEFAULT_REDUCTION_METHOD: str = Field(default="NONE")
-    USE_INCREMENTAL_SOLVER: bool = Field(default=True)
+    USE_INCREMENTAL_SOLVER: bool = Field(default=False)
     INCREMENTAL_ASTAR_SCOPE: str = Field(default="GLOBAL")
     OUTPUT_DIR: str = Field(default="output")
     MAP_DEFAULT_SEED: int | None = Field(default=None)

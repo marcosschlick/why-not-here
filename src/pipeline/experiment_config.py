@@ -111,11 +111,11 @@ def build_experiment_config(
         "USE_INCREMENTAL_SOLVER": bool(current_system.get("USE_INCREMENTAL_SOLVER", False)),
         "MAX_ISP_ITERATIONS": int(current_system.get("MAX_ISP_ITERATIONS", 50)),
         "INCREMENTAL_ASTAR_SCOPE": str(current_system.get("INCREMENTAL_ASTAR_SCOPE", "GLOBAL")),
-        "DEFAULT_REDUCTION_METHOD": str(current_system.get("DEFAULT_REDUCTION_METHOD", "SPARSIFIED")),
+        "DEFAULT_REDUCTION_METHOD": str(current_system.get("DEFAULT_REDUCTION_METHOD", "NONE")),
         "BBOX_MARGIN": int(current_system.get("BBOX_MARGIN", 2)),
         "TARGET_TERRAIN": str(current_system.get("TARGET_TERRAIN", "COMPACTED_SOIL")),
         "DEFAULT_PLANNER": str(current_system.get("DEFAULT_PLANNER", "ASTAR")),
-        "OUTPUT_DIR": str(current_system.get("OUTPUT_DIR", "output")),
+        "OUTPUT_DIR": str(current_system.get("OUTPUT_DIR", "")),
     }
 
     if raw_start is not None:
