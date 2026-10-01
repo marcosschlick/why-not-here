@@ -35,14 +35,16 @@ function shadedColor([red, green, blue]: Rgb, factor: number): string {
   return `rgb(${channels[0]},${channels[1]},${channels[2]})`;
 }
 
-const TERRAIN_RGB: Record<string, Rgb> = {
-  COMPACTED_SOIL: [158, 107, 71],
-  GRASS: [46, 148, 56],
-  DRY_VEGETATION: [191, 194, 51],
-  SAND: [250, 209, 66],
-  MUD: [92, 56, 41],
-  WATER_RIVER: [5, 133, 230],
-};
+function terrainColor(hexColor: string | undefined): Rgb {
+  if (!hexColor || !/^#[0-9a-f]{6}$/i.test(hexColor)) {
+    return [128, 128, 128];
+  }
+  return [
+    Number.parseInt(hexColor.slice(1, 3), 16),
+    Number.parseInt(hexColor.slice(3, 5), 16),
+    Number.parseInt(hexColor.slice(5, 7), 16),
+  ];
+}
 
 const OBSTACLE_RGB: Rgb = [20, 20, 23];
 const START_RGB: Rgb = [0, 176, 255];
@@ -184,23 +186,24 @@ export function TacticalMapCanvas({
         const y = Math.round(row * effectiveCellSize);
         const width = Math.round((col + 1) * effectiveCellSize) - x;
         const height = Math.round((row + 1) * effectiveCellSize) - y;
-        const terrainName = terrain[row]?.[col] || "GRASS";
+        const terrainName =
+          terrain[row]?.[col] || mapData.config.DEFAULT_TERRAIN || "GRASS";
         const isObstacle = obstacle[row]?.[col] === 1;
         const cellElevation = elevation[row]?.[col] ?? 0;
+        const baseTerrainColor = terrainColor(
+          mapData.config.TERRAIN_COLORS?.[terrainName],
+        );
         const shade =
           elevationRange > 0
             ? 0.82 + 0.36 * ((cellElevation - minElev) / elevationRange)
             : 1;
 
         if (terrainName === "WATER_RIVER") {
-          ctx.fillStyle = shadedColor(TERRAIN_RGB.WATER_RIVER, shade);
+          ctx.fillStyle = shadedColor(baseTerrainColor, shade);
         } else if (isObstacle) {
           ctx.fillStyle = rgba(OBSTACLE_RGB);
         } else {
-          ctx.fillStyle = shadedColor(
-            TERRAIN_RGB[terrainName] || [128, 128, 128],
-            shade,
-          );
+          ctx.fillStyle = shadedColor(baseTerrainColor, shade);
         }
         ctx.fillRect(x, y, width, height);
 

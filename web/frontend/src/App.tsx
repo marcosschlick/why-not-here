@@ -206,7 +206,7 @@ export function App() {
 
       for (const item of items) {
         try {
-          const imported = await importConfig(item.data, false);
+          const imported = await importConfig(item.data, true);
           const queueItem: QueueItem = {
             id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             config: imported.config,

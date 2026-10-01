@@ -177,7 +177,7 @@ export function QueuePanel({
                     : "Monolithic"}
                 </span>
                 <span className="param-tag">
-                  Dir: {item.config.OUTPUT_DIR || "output"}
+                  Dir: {item.config.OUTPUT_DIR || "Not selected"}
                 </span>
               </div>
 

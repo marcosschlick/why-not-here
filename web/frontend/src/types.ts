@@ -1,7 +1,10 @@
 export interface SystemConfig {
   MAP_W: number;
   MAP_H: number;
+  CELL_SIZE?: number;
   CONNECTIVITY: number;
+  DEFAULT_TERRAIN?: string;
+  BASE_TERRAIN?: string;
   DEFAULT_REDUCTION_METHOD: string;
   USE_INCREMENTAL_SOLVER: boolean;
   OUTPUT_DIR: string;
@@ -10,11 +13,16 @@ export interface SystemConfig {
   DEFAULT_SOLVER?: string;
   SOLVER_TIMEOUT_SEC?: number;
   TARGET_TERRAIN?: string;
+  TERRAINS?: Record<string, number>;
+  TERRAIN_COLORS?: Record<string, string>;
+  MAX_SLOPE_DEG?: number;
+  CLOSED_LOOP_TIMEOUT_SEC?: number;
   MAX_ISP_ITERATIONS?: number;
   BBOX_MARGIN?: number;
   INCREMENTAL_ASTAR_SCOPE?: string;
   MAP_ELEVATION_SCALE?: number;
   MAP_ELEVATION_FREQ?: number;
+  MAP_BIOME_FREQ?: number;
   MAP_OBSTACLE_FREQ?: number;
   MAP_OBSTACLE_THRESHOLD?: number;
   [key: string]: unknown;
