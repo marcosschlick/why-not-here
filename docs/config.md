@@ -125,3 +125,32 @@ Standardizes persistence paths for map definitions, output visuals, and executio
 | `DEFAULT_MAP_FILE` | `str` | `"maps/map.json"` | Default file path for serialized map JSON definitions.                                                                                                                                                   |
 | `DEFAULT_MAP_IMG`  | `str` | `"maps/map.png"`  | Default file path for rendered map preview images.                                                                                                                                                       |
 | `OUTPUT_DIR`       | `str` | `"output"`        | Root directory path for generated visual artifacts, reports, and solutions. Output runs are organized into `map/` (`map.png`, `map.json`) and `results/` (solution plots `1_...` to `5_...`, `log.txt`). |
+
+---
+
+## 10. Unified Experiment Serialization Schema (JSON)
+
+Standardizes export, import, and reproduction of experiments across both the Web client and the CLI.
+
+| Field | Type | Description |
+| :---- | :--- | :---------- |
+| `MAP_H`, `MAP_W` | `int` | Matrix dimensions (rows, columns). |
+| `CELL_SIZE` | `float` | Metric resolution per cell. |
+| `CONNECTIVITY` | `int` | Grid neighborhood model (`4` or `8`). |
+| `MAP_DEFAULT_SEED` | `int` | Procedural map seed. |
+| `MAP_ELEVATION_SCALE`, `MAP_ELEVATION_FREQ` | `float` | Perlin noise amplitude and frequency for elevation. |
+| `MAP_OBSTACLE_FREQ`, `MAP_OBSTACLE_THRESHOLD` | `float` | Obstacle cluster noise frequency and threshold. |
+| `DEFAULT_SOLVER` | `str` | MIP solver backend (`"HIGHS"`, `"GUROBI"`, `"CBC"`). |
+| `SOLVER_TIMEOUT_SEC` | `float` | Solver time limit in seconds. |
+| `USE_INCREMENTAL_SOLVER` | `bool` | `True` for iterative cutting-plane, `False` for monolithic MILP. |
+| `MAX_ISP_ITERATIONS` | `int` | Maximum cutting-plane iterations. |
+| `INCREMENTAL_ASTAR_SCOPE` | `str` | A* search scope (`"GLOBAL"` or `"SUBGRAPH"`). |
+| `DEFAULT_REDUCTION_METHOD` | `str` | Active reduction method (`"NONE"`, `"BBOX"`, `"FLOODFILL"`, `"SPARSIFIED"`, `"PATH_ONLY"`). |
+| `BBOX_MARGIN` | `int` | Cell padding around bounding box. |
+| `TARGET_TERRAIN` | `str` | Semantic target terrain for soil upgrades. |
+| `DEFAULT_PLANNER` | `str` | Path planner algorithm (`"ASTAR"` or `"DIJKSTRA"`). |
+| `OUTPUT_DIR` | `str` | Directory path for generated artifacts. |
+| `start` | `[row, col]` | Origin coordinate pair. |
+| `goal` | `[row, col]` | Destination coordinate pair. |
+| `p_user` | `[[row, col], ...]` | Full alternative trajectory from start to goal. |
+

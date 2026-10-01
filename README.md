@@ -9,7 +9,7 @@ The system answers _"Why was the optimal path $p^_$ chosen instead of the user-e
 ## Project Structure
 
 - `src/`: Core scientific modules (A\*, Dijkstra, procedural map generation, ISP formulation, reduction strategies, incremental solver).
-- `web/api/`: FastAPI backend service exposing endpoints for simulations and benchmarks.
+- `web/api/`: FastAPI backend service exposing endpoints for simulations and experiments.
 - `web/frontend/`: React + TypeScript interactive dashboard for map exploration and path comparison.
 - `docs/`: Parameter configuration reference (`config.md`) and design palette tokens (`palette.md`).
 
@@ -37,7 +37,11 @@ cd web/frontend && npm install && cd ../..
 #### Running CLI Pipeline
 
 ```bash
+# Interactive menu
 python -B src/main.py
+
+# Run experiment directly from configuration file
+python -B src/main.py run path/to/experiment.json
 ```
 
 #### Running Web Platform

@@ -67,7 +67,7 @@ This repository contains the Bachelor's Thesis (TCC) research and implementation
   - `planning/`: Path planning algorithms and heuristics (`astar.py`, `dijkstra.py`, `heuristics.py`, `planner.py`).
   - `isp/`: Inverse Shortest Path single-step formulation, MILP/CVXPY solvers, and semantic constraints (`solver.py`, `semantics.py`, `formulation.py`, `base.py`, `types.py`, `modifier.py`, `mccormick.py`).
   - `visual/`: Map plotting and tactical visualization (`plotter.py`, `layers.py`, `legend.py`, `style.py`).
-  - `pipeline/`: Pipeline orchestration and benchmarks (`benchmark.py`, `generate_map.py`, `run_isp.py`, `utils.py`).
+  - `pipeline/`: Pipeline orchestration and experiments (`experiment_config.py`, `generate_map.py`, `run_isp.py`, `utils.py`).
   - `main.py`: CLI entry point orchestrating execution pipelines.
 - `web/`: Decoupled web demonstration and interface layer.
   - `api/`: Modular FastAPI backend service exposing endpoints for simulation control (`app.py`, `routes.py`, `schemas.py`, `config_manager.py`, `runner.py`, `artifacts.py`, `__init__.py`).
