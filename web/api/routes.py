@@ -62,7 +62,10 @@ def read_config() -> dict[str, Any]:
 
 @router.post("/config")
 def modify_config(payload: dict[str, Any]) -> dict[str, Any]:
-    updated_items = update_configurations(payload)
+    try:
+        updated_items = update_configurations(payload)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "success", "updated": updated_items}
 
 
@@ -72,12 +75,15 @@ def export_configuration_endpoint(payload: ExportConfigRequest) -> dict[str, Any
     start = (int(payload.start[0]), int(payload.start[1]))
     goal = (int(payload.goal[0]), int(payload.goal[1]))
     user_path = [(int(pt[0]), int(pt[1])) for pt in payload.user_path]
-    return build_experiment_config(
-        config_dict=config_dict,
-        start=start,
-        goal=goal,
-        user_path=user_path,
-    )
+    try:
+        return build_experiment_config(
+            config_dict=config_dict,
+            start=start,
+            goal=goal,
+            user_path=user_path,
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/config/save")
@@ -92,7 +98,7 @@ def save_configurations_endpoint(
         )
     except FileExistsError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except OSError as exc:
         raise HTTPException(
@@ -107,10 +113,19 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
     raw_data = payload.model_dump(exclude_unset=False, exclude_none=True)
     try:
         params, start, goal, p_user = validate_experiment_config(raw_data)
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    apply_experiment_config(params, start=start, goal=goal)
+    if payload.persist_artifacts and not str(params.get("OUTPUT_DIR", "")).strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Output directory is required when importing a configuration for a run.",
+        )
+
+    try:
+        apply_experiment_config(params, start=start, goal=goal)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
         grid = generate_map(
@@ -184,7 +199,17 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
         if isinstance(extra, dict):
             updates.update(extra)
 
-    update_configurations(updates)
+    effective_output_dir = updates.get("OUTPUT_DIR", "")
+    if persist_artifacts and not str(effective_output_dir or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Output directory is required. Select a directory before generating map artifacts.",
+        )
+
+    try:
+        update_configurations(updates)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
         grid = generate_map(
@@ -246,7 +271,16 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
         )
 
     if payload.config:
-        update_configurations(payload.config)
+        try:
+            update_configurations(payload.config)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not str(config.OUTPUT_DIR or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Output directory is required before executing the ISP solver.",
+        )
 
     p_user = None
     if payload.user_path is not None:
@@ -332,6 +366,11 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
 
 @router.post("/run")
 def execute_pipeline(payload: RunRequest) -> dict[str, Any]:
+    if not str(config.OUTPUT_DIR or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Output directory is required before starting the pipeline.",
+        )
     if runner.is_running():
         raise HTTPException(
             status_code=409, detail="Pipeline execution already in progress"

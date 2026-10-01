@@ -16,7 +16,7 @@ class GenerateMapRequest(BaseModel):
     DEFAULT_REDUCTION_METHOD: str = Field(default="NONE")
     USE_INCREMENTAL_SOLVER: bool = Field(default=False)
     INCREMENTAL_ASTAR_SCOPE: str = Field(default="GLOBAL")
-    OUTPUT_DIR: str = Field(default="output")
+    OUTPUT_DIR: str = Field(default="")
     MAP_DEFAULT_SEED: int | None = Field(default=None)
     persist_artifacts: bool = True
     extra_config: dict[str, Any] | None = None
