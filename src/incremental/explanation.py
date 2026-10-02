@@ -2,13 +2,13 @@ from src.config import IMPASSABLE_TERRAINS
 from src.grid.grid import Grid
 from src.isp.semantics import SemanticModifications
 
-TERRAIN_NAMES_PT = {
-    "COMPACTED_SOIL": "solo compactado",
-    "GRASS": "grama",
-    "DRY_VEGETATION": "vegetação seca",
-    "SAND": "areia",
-    "MUD": "lama",
-    "WATER_RIVER": "rio/curso d'água",
+TERRAIN_NAMES = {
+    "COMPACTED_SOIL": "compacted soil",
+    "GRASS": "grass",
+    "DRY_VEGETATION": "dry vegetation",
+    "SAND": "sand",
+    "MUD": "mud",
+    "WATER_RIVER": "river/stream",
 }
 
 
@@ -20,40 +20,44 @@ def generate_explanation_text(
     if modifications is None:
         if fallback_reason:
             return fallback_reason
-        return "Nenhuma intervenção viável foi encontrada para tornar a rota alternativa p' ótima."
+        return "No feasible intervention was found to make the alternative route p' optimal."
 
     has_terrain = bool(modifications.terrain_nodes)
     has_obstacle = bool(modifications.obstacle_nodes)
     has_slope = bool(modifications.slope_edges)
 
     if not has_terrain and not has_obstacle and not has_slope:
-        return "A rota alternativa p' já é tão rápida quanto a rota ótima p*, não exigindo nenhuma alteração no ambiente."
+        return "The alternative route p' already has the same estimated traversal time as the optimal route p*, so no environmental changes are needed."
 
     lines = [
         (
-            "A rota ótima p* foi escolhida em vez da alternativa p' porque o trajeto alternativo "
-            "enfrenta desvantagens no terreno que aumentam o tempo de deslocamento do robô. "
-            "Para que a rota alternativa p' se tornasse tão eficiente quanto a rota ótima p*, "
-            "seriam necessárias as seguintes modificações mínimas no ambiente:"
+            "This contrastive explanation describes why the planner selected the optimal route p* "
+            "over the alternative route p': conditions along p' increase the robot's traversal time. "
+            "The minimum environmental changes needed to make the alternative route p' optimal are:"
         )
     ]
 
     if has_terrain:
+        terrain_count = len(modifications.terrain_nodes)
+        terrain_cell_label = "cell" if terrain_count == 1 else "cells"
         if grid is not None:
             counts: dict[str, int] = {}
             for u in modifications.terrain_nodes:
                 t = grid.get_cell(u).terrain
-                name = TERRAIN_NAMES_PT.get(t, t.lower())
+                name = TERRAIN_NAMES.get(t, t.lower().replace("_", " "))
                 counts[name] = counts.get(name, 0) + 1
-            details = ", ".join(f"{cnt} de {name}" for name, cnt in counts.items())
+            details = ", ".join(
+                f"{name} ({cnt} {'cell' if cnt == 1 else 'cells'})"
+                for name, cnt in counts.items()
+            )
             lines.append(
-                f"- Pavimentar {len(modifications.terrain_nodes)} células de terreno lento "
-                f"({details}) para o padrão de referência (solo compactado)."
+                f"- Convert {terrain_count} slow-terrain {terrain_cell_label} "
+                f"({details}) to the baseline terrain (compacted soil)."
             )
         else:
             lines.append(
-                f"- Pavimentar {len(modifications.terrain_nodes)} células com terrenos degradados "
-                f"para o patamar de referência (solo compactado)."
+                f"- Convert {terrain_count} degraded-terrain {terrain_cell_label} "
+                "to the baseline terrain (compacted soil)."
             )
 
     if has_obstacle:
@@ -69,23 +73,37 @@ def generate_explanation_text(
             obs_count = len(modifications.obstacle_nodes)
 
         if water_count > 0:
-            lines.append(
-                f"- Construir travessia transitável em {water_count} células de rio/curso d'água."
-            )
+            if water_count == 1:
+                lines.append("- Build a traversable crossing at 1 river/stream cell.")
+            else:
+                lines.append(
+                    f"- Build traversable crossings at {water_count} river/stream cells."
+                )
         if obs_count > 0:
-            lines.append(
-                f"- Remover obstáculos intransponíveis em {obs_count} células "
-                "que bloqueiam a passagem direta na rota alternativa."
-            )
+            if obs_count == 1:
+                lines.append(
+                    "- Remove the impassable obstacle blocking 1 cell on the alternative route."
+                )
+            else:
+                lines.append(
+                    f"- Remove impassable obstacles blocking {obs_count} cells "
+                    "on the alternative route."
+                )
 
     if has_slope:
-        lines.append(
-            f"- Aplainar {len(modifications.slope_edges)} trechos de aclive/inclinação acentuada "
-            "que desaceleram ou impedem a progressão contínua do robô."
-        )
+        slope_count = len(modifications.slope_edges)
+        if slope_count == 1:
+            lines.append(
+                "- Level 1 steep-slope segment that slows or prevents continuous robot traversal."
+            )
+        else:
+            lines.append(
+                f"- Level {slope_count} steep-slope segments "
+                "that slow or prevent continuous robot traversal."
+            )
 
     lines.append(
-        "Sem essas intervenções, a rota alternativa impõe maior resistência física e atrasa a missão."
+        "Without these changes, the alternative route has a higher traversal cost and increases mission time."
     )
     return "\n".join(lines)
 
@@ -94,22 +112,22 @@ def generate_cost_baseline_justification(
     cost_p_star: float, cost_p_prime: float
 ) -> str:
     if cost_p_star == float("inf"):
-        return "Nenhuma rota viável foi encontrada no mapa atual para a origem e o destino definidos."
+        return "No feasible route was found on the current map for the selected start and goal."
     if cost_p_prime == float("inf"):
         return (
-            f"A rota ótima p* foi escolhida por ser viável (tempo estimado: {cost_p_star:.2f} s), "
-            "enquanto a rota alternativa p' é intransponível nas condições atuais do terreno "
-            "(tempo infinito devido a obstáculos ou aclives excessivos)."
+            f"The optimal route p* is feasible (estimated traversal time: {cost_p_star:.2f} s), "
+            "while the alternative route p' is impassable under current terrain conditions "
+            "(infinite traversal time due to obstacles or steep slopes)."
         )
     diff = cost_p_prime - cost_p_star
     if abs(diff) < 1e-4:
         return (
-            f"A rota alternativa p' possui o mesmo tempo de percurso estimado que a rota ótima p* "
+            f"The alternative route p' has the same estimated traversal time as the optimal route p* "
             f"({cost_p_star:.2f} s)."
         )
     pct = (diff / cost_p_star * 100.0) if cost_p_star > 0.0 else 0.0
     return (
-        f"A rota ótima p* foi escolhida por ser mais rápida: tempo total estimado de {cost_p_star:.2f} s "
-        f"contra {cost_p_prime:.2f} s da rota alternativa p' "
-        f"(diferença de {diff:.2f} s, tornando a rota alternativa {pct:.1f}% mais lenta)."
+        f"The optimal route p* was selected because it is faster: estimated traversal time of {cost_p_star:.2f} s "
+        f"compared with {cost_p_prime:.2f} s for the alternative route p' "
+        f"(a difference of {diff:.2f} s, making the alternative route {pct:.1f}% slower)."
     )

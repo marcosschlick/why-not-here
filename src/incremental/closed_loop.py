@@ -279,10 +279,7 @@ class ClosedLoopISPSolver:
                             step_solver.last_solver_status or "OPTIMAL",
                         )
                     else:
-                        explanation = (
-                            "The alternative path p' could not be made optimal by the planner "
-                            "within the allowed intervention domain."
-                        )
+                        explanation = generate_explanation_text(delta, full_grid)
                         return make_res(
                             False,
                             delta,

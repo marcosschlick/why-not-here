@@ -485,22 +485,6 @@ export function ResultsView({
         )}
       </div>
 
-      {currentResult && explanationText && (
-        <div className="report-card result-explanation-card">
-          <div className="report-card-header">
-            <h3>Solver Explanation</h3>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => handleCopy(explanationText, "explanation")}
-            >
-              {copiedKey === "explanation" ? "Copied" : "Copy"}
-            </button>
-          </div>
-          <pre className="code-report">{explanationText}</pre>
-        </div>
-      )}
-
       {currentResult && currentMapData && (
         <section className="results-map-card">
           <div className="results-map-header">
@@ -697,6 +681,22 @@ export function ResultsView({
               </span>
             </div>
           </div>
+        </div>
+      )}
+
+      {currentResult && explanationText && (
+        <div className="report-card result-explanation-card">
+          <div className="report-card-header">
+            <h3>Solver Explanation</h3>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => handleCopy(explanationText, "explanation")}
+            >
+              {copiedKey === "explanation" ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <pre className="code-report">{explanationText}</pre>
         </div>
       )}
 
