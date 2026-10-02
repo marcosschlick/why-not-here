@@ -1795,24 +1795,6 @@ kbd,
   font-size: 0.75rem;
   font-weight: 720;
 }
-.artifact-status-badge {
-  padding: 0.2rem 0.35rem;
-  border: 1px solid transparent;
-  border-radius: var(--radius-xs);
-  font-size: 0.62rem;
-  font-weight: 700;
-  line-height: 1.3;
-}
-.artifact-status-badge.candidate {
-  color: var(--text-danger);
-  background: var(--surface-danger);
-  border-color: var(--border-danger);
-}
-.artifact-status-badge.validated {
-  color: var(--text-structural);
-  background: var(--surface-info);
-  border-color: color-mix(in srgb, var(--azure-blue) 30%, transparent);
-}
 .artifact-img-wrap {
   position: relative;
   display: grid;
@@ -2077,6 +2059,7 @@ kbd,
   background: var(--yale-blue);
 }
 .mechanic-header {
+  min-height: 2.2rem;
   gap: 0.5rem;
   margin-bottom: 0.6rem;
 }
@@ -2084,6 +2067,7 @@ kbd,
   margin: 0;
   color: var(--text-strong);
   font-size: 0.84rem;
+  line-height: 1.3;
 }
 .about-modal-footer {
   display: flex;

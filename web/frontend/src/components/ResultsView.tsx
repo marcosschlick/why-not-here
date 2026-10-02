@@ -32,12 +32,10 @@ function ArtifactCard({
   artifactPath,
   cacheKey,
   onSelect,
-  modificationStatus,
 }: {
   artifactPath: string;
   cacheKey: number;
   onSelect: (path: string) => void;
-  modificationStatus: { label: string; isCandidate: boolean } | null;
 }) {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -53,9 +51,6 @@ function ArtifactCard({
     "map.png": "Procedural Base Map",
   };
   const displayTitle = titleMap[filename] || filename;
-  const isModificationArtifact =
-    filename === "4_isp_modifications.png" ||
-    filename === "5_isp_with_user_path.png";
   const fullUrl = artifactPath.includes("?")
     ? `${artifactPath}&t=${cacheKey}`
     : `${artifactPath}?t=${cacheKey}`;
@@ -75,15 +70,6 @@ function ArtifactCard({
     >
       <div className="artifact-item-header">
         <span className="artifact-title">{displayTitle}</span>
-        {isModificationArtifact && modificationStatus && (
-          <span
-            className={`artifact-status-badge ${
-              modificationStatus.isCandidate ? "candidate" : "validated"
-            }`}
-          >
-            {modificationStatus.label}
-          </span>
-        )}
       </div>
       <div className="artifact-img-wrap">
         {!isLoaded && !hasError && (
@@ -99,11 +85,7 @@ function ArtifactCard({
         ) : (
           <img
             src={fullUrl}
-            alt={
-              isModificationArtifact && modificationStatus
-                ? `${displayTitle}. ${modificationStatus.label}`
-                : displayTitle
-            }
+            alt={displayTitle}
             onLoad={() => setIsLoaded(true)}
             onError={() => setHasError(true)}
             className={`artifact-image ${isLoaded ? "is-loaded" : ""}`}
@@ -285,22 +267,6 @@ export function ResultsView({
     ? currentResult.explanation_text?.trim() ||
       `No detailed explanation was returned for solver status ${currentResult.solver_status}.`
     : null;
-  const modificationStatus = currentResult
-    ? currentResult.success
-      ? currentResult.solver_status === "OPTIMAL"
-        ? { label: "Certified global optimum", isCandidate: false }
-        : currentResult.solver_status === "OPTIMAL_INACCURATE"
-          ? {
-              label: "Path validated; minimum not certified",
-              isCandidate: false,
-            }
-          : { label: "Globally validated", isCandidate: false }
-      : {
-          label: `Candidate · ${currentResult.solver_status} · not certified`,
-          isCandidate: true,
-        }
-    : null;
-
   const runtimeDisplay =
     typeof currentResult?.runtime_sec === "number"
       ? `${currentResult.runtime_sec.toFixed(3)}s`
@@ -729,7 +695,6 @@ export function ResultsView({
                 artifactPath={artifactPath}
                 cacheKey={cacheKey}
                 onSelect={setSelectedImage}
-                modificationStatus={modificationStatus}
               />
             ))}
           </div>
@@ -743,7 +708,10 @@ export function ResultsView({
           role="dialog"
           aria-modal="true"
         >
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-content is-visible"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal-header">
               <span>{selectedImage.split("?")[0].split("/").pop()}</span>
               <button

@@ -228,6 +228,32 @@ export function TacticalMapCanvas({
       }
     }
 
+    drawPath(
+      ctx,
+      optimalPath,
+      OPTIMAL_PATH_RGB,
+      effectiveCellSize,
+      0.9,
+      Math.max(2, effectiveCellSize * 0.28),
+    );
+    drawPath(
+      ctx,
+      userPath,
+      USER_PATH_RGB,
+      effectiveCellSize,
+      0.35,
+      Math.max(3, effectiveCellSize * 0.7),
+    );
+    drawPath(
+      ctx,
+      userPath,
+      USER_PATH_RGB,
+      effectiveCellSize,
+      1,
+      Math.max(2, effectiveCellSize * 0.4),
+      true,
+    );
+
     const terrainNodes = modifications?.terrain_nodes ?? [];
     const obstacleNodes = modifications?.obstacle_nodes ?? [];
     const slopeEdges = modifications?.slope_edges ?? [];
@@ -284,32 +310,6 @@ export function TacticalMapCanvas({
       ctx.lineCap = "round";
       ctx.stroke();
     }
-
-    drawPath(
-      ctx,
-      optimalPath,
-      OPTIMAL_PATH_RGB,
-      effectiveCellSize,
-      0.9,
-      Math.max(2, effectiveCellSize * 0.28),
-    );
-    drawPath(
-      ctx,
-      userPath,
-      USER_PATH_RGB,
-      effectiveCellSize,
-      0.35,
-      Math.max(3, effectiveCellSize * 0.7),
-    );
-    drawPath(
-      ctx,
-      userPath,
-      USER_PATH_RGB,
-      effectiveCellSize,
-      1,
-      Math.max(2, effectiveCellSize * 0.4),
-      true,
-    );
 
     const startX = start[1] * effectiveCellSize + effectiveCellSize / 2;
     const startY = start[0] * effectiveCellSize + effectiveCellSize / 2;
