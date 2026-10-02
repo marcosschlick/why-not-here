@@ -24,6 +24,8 @@ interface TacticalMapCanvasProps {
 
 type Rgb = [number, number, number];
 
+const EMPTY_PATH: GridPoint[] = [];
+
 function rgba([red, green, blue]: Rgb, alpha = 1): string {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
@@ -128,8 +130,8 @@ function drawHatch(
 
 export function TacticalMapCanvas({
   mapData,
-  userPath = [],
-  optimalPath = [],
+  userPath = EMPTY_PATH,
+  optimalPath = EMPTY_PATH,
   modifications,
   cellSize,
   zoomLevel = 1,
@@ -145,10 +147,18 @@ export function TacticalMapCanvas({
   onPointerLeave,
 }: TacticalMapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const [deviceScale] = useState<number>(() =>
     typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
   );
   const { h, w, start, goal, terrain, elevation, obstacle } = mapData;
+  const effectiveCellSize = cellSize * zoomLevel;
+  const logicalWidth = Math.max(1, Math.round(w * effectiveCellSize));
+  const logicalHeight = Math.max(1, Math.round(h * effectiveCellSize));
+  const renderScale = Math.min(
+    deviceScale,
+    4096 / Math.max(1, logicalWidth, logicalHeight),
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -156,17 +166,16 @@ export function TacticalMapCanvas({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const effectiveCellSize = cellSize * zoomLevel;
-    const logicalWidth = Math.round(w * effectiveCellSize);
-    const logicalHeight = Math.round(h * effectiveCellSize);
-    const renderScale = Math.min(
-      deviceScale,
-      4096 / Math.max(1, logicalWidth, logicalHeight),
-    );
-    canvas.width = Math.round(logicalWidth * renderScale);
-    canvas.height = Math.round(logicalHeight * renderScale);
-    canvas.style.width = `${logicalWidth}px`;
-    canvas.style.height = `${logicalHeight}px`;
+    const pixelWidth = Math.round(logicalWidth * renderScale);
+    const pixelHeight = Math.round(logicalHeight * renderScale);
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+    if (canvas.style.width !== `${logicalWidth}px`) {
+      canvas.style.width = `${logicalWidth}px`;
+    }
+    if (canvas.style.height !== `${logicalHeight}px`) {
+      canvas.style.height = `${logicalHeight}px`;
+    }
     ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
 
     let minElev = Infinity;
@@ -344,53 +353,20 @@ export function TacticalMapCanvas({
       ctx.fillText("G", goalX, goalY);
     }
 
-    if (hoveredCell) {
-      const [row, col] = hoveredCell;
-      if (row >= 0 && row < h && col >= 0 && col < w) {
-        const x = Math.round(col * effectiveCellSize);
-        const y = Math.round(row * effectiveCellSize);
-        const width = Math.round((col + 1) * effectiveCellSize) - x;
-        const height = Math.round((row + 1) * effectiveCellSize) - y;
-        ctx.strokeStyle = rgba(START_RGB);
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x, y, width, height);
-
-        if (isShiftDown && !isConnectedToGoal) {
-          const origin =
-            dragOrigin ??
-            (userPath.length > 0 ? userPath[userPath.length - 1] : start);
-          ctx.save();
-          ctx.beginPath();
-          ctx.setLineDash([4, 4]);
-          ctx.moveTo(
-            origin[1] * effectiveCellSize + effectiveCellSize / 2,
-            origin[0] * effectiveCellSize + effectiveCellSize / 2,
-          );
-          ctx.lineTo(
-            col * effectiveCellSize + effectiveCellSize / 2,
-            row * effectiveCellSize + effectiveCellSize / 2,
-          );
-          ctx.strokeStyle = rgba(START_RGB, 0.85);
-          ctx.lineWidth = Math.max(1.5, effectiveCellSize * 0.2);
-          ctx.stroke();
-          ctx.restore();
-        }
-      }
-    }
   }, [
     cellSize,
     deviceScale,
-    dragOrigin,
     elevation,
+    effectiveCellSize,
     goal,
     h,
-    hoveredCell,
-    isConnectedToGoal,
-    isShiftDown,
+    logicalHeight,
+    logicalWidth,
     mapData,
     modifications,
     obstacle,
     optimalPath,
+    renderScale,
     start,
     terrain,
     userPath,
@@ -398,20 +374,98 @@ export function TacticalMapCanvas({
     zoomLevel,
   ]);
 
+  useEffect(() => {
+    const canvas = overlayRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const pixelWidth = Math.round(logicalWidth * renderScale);
+    const pixelHeight = Math.round(logicalHeight * renderScale);
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+    if (canvas.style.width !== `${logicalWidth}px`) {
+      canvas.style.width = `${logicalWidth}px`;
+    }
+    if (canvas.style.height !== `${logicalHeight}px`) {
+      canvas.style.height = `${logicalHeight}px`;
+    }
+    ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+    ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+
+    if (!hoveredCell) return;
+    const [row, col] = hoveredCell;
+    if (row < 0 || row >= h || col < 0 || col >= w) return;
+
+    const x = Math.round(col * effectiveCellSize);
+    const y = Math.round(row * effectiveCellSize);
+    const width = Math.round((col + 1) * effectiveCellSize) - x;
+    const height = Math.round((row + 1) * effectiveCellSize) - y;
+    ctx.strokeStyle = rgba(START_RGB);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, width, height);
+
+    if (isShiftDown && !isConnectedToGoal) {
+      const origin =
+        dragOrigin ??
+        (userPath.length > 0 ? userPath[userPath.length - 1] : start);
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([4, 4]);
+      ctx.moveTo(
+        origin[1] * effectiveCellSize + effectiveCellSize / 2,
+        origin[0] * effectiveCellSize + effectiveCellSize / 2,
+      );
+      ctx.lineTo(
+        col * effectiveCellSize + effectiveCellSize / 2,
+        row * effectiveCellSize + effectiveCellSize / 2,
+      );
+      ctx.strokeStyle = rgba(START_RGB, 0.85);
+      ctx.lineWidth = Math.max(1.5, effectiveCellSize * 0.2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }, [
+    dragOrigin,
+    effectiveCellSize,
+    h,
+    hoveredCell,
+    isConnectedToGoal,
+    isShiftDown,
+    logicalHeight,
+    logicalWidth,
+    renderScale,
+    start,
+    userPath,
+    w,
+  ]);
+
   return (
-    <canvas
-      ref={canvasRef}
-      className={`interactive-canvas ${className} ${
-        interactive ? "" : "is-read-only"
-      } ${isConnectedToGoal ? "is-locked" : ""}`}
-      aria-label="Tactical map"
-      role={interactive ? undefined : "img"}
-      onPointerDown={interactive ? onPointerDown : undefined}
-      onPointerMove={onPointerMove}
-      onPointerUp={interactive ? onPointerUp : undefined}
-      onPointerCancel={interactive ? onPointerUp : undefined}
-      onPointerLeave={onPointerLeave}
-    />
+    <div
+      className={`tactical-map-canvas ${className}`}
+      style={{ width: `${logicalWidth + 2}px`, height: `${logicalHeight + 2}px` }}
+    >
+      <canvas
+        ref={canvasRef}
+        className="map-canvas-layer map-canvas-base"
+        style={{ width: `${logicalWidth}px`, height: `${logicalHeight}px` }}
+        aria-hidden="true"
+      />
+      <canvas
+        ref={overlayRef}
+        className={`map-canvas-layer interactive-canvas ${
+          interactive ? "" : "is-read-only"
+        } ${isConnectedToGoal ? "is-locked" : ""}`}
+        style={{ width: `${logicalWidth}px`, height: `${logicalHeight}px` }}
+        aria-label="Tactical map"
+        role={interactive ? undefined : "img"}
+        onPointerDown={interactive ? onPointerDown : undefined}
+        onPointerMove={onPointerMove}
+        onPointerUp={interactive ? onPointerUp : undefined}
+        onPointerCancel={interactive ? onPointerUp : undefined}
+        onPointerLeave={onPointerLeave}
+      />
+    </div>
   );
 }
 

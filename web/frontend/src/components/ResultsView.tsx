@@ -9,6 +9,7 @@ import type {
 } from "../types";
 import { SolverConfigBadges } from "./SolverConfigBadges";
 import { formatReductionMethod } from "../utils/formatters";
+import { useMapCanvasFit } from "../utils/useMapCanvasFit";
 import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
 import type { GridPoint } from "../utils/geometry";
 
@@ -31,10 +32,12 @@ function ArtifactCard({
   artifactPath,
   cacheKey,
   onSelect,
+  modificationStatus,
 }: {
   artifactPath: string;
   cacheKey: number;
   onSelect: (path: string) => void;
+  modificationStatus: { label: string; isCandidate: boolean } | null;
 }) {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -50,6 +53,9 @@ function ArtifactCard({
     "map.png": "Procedural Base Map",
   };
   const displayTitle = titleMap[filename] || filename;
+  const isModificationArtifact =
+    filename === "4_isp_modifications.png" ||
+    filename === "5_isp_with_user_path.png";
   const fullUrl = artifactPath.includes("?")
     ? `${artifactPath}&t=${cacheKey}`
     : `${artifactPath}?t=${cacheKey}`;
@@ -69,6 +75,15 @@ function ArtifactCard({
     >
       <div className="artifact-item-header">
         <span className="artifact-title">{displayTitle}</span>
+        {isModificationArtifact && modificationStatus && (
+          <span
+            className={`artifact-status-badge ${
+              modificationStatus.isCandidate ? "candidate" : "validated"
+            }`}
+          >
+            {modificationStatus.label}
+          </span>
+        )}
       </div>
       <div className="artifact-img-wrap">
         {!isLoaded && !hasError && (
@@ -84,7 +99,11 @@ function ArtifactCard({
         ) : (
           <img
             src={fullUrl}
-            alt={displayTitle}
+            alt={
+              isModificationArtifact && modificationStatus
+                ? `${displayTitle}. ${modificationStatus.label}`
+                : displayTitle
+            }
             onLoad={() => setIsLoaded(true)}
             onError={() => setHasError(true)}
             className={`artifact-image ${isLoaded ? "is-loaded" : ""}`}
@@ -113,7 +132,6 @@ export function ResultsView({
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const mapCanvasContainerRef = useRef<HTMLDivElement | null>(null);
-  const [mapCellSize, setMapCellSize] = useState<number>(10);
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [hoveredCell, setHoveredCell] = useState<GridPoint | null>(null);
 
@@ -153,6 +171,17 @@ export function ResultsView({
     : userPath;
   const mapHeight = currentMapData?.h;
   const mapWidth = currentMapData?.w;
+  const mapCellSize = useMapCanvasFit(
+    mapCanvasContainerRef,
+    mapHeight,
+    mapWidth,
+  );
+  const [previousMapData, setPreviousMapData] = useState(currentMapData);
+  if (previousMapData !== currentMapData) {
+    setPreviousMapData(currentMapData);
+    setHoveredCell(null);
+    setZoomLevel(1.0);
+  }
   const tacticalArtifacts = currentArtifacts.filter(
     (artifactPath) => artifactPath.split("?")[0].split("/").pop() !== "map.png",
   );
@@ -167,38 +196,6 @@ export function ResultsView({
     (currentStatus === "pending" ||
       currentStatus === "generating_map" ||
       currentStatus === "awaiting_route");
-
-  useEffect(() => {
-    if (mapHeight === undefined || mapWidth === undefined) return;
-    const activeMapHeight = mapHeight;
-    const activeMapWidth = mapWidth;
-
-    function updateCellSize() {
-      const containerWidth = mapCanvasContainerRef.current?.clientWidth ?? 0;
-      const maxAvailableWidth = Math.max(280, containerWidth - 48);
-      const maxAvailableHeight = 460;
-      const sizeW = Math.floor(maxAvailableWidth / activeMapWidth);
-      const sizeH = Math.floor(maxAvailableHeight / activeMapHeight);
-      setMapCellSize(Math.max(4, Math.min(24, Math.min(sizeW, sizeH))));
-    }
-
-    updateCellSize();
-    const resizeObserver = new ResizeObserver(updateCellSize);
-    if (mapCanvasContainerRef.current) {
-      resizeObserver.observe(mapCanvasContainerRef.current);
-    }
-    window.addEventListener("resize", updateCellSize);
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", updateCellSize);
-    };
-  }, [mapHeight, mapWidth]);
-
-  const [prevMapData, setPrevMapData] = useState(currentMapData);
-  if (prevMapData !== currentMapData) {
-    setPrevMapData(currentMapData);
-    setHoveredCell(null);
-  }
 
   useEffect(() => {
     const wrapper = mapCanvasContainerRef.current;
@@ -281,10 +278,28 @@ export function ResultsView({
     (currentModifications?.slope_edges?.length ?? 0) > 0;
   const isInfeasible = currentResult?.solver_status === "INFEASIBLE";
   const isCandidateSolution =
-    isFailed && !isOptimal && !isInfeasible && hasCandidateModifications;
-  const visibleModifications: SemanticModificationsData | null = isInfeasible
-    ? null
-    : currentModifications;
+    isFailed && !isOptimal && hasCandidateModifications;
+  const visibleModifications: SemanticModificationsData | null =
+    hasCandidateModifications ? currentModifications : null;
+  const explanationText = currentResult
+    ? currentResult.explanation_text?.trim() ||
+      `No detailed explanation was returned for solver status ${currentResult.solver_status}.`
+    : null;
+  const modificationStatus = currentResult
+    ? currentResult.success
+      ? currentResult.solver_status === "OPTIMAL"
+        ? { label: "Certified global optimum", isCandidate: false }
+        : currentResult.solver_status === "OPTIMAL_INACCURATE"
+          ? {
+              label: "Path validated; minimum not certified",
+              isCandidate: false,
+            }
+          : { label: "Globally validated", isCandidate: false }
+      : {
+          label: `Candidate · ${currentResult.solver_status} · not certified`,
+          isCandidate: true,
+        }
+    : null;
 
   const runtimeDisplay =
     typeof currentResult?.runtime_sec === "number"
@@ -470,6 +485,22 @@ export function ResultsView({
         )}
       </div>
 
+      {currentResult && explanationText && (
+        <div className="report-card result-explanation-card">
+          <div className="report-card-header">
+            <h3>Solver Explanation</h3>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => handleCopy(explanationText, "explanation")}
+            >
+              {copiedKey === "explanation" ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <pre className="code-report">{explanationText}</pre>
+        </div>
+      )}
+
       {currentResult && currentMapData && (
         <section className="results-map-card">
           <div className="results-map-header">
@@ -513,18 +544,18 @@ export function ResultsView({
                 </button>
                 <button
                   type="button"
-                  className="btn-zoom btn-zoom-reset"
+                  className="btn-zoom btn-zoom-fit"
                   onClick={() => setZoomLevel(1.0)}
                   disabled={zoomLevel === 1.0}
-                  title="Reset Zoom to 100%"
+                  title="Fit map to view"
                 >
-                  Reset
+                  Fit
                 </button>
               </div>
             </div>
           </div>
 
-          {(isInfeasible || !hasCandidateModifications) && (
+          {!hasCandidateModifications && (
             <p className="results-map-notice">
               {isInfeasible
                 ? "No valid modifications could be calculated; the alternative route is shown."
@@ -669,25 +700,6 @@ export function ResultsView({
         </div>
       )}
 
-      {currentResult?.explanation_text && (
-        <div className="report-card">
-          <div className="report-card-header">
-            <h3>Contrastive Explanation</h3>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() =>
-                currentResult.explanation_text &&
-                handleCopy(currentResult.explanation_text, "explanation")
-              }
-            >
-              {copiedKey === "explanation" ? "Copied" : "Copy"}
-            </button>
-          </div>
-          <pre className="code-report">{currentResult.explanation_text}</pre>
-        </div>
-      )}
-
       {currentResult?.cost_baseline_text && (
         <div className="report-card">
           <div className="report-card-header">
@@ -717,6 +729,7 @@ export function ResultsView({
                 artifactPath={artifactPath}
                 cacheKey={cacheKey}
                 onSelect={setSelectedImage}
+                modificationStatus={modificationStatus}
               />
             ))}
           </div>

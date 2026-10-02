@@ -42,14 +42,14 @@ Controls pseudorandom seed, Perlin noise scales, and biome thresholds for terrai
 
 Defines traversability speeds, slope thresholds, and mechanical limits based on the Husky UGV.
 
-| Parameter             | Type               | Default Value                                                                                               | Description                                                                       |
-| :-------------------- | :----------------- | :---------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------- |
-| `MAX_SLOPE_DEG`       | `float`            | `20.0`                                                                                                      | Maximum traversable slope in degrees ($\alpha_{\max} = 20.0^\circ$).              |
-| `TERRAINS`            | `dict[str, float]` | Ten built-in terrain speeds                                                                                      | Nominal traversal speeds in m/s for each terrain type.                            |
-| `TERRAIN_COLORS`      | `dict[str, str]`   | Hex colors for all built-in terrains                                                                              | User-editable `#RRGGBB` map palette shared by the Web canvas and Python renderers. |
-| `BASE_TERRAIN`        | `str`              | `"GRASS"`                                                                                                   | Reference terrain type for base traversability calculations.                      |
-| `IMPASSABLE_TERRAINS` | `set[str]`         | `{"WATER_RIVER"}`                                                                                           | Dynamically derived set of terrain types with nominal speed $\le 0.0\text{ m/s}$. |
-| `V_MAX`               | `float`            | `1.2`                                                                                                       | Dynamically derived maximum nominal speed across all terrains in m/s.             |
+| Parameter             | Type               | Default Value                        | Description                                                                        |
+| :-------------------- | :----------------- | :----------------------------------- | :--------------------------------------------------------------------------------- |
+| `MAX_SLOPE_DEG`       | `float`            | `20.0`                               | Maximum traversable slope in degrees ($\alpha_{\max} = 20.0^\circ$).               |
+| `TERRAINS`            | `dict[str, float]` | Ten built-in terrain speeds          | Nominal traversal speeds in m/s for each terrain type.                             |
+| `TERRAIN_COLORS`      | `dict[str, str]`   | Hex colors for all built-in terrains | User-editable `#RRGGBB` map palette shared by the Web canvas and Python renderers. |
+| `BASE_TERRAIN`        | `str`              | `"GRASS"`                            | Reference terrain type for base traversability calculations.                       |
+| `IMPASSABLE_TERRAINS` | `set[str]`         | `{"WATER_RIVER"}`                    | Dynamically derived set of terrain types with nominal speed $\le 0.0\text{ m/s}$.  |
+| `V_MAX`               | `float`            | `1.2`                                | Dynamically derived maximum nominal speed across all terrains in m/s.              |
 
 ---
 
@@ -89,9 +89,13 @@ Specifies the mathematical programming solver backend and runtime limits.
 
 | Parameter            | Type    | Default Value | Description                                                                |
 | :------------------- | :------ | :------------ | :------------------------------------------------------------------------- |
-| `DEFAULT_SOLVER`     | `str`   | `"HIGHS"`     | Primary MIP solver backend for CVXPY (`"HIGHS"` or optional `"GUROBI"`).     |
+| `DEFAULT_SOLVER`     | `str`   | `"HIGHS"`     | Primary MIP solver backend for CVXPY (`"HIGHS"` or optional `"GUROBI"`).   |
 | `SOLVER_TIMEOUT_SEC` | `float` | `6000.0`      | Single-run solver timeout in seconds.                                      |
 | `MIP_GAP_TOLERANCE`  | `float` | `1e-4`        | Relative optimality gap tolerance between dual bound and integer solution. |
+
+The selected solver must be installed in the active Python environment. The system does not automatically fall back to another backend when the selected solver is unavailable.
+
+`INCREMENTAL_TOLERANCE` is an absolute comparison tolerance; `MIP_GAP_TOLERANCE` is the relative optimality gap passed to the MIP solver.
 
 ---
 
@@ -99,13 +103,13 @@ Specifies the mathematical programming solver backend and runtime limits.
 
 Governs the cutting-plane iterative solver and closed-loop validation cycle.
 
-| Parameter                 | Type    | Default Value | Description                                                                         |
-| :------------------------ | :------ | :------------ | :---------------------------------------------------------------------------------- |
-| `USE_INCREMENTAL_SOLVER`  | `bool`  | `False`       | Solver mode (`False` = monolithic MILP, `True` = cutting-plane incremental solver). |
-| `MAX_ISP_ITERATIONS`      | `int`   | `50`          | Maximum number of cutting-plane iterations.                                         |
-| `INCREMENTAL_TOLERANCE`   | `float` | `1e-4`        | Optimality gap tolerance for the closed-loop certificate.                           |
-| `CLOSED_LOOP_TIMEOUT_SEC` | `float` | `300.0`       | Global timeout in seconds for the entire closed-loop process.                       |
-| `INCREMENTAL_ASTAR_SCOPE` | `str`   | `"GLOBAL"`    | A* search scope for competing paths (`"GLOBAL"` = full grid, `"SUBGRAPH"` = reduced subgraph only with final global certification). |
+| Parameter                 | Type    | Default Value | Description                                                                                                                                                                                                                                                                                      |
+| :------------------------ | :------ | :------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `USE_INCREMENTAL_SOLVER`  | `bool`  | `False`       | Solver mode (`False` = monolithic MILP, `True` = cutting-plane incremental solver).                                                                                                                                                                                                              |
+| `MAX_ISP_ITERATIONS`      | `int`   | `50`          | Maximum number of cutting-plane iterations.                                                                                                                                                                                                                                                      |
+| `INCREMENTAL_TOLERANCE`   | `float` | `1e-4`        | Absolute path-cost comparison tolerance, in seconds, used by closed-loop validation.                                                                                                                                                                                                             |
+| `CLOSED_LOOP_TIMEOUT_SEC` | `float` | `300.0`       | Global timeout in seconds for the entire closed-loop process.                                                                                                                                                                                                                                    |
+| `INCREMENTAL_ASTAR_SCOPE` | `str`   | `"GLOBAL"`    | Incremental solver search scope (`"GLOBAL"` = full grid; `"SUBGRAPH"` = reduced subgraph, followed by a full-grid validation of a subgraph-optimal candidate). With reduction `NONE`, the scope is forced to `GLOBAL`. A candidate that fails global validation returns `SUBGRAPH_OPTIMAL_ONLY`. |
 
 ---
 
@@ -113,10 +117,10 @@ Governs the cutting-plane iterative solver and closed-loop validation cycle.
 
 Controls subgraph pruning heuristics to reduce problem dimension before optimization.
 
-| Parameter                  | Type  | Default Value  | Description                                                                                   |
-| :------------------------- | :---- | :------------- | :-------------------------------------------------------------------------------------------- |
-| `DEFAULT_REDUCTION_METHOD` | `str` | `"NONE"` | Active reduction strategy (`"NONE"`, `"BBOX"`, `"FLOODFILL"`, `"SPARSIFIED"`, `"PATH_ONLY"`). |
-| `BBOX_MARGIN`              | `int` | `2`            | Cell margin padding applied around bounding box boundaries.                                   |
+| Parameter                  | Type  | Default Value | Description                                                                                   |
+| :------------------------- | :---- | :------------ | :-------------------------------------------------------------------------------------------- |
+| `DEFAULT_REDUCTION_METHOD` | `str` | `"NONE"`      | Active reduction strategy (`"NONE"`, `"BBOX"`, `"FLOODFILL"`, `"SPARSIFIED"`, `"PATH_ONLY"`). |
+| `BBOX_MARGIN`              | `int` | `2`           | Cell margin padding applied around bounding box boundaries.                                   |
 
 ---
 
@@ -124,12 +128,12 @@ Controls subgraph pruning heuristics to reduce problem dimension before optimiza
 
 Standardizes persistence paths for map definitions, output visuals, and execution artifacts.
 
-| Parameter          | Type  | Default Value     | Description                                                                                                                                                                                              |
-| :----------------- | :---- | :---------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MAPS_DIR`         | `str` | `"maps"`          | Relative directory path for serialized procedural map files.                                                                                                                                             |
-| `DEFAULT_MAP_FILE` | `str` | `"maps/map.json"` | Default file path for serialized map JSON definitions.                                                                                                                                                   |
-| `DEFAULT_MAP_IMG`  | `str` | `"maps/map.png"`  | Default file path for rendered map preview images.                                                                                                                                                       |
-| `OUTPUT_DIR`       | `str` | `""`        | Must be explicitly selected before generating persisted artifacts. Output runs are organized into `map/` (`map.png`, `map.json`) and `results/` (solution plots `1_...` to `5_...`, `log.txt`). |
+| Parameter          | Type  | Default Value     | Description                                                                                                                                                                                                                                                                                   |
+| :----------------- | :---- | :---------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MAPS_DIR`         | `str` | `"maps"`          | Relative directory path for serialized procedural map files.                                                                                                                                                                                                                                  |
+| `DEFAULT_MAP_FILE` | `str` | `"maps/map.json"` | Default file path for serialized map JSON definitions.                                                                                                                                                                                                                                        |
+| `DEFAULT_MAP_IMG`  | `str` | `"maps/map.png"`  | Default file path for rendered map preview images.                                                                                                                                                                                                                                            |
+| `OUTPUT_DIR`       | `str` | `""`              | Must be explicitly selected before generating persisted artifacts. Output runs are organized into `map/` (`map.png`, `map.json`) and `results/` (solution plots and `log.txt`). Up to five plots are generated; plots 4 and 5 are saved only when the ISP solver returns a successful result. |
 
 ---
 
@@ -137,32 +141,32 @@ Standardizes persistence paths for map definitions, output visuals, and executio
 
 Standardizes export, import, and reproduction of experiments across both the Web client and the CLI.
 
-| Field | Type | Description |
-| :---- | :--- | :---------- |
-| `MAP_H`, `MAP_W` | `int` | Matrix dimensions (rows, columns). |
-| `CELL_SIZE` | `float` | Metric resolution per cell. |
-| `MAX_SLOPE_DEG` | `float` | Maximum traversable slope in degrees. |
-| `CLOSED_LOOP_TIMEOUT_SEC` | `float` | Overall timeout for closed-loop ISP execution in seconds. |
-| `MAP_BIOME_FREQ` | `float` | Spatial frequency used to distribute procedural biomes. |
-| `CONNECTIVITY` | `int` | Grid neighborhood model (`4` or `8`). |
-| `MAP_DEFAULT_SEED` | `int` | Procedural map seed. |
-| `MAP_ELEVATION_SCALE`, `MAP_ELEVATION_FREQ` | `float` | Perlin noise amplitude and frequency for elevation. |
-| `MAP_OBSTACLE_FREQ`, `MAP_OBSTACLE_THRESHOLD` | `float` | Obstacle cluster noise frequency and threshold. |
-| `DEFAULT_SOLVER` | `str` | MIP solver backend (`"HIGHS"` or `"GUROBI"`). HiGHS is the default; Gurobi is the backend alternative. SCIP and CBC are not supported. |
-| `SOLVER_TIMEOUT_SEC` | `float` | Solver time limit in seconds. |
-| `USE_INCREMENTAL_SOLVER` | `bool` | `True` for iterative cutting-plane, `False` for monolithic MILP. |
-| `MAX_ISP_ITERATIONS` | `int` | Maximum cutting-plane iterations. |
-| `INCREMENTAL_ASTAR_SCOPE` | `str` | A* search scope (`"GLOBAL"` or `"SUBGRAPH"`). |
-| `DEFAULT_REDUCTION_METHOD` | `str` | Active reduction method (`"NONE"`, `"BBOX"`, `"FLOODFILL"`, `"SPARSIFIED"`, `"PATH_ONLY"`). |
-| `BBOX_MARGIN` | `int` | Cell padding around bounding box. |
-| `TARGET_TERRAIN` | `str` | Semantic target terrain for soil upgrades. |
-| `DEFAULT_TERRAIN` | `str` | Terrain assigned to uninitialized cells and used as the procedural biome fallback. |
-| `BASE_TERRAIN` | `str` | Traversable reference terrain for ISP traversability calculations. |
-| `TERRAINS`, `TERRAIN_COLORS` | `dict` | Terrain speeds and `#RRGGBB` colors, included in each exported experiment. |
-| `DEFAULT_PLANNER` | `str` | Path planner algorithm (`"ASTAR"` or `"DIJKSTRA"`). |
-| `OUTPUT_DIR` | `str` | Directory path for generated artifacts. |
-| `start` | `[row, col]` | Origin coordinate pair. |
-| `goal` | `[row, col]` | Destination coordinate pair. |
-| `p_user` | `[[row, col], ...]` | Full alternative trajectory from start to goal. |
+| Field                                         | Type                | Description                                                                                                                            |
+| :-------------------------------------------- | :------------------ | :------------------------------------------------------------------------------------------------------------------------------------- |
+| `MAP_H`, `MAP_W`                              | `int`               | Matrix dimensions (rows, columns).                                                                                                     |
+| `CELL_SIZE`                                   | `float`             | Metric resolution per cell.                                                                                                            |
+| `MAX_SLOPE_DEG`                               | `float`             | Maximum traversable slope in degrees.                                                                                                  |
+| `CLOSED_LOOP_TIMEOUT_SEC`                     | `float`             | Overall timeout for closed-loop ISP execution in seconds.                                                                              |
+| `MAP_BIOME_FREQ`                              | `float`             | Spatial frequency used to distribute procedural biomes.                                                                                |
+| `CONNECTIVITY`                                | `int`               | Grid neighborhood model (`4` or `8`).                                                                                                  |
+| `MAP_DEFAULT_SEED`                            | `int`               | Procedural map seed.                                                                                                                   |
+| `MAP_ELEVATION_SCALE`, `MAP_ELEVATION_FREQ`   | `float`             | Perlin noise amplitude and frequency for elevation.                                                                                    |
+| `MAP_OBSTACLE_FREQ`, `MAP_OBSTACLE_THRESHOLD` | `float`             | Obstacle cluster noise frequency and threshold.                                                                                        |
+| `DEFAULT_SOLVER`                              | `str`               | MIP solver backend (`"HIGHS"` or `"GUROBI"`). HiGHS is the default; Gurobi is the backend alternative. SCIP and CBC are not supported. |
+| `SOLVER_TIMEOUT_SEC`                          | `float`             | Solver time limit in seconds.                                                                                                          |
+| `USE_INCREMENTAL_SOLVER`                      | `bool`              | `True` for iterative cutting-plane, `False` for monolithic MILP.                                                                       |
+| `MAX_ISP_ITERATIONS`                          | `int`               | Maximum cutting-plane iterations.                                                                                                      |
+| `INCREMENTAL_ASTAR_SCOPE`                     | `str`               | A\* search scope (`"GLOBAL"` or `"SUBGRAPH"`).                                                                                         |
+| `DEFAULT_REDUCTION_METHOD`                    | `str`               | Active reduction method (`"NONE"`, `"BBOX"`, `"FLOODFILL"`, `"SPARSIFIED"`, `"PATH_ONLY"`).                                            |
+| `BBOX_MARGIN`                                 | `int`               | Cell padding around bounding box.                                                                                                      |
+| `TARGET_TERRAIN`                              | `str`               | Semantic target terrain for soil upgrades.                                                                                             |
+| `DEFAULT_TERRAIN`                             | `str`               | Terrain assigned to uninitialized cells and used as the procedural biome fallback.                                                     |
+| `BASE_TERRAIN`                                | `str`               | Traversable reference terrain for ISP traversability calculations.                                                                     |
+| `TERRAINS`, `TERRAIN_COLORS`                  | `dict`              | Terrain speeds and `#RRGGBB` colors, included in each exported experiment.                                                             |
+| `DEFAULT_PLANNER`                             | `str`               | Path planner algorithm (`"ASTAR"` or `"DIJKSTRA"`).                                                                                    |
+| `OUTPUT_DIR`                                  | `str`               | Directory path for generated artifacts.                                                                                                |
+| `start`                                       | `[row, col]`        | Origin coordinate pair.                                                                                                                |
+| `goal`                                        | `[row, col]`        | Destination coordinate pair.                                                                                                           |
+| `p_user`                                      | `[[row, col], ...]` | Full alternative trajectory from start to goal.                                                                                        |
 
-Experiment JSON files include the terrain registry and all active terrain parameters so a custom terrain setup can be reproduced. Legacy JSON files without these fields remain valid and use the built-in defaults. Runtime edits are held in memory and do not rewrite Python configuration modules. The `OUTPUT_DIR` field must contain a user-selected path whenever an API request persists artifacts.
+Experiment JSON files include the terrain registry and the configuration fields listed above so a custom terrain setup can be reproduced. Legacy JSON files without optional configuration fields remain valid and use the built-in defaults. Runtime edits are held in memory and do not rewrite Python configuration modules. The `OUTPUT_DIR` field must contain a user-selected path whenever an API request persists artifacts.

@@ -2,7 +2,7 @@
 
 Contrastive explanations for autonomous path planning via Inverse Shortest Path (ISP) on 2D grids.
 
-The system answers _"Why was the optimal path $p^_$ chosen instead of the user-expected alternative $p'$?"\* by formulating and solving an inverse optimization problem that identifies minimal cost adjustments and semantic explanations.
+The system answers _"Why was the optimal path $p^*$ chosen instead of the user-expected alternative $p'$?"_ by formulating and solving an inverse optimization problem that identifies minimal cost adjustments and semantic explanations.
 
 ---
 
@@ -22,13 +22,14 @@ The system answers _"Why was the optimal path $p^_$ chosen instead of the user-e
 #### Prerequisites
 
 - Python 3.12+
-- Node.js 18+ (for frontend)
+- Node.js 20.19+ or 22.12+ (for the frontend; required by the Vite version in the lockfile)
 
 #### Install Dependencies
 
 ```bash
-# Python dependencies
-pip install -r requirements.txt
+# Create and prepare the Python virtual environment
+python -B -m venv venv
+./venv/bin/python -B -m pip install -r requirements.txt
 
 # Frontend dependencies
 cd web/frontend && npm install && cd ../..
@@ -38,17 +39,17 @@ cd web/frontend && npm install && cd ../..
 
 ```bash
 # Interactive menu
-python -B src/main.py
+./venv/bin/python -B src/main.py
 
 # Run experiment directly from configuration file
-python -B src/main.py run path/to/experiment.json
+./venv/bin/python -B src/main.py run path/to/experiment.json
 ```
 
 #### Running Web Platform
 
 ```bash
 # Terminal 1: Backend API (port 8000)
-uvicorn web.api.app:app --host 127.0.0.1 --port 8000 --reload
+./venv/bin/python -B -m uvicorn web.api.app:app --host 127.0.0.1 --port 8000 --reload
 
 # Terminal 2: Frontend Dashboard (port 5173)
 cd web/frontend && npm run dev

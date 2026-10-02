@@ -1,18 +1,17 @@
 import {
-  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { exportConfig } from "../services/api";
 import type { MapData } from "../types";
 import {
   connectPoints,
   constrainDirection,
   type GridPoint,
 } from "../utils/geometry";
+import { useMapCanvasFit } from "../utils/useMapCanvasFit";
 import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
 
 interface RouteCanvasProps {
@@ -24,7 +23,6 @@ interface RouteCanvasProps {
   onCancel?: () => void;
   solveButtonText?: string;
   busyButtonText?: string;
-  workflowMode: "run" | "create";
   onPrevMap?: () => void;
   batchStepper?: React.ReactNode;
 }
@@ -38,7 +36,6 @@ export function RouteCanvas({
   onCancel,
   solveButtonText,
   busyButtonText,
-  workflowMode,
   onPrevMap,
   batchStepper,
 }: RouteCanvasProps) {
@@ -48,11 +45,10 @@ export function RouteCanvas({
   const [hoveredCell, setHoveredCell] = useState<GridPoint | null>(null);
   const [isShiftDown, setIsShiftDown] = useState<boolean>(false);
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
-  const [cellSize, setCellSize] = useState<number>(10);
+  const [zoomMapData, setZoomMapData] = useState(mapData);
   const [undoDepth, setUndoDepth] = useState<number>(0);
   const [showOptimalRoute, setShowOptimalRoute] = useState<boolean>(false);
   const [dragOrigin, setDragOrigin] = useState<GridPoint | null>(null);
-  const [isExporting, setIsExporting] = useState<boolean>(false);
 
   const strokeBasePathRef = useRef<GridPoint[] | null>(null);
   const dragOriginRef = useRef<GridPoint | null>(null);
@@ -62,40 +58,17 @@ export function RouteCanvas({
 
   const { h, w, start, goal, connectivity, terrain, elevation, obstacle } =
     mapData;
+  const cellSize = useMapCanvasFit(wrapperRef, h, w);
+
+  if (zoomMapData !== mapData) {
+    setZoomMapData(mapData);
+    setZoomLevel(1.0);
+  }
 
   const isConnectedToGoal =
     userPath.length > 0 &&
     userPath[userPath.length - 1][0] === goal[0] &&
     userPath[userPath.length - 1][1] === goal[1];
-
-  const handleExportConfig = useCallback(async () => {
-    if (!isConnectedToGoal || userPath.length === 0) return;
-    setIsExporting(true);
-    try {
-      const exported = await exportConfig({
-        config: mapData.config,
-        start,
-        goal,
-        user_path: userPath,
-      });
-      const blob = new Blob([JSON.stringify(exported, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const seed = mapData.config?.MAP_DEFAULT_SEED ?? "custom";
-      a.href = url;
-      a.download = `isp-config-${seed}-${Date.now()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Export configuration error:", err);
-    } finally {
-      setIsExporting(false);
-    }
-  }, [isConnectedToGoal, userPath, mapData.config, start, goal]);
 
   useEffect(() => {
     function updateHoverWithShift(shiftState: boolean) {
@@ -139,23 +112,6 @@ export function RouteCanvas({
       window.removeEventListener("blur", handleBlur);
     };
   }, [userPath, start, connectivity, h, w]);
-
-  const updateCellSize = useCallback(() => {
-    if (!containerRef.current) return;
-    const containerWidth = containerRef.current.clientWidth;
-    const maxAvailableWidth = Math.max(280, containerWidth - 48);
-    const maxAvailableHeight = 460;
-    const sizeW = Math.floor(maxAvailableWidth / w);
-    const sizeH = Math.floor(maxAvailableHeight / h);
-    const computedSize = Math.max(4, Math.min(24, Math.min(sizeW, sizeH)));
-    setCellSize(computedSize);
-  }, [w, h]);
-
-  useEffect(() => {
-    updateCellSize();
-    window.addEventListener("resize", updateCellSize);
-    return () => window.removeEventListener("resize", updateCellSize);
-  }, [updateCellSize]);
 
   useLayoutEffect(() => {
     if (mapDataRef.current !== mapData) {
@@ -449,114 +405,95 @@ export function RouteCanvas({
         </div>
 
         <div className="canvas-actions-bar">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={handleAutoRoute}
-            disabled={isSolving}
-          >
-            Automatic Route
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={handleConnectGoal}
-            disabled={isSolving || isConnectedToGoal}
-          >
-            Connect to Goal
-          </button>
-
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={handleUndo}
-            disabled={isSolving || undoDepth === 0}
-          >
-            Undo Last Point
-          </button>
-
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={handleClear}
-            disabled={isSolving}
-          >
-            Clear
-          </button>
-
-          {workflowMode === "run" && (
+          <div className="canvas-control-group" role="group" aria-label="Route editing">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleAutoRoute}
+              disabled={isSolving}
+            >
+              Automatic Route
+            </button>
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={handleExportConfig}
+              onClick={handleConnectGoal}
+              disabled={isSolving || isConnectedToGoal}
+            >
+              Connect to Goal
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={handleUndo}
+              disabled={isSolving || undoDepth === 0}
+            >
+              Undo Last Point
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger-ghost"
+              onClick={handleClear}
+              disabled={isSolving}
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="canvas-control-group canvas-view-group" role="group" aria-label="Map display">
+            <button
+              type="button"
+              className={`btn ${showOptimalRoute ? "btn-secondary active" : "btn-ghost"}`}
+              onClick={() => setShowOptimalRoute((prev) => !prev)}
               disabled={
                 isSolving ||
-                isExporting ||
-                !isConnectedToGoal ||
-                userPath.length === 0
+                !mapData.optimal_path ||
+                mapData.optimal_path.length === 0
               }
               title={
-                isConnectedToGoal
-                  ? "Export experiment configuration and route to JSON file"
-                  : "Route must connect Start to Goal to export configuration"
+                showOptimalRoute
+                  ? "Hide initial optimal path (p*)"
+                  : "Show initial optimal path (p*)"
               }
             >
-              {isExporting ? "Exporting..." : "Export Configuration"}
+              {showOptimalRoute ? "Hide Optimal Route" : "Show Optimal Route"}
             </button>
-          )}
 
-          <button
-            type="button"
-            className={`btn ${showOptimalRoute ? "btn-secondary active" : "btn-ghost"}`}
-            onClick={() => setShowOptimalRoute((prev) => !prev)}
-            disabled={
-              isSolving ||
-              !mapData.optimal_path ||
-              mapData.optimal_path.length === 0
-            }
-            title={
-              showOptimalRoute
-                ? "Hide initial optimal path (p*)"
-                : "Show initial optimal path (p*)"
-            }
-          >
-            {showOptimalRoute ? "Hide Optimal Route" : "Show Optimal Route"}
-          </button>
-
-          <div className="zoom-controls-bar">
-            <span className="zoom-label">Zoom</span>
-            <button
-              type="button"
-              className="btn-zoom"
-              onClick={() =>
-                setZoomLevel((z) => Math.max(1.0, +(z - 0.25).toFixed(2)))
-              }
-              disabled={zoomLevel <= 1.0}
-              title="Zoom Out (-0.25x)"
-            >
-              &minus;
-            </button>
-            <span className="zoom-value">{Math.round(zoomLevel * 100)}%</span>
-            <button
-              type="button"
-              className="btn-zoom"
-              onClick={() =>
-                setZoomLevel((z) => Math.min(3.0, +(z + 0.25).toFixed(2)))
-              }
-              disabled={zoomLevel >= 3.0}
-              title="Zoom In (+0.25x)"
-            >
-              +
-            </button>
-            <button
-              type="button"
-              className="btn-zoom btn-zoom-reset"
-              onClick={() => setZoomLevel(1.0)}
-              disabled={zoomLevel === 1.0}
-              title="Reset Zoom to 100%"
-            >
-              Reset
-            </button>
+            <div className="zoom-controls-bar">
+              <span className="zoom-label">Zoom</span>
+              <button
+                type="button"
+                className="btn-zoom"
+                onClick={() =>
+                  setZoomLevel((z) => Math.max(1.0, +(z - 0.25).toFixed(2)))
+                }
+                disabled={zoomLevel <= 1.0}
+                title="Zoom Out (-0.25x)"
+              >
+                &minus;
+              </button>
+              <span className="zoom-value">{Math.round(zoomLevel * 100)}%</span>
+              <button
+                type="button"
+                className="btn-zoom"
+                onClick={() =>
+                  setZoomLevel((z) => Math.min(3.0, +(z + 0.25).toFixed(2)))
+                }
+                disabled={zoomLevel >= 3.0}
+                title="Zoom In (+0.25x)"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className="btn-zoom btn-zoom-fit"
+                onClick={() => setZoomLevel(1.0)}
+                disabled={zoomLevel === 1.0}
+                title="Fit map to view"
+              >
+                Fit
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -610,27 +547,6 @@ export function RouteCanvas({
               disabled={isSolving}
             >
               Back
-            </button>
-          )}
-
-          {workflowMode === "run" && (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleExportConfig}
-              disabled={
-                isSolving ||
-                isExporting ||
-                !isConnectedToGoal ||
-                userPath.length === 0
-              }
-              title={
-                isConnectedToGoal
-                  ? "Export experiment configuration and route to JSON file"
-                  : "Route must connect Start to Goal to export configuration"
-              }
-            >
-              {isExporting ? "Exporting..." : "Export Config"}
             </button>
           )}
 

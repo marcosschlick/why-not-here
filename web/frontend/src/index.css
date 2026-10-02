@@ -692,6 +692,28 @@ kbd,
   font-size: 0.74rem;
   font-weight: 650;
 }
+.validation-toast {
+  position: fixed;
+  right: clamp(1rem, 3vw, 2rem);
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: min(32rem, calc(100vw - 2rem));
+  padding: 0.75rem 0.875rem;
+  color: var(--text-danger);
+  background: var(--surface-danger);
+  border: 1px solid var(--border-danger);
+  border-left: 0.25rem solid var(--lobster-pink);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+.validation-toast span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .input-with-button {
   display: flex;
   align-items: center;
@@ -982,6 +1004,27 @@ kbd,
   justify-content: flex-end;
   gap: 0.5rem;
 }
+.canvas-actions-bar {
+  flex: 1 1 36rem;
+  gap: 0.75rem;
+}
+.canvas-control-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.canvas-view-group {
+  margin-left: auto;
+}
+.canvas-control-group > .btn {
+  white-space: nowrap;
+}
+.btn-danger-ghost {
+  color: var(--text-danger);
+  background: transparent;
+  border-color: var(--border-danger);
+}
 .zoom-controls-bar {
   display: inline-flex;
   align-items: center;
@@ -1066,10 +1109,14 @@ kbd,
 }
 .canvas-wrapper {
   display: grid;
-  place-items: center;
-  min-height: 20rem;
+  place-items: safe center;
+  width: 100%;
+  min-width: 0;
+  height: min(65dvh, 48rem);
+  min-height: min(16rem, 50dvh);
   padding: clamp(0.75rem, 2vw, 1.5rem);
   overflow: auto;
+  overscroll-behavior: contain;
   background-color: var(--surface-canvas);
   background-image: radial-gradient(
     circle,
@@ -1083,15 +1130,31 @@ kbd,
     inset 0 1px 0 color-mix(in srgb, var(--bright-snow) 10%, transparent),
     var(--shadow-md);
 }
-.interactive-canvas {
-  display: block;
-  max-width: none;
-  touch-action: none;
-  cursor: crosshair;
+.tactical-map-canvas {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: hidden;
   background: var(--surface-canvas);
-  border: 1px solid color-mix(in srgb, var(--bright-snow) 16%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--bright-snow) 16%, transparent);
   box-shadow: 0 0.75rem 2rem
     color-mix(in srgb, var(--yale-blue) 28%, transparent);
+}
+.map-canvas-layer {
+  position: absolute;
+  inset: 0;
+  display: block;
+  max-width: none;
+}
+.map-canvas-base {
+  pointer-events: none;
+}
+.interactive-canvas {
+  touch-action: none;
+  cursor: crosshair;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 .interactive-canvas.is-locked {
   cursor: not-allowed;
@@ -1629,7 +1692,6 @@ kbd,
 .results-map-canvas-wrapper {
   width: 100%;
   min-width: 0;
-  min-height: 16rem;
 }
 .results-map-card > .canvas-legend {
   justify-content: start;
@@ -1721,12 +1783,35 @@ kbd,
     box-shadow var(--duration-fast) var(--ease-out);
 }
 .artifact-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.4rem;
+  flex-wrap: wrap;
   margin-bottom: 0.5rem;
 }
 .artifact-title {
   color: var(--text-strong);
   font-size: 0.75rem;
   font-weight: 720;
+}
+.artifact-status-badge {
+  padding: 0.2rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.artifact-status-badge.candidate {
+  color: var(--text-danger);
+  background: var(--surface-danger);
+  border-color: var(--border-danger);
+}
+.artifact-status-badge.validated {
+  color: var(--text-structural);
+  background: var(--surface-info);
+  border-color: color-mix(in srgb, var(--azure-blue) 30%, transparent);
 }
 .artifact-img-wrap {
   position: relative;
@@ -2252,6 +2337,11 @@ kbd,
     background: var(--surface-info);
     border-color: color-mix(in srgb, var(--azure-blue) 45%, transparent);
   }
+  .btn-danger-ghost:not(:disabled):hover {
+    color: var(--text-danger);
+    background: var(--surface-danger);
+    border-color: var(--border-danger);
+  }
   .solver-param-chip:hover,
   .queue-item-card:hover {
     transform: translateY(-0.0625rem);
@@ -2339,6 +2429,13 @@ kbd,
   .solve-action-group,
   .queue-header-actions {
     justify-content: flex-start;
+  }
+  .canvas-actions-bar {
+    flex: 0 1 auto;
+    width: 100%;
+  }
+  .canvas-view-group {
+    margin-left: 0;
   }
   .form-grid,
   .config-form-grid-pair,

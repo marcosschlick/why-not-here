@@ -745,7 +745,6 @@ export function App() {
                 setIsBatchMode(false);
                 setCurrentStep("config");
               }}
-              workflowMode={workflowMode}
               busyButtonText={
                 workflowMode === "create"
                   ? "Saving Configuration..."

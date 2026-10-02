@@ -18,9 +18,6 @@ from .utils import create_alternative_path, get_project_path, prepare_endpoints
 
 
 def format_artifact_skip_note(result: ClosedLoopResult) -> str | None:
-    if result.success:
-        return None
-
     modifications = result.modifications
     has_candidates = modifications is not None and any(
         (
@@ -30,24 +27,29 @@ def format_artifact_skip_note(result: ClosedLoopResult) -> str | None:
         )
     )
 
+    if has_candidates:
+        return None
+
+    if result.success:
+        return " (Note: Maps 4 and 5 were omitted because no semantic modifications were required)"
+
     if result.solver_status == "INFEASIBLE":
-        return " (Note: Maps 4 and 5 were skipped because no viable modifications were found)"
+        return " (Note: Maps 4 and 5 were omitted because no viable modifications were found)"
 
     if result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
-        return " (Note: Maps 4 and 5 were skipped because the solver reached the limit before certifying a global solution)"
+        return " (Note: Maps 4 and 5 were omitted because the solver returned no candidate modifications before reaching its limit)"
 
-    if has_candidates and result.solver_status in {
-        "SUBGRAPH_OPTIMAL_ONLY",
-        "SUBOPTIMAL",
-        "DISCONNECTED_GRAPH",
-        "STALLED_OR_CYCLE",
-    }:
-        return " (Note: Maps 4 and 5 were skipped because the candidate modifications failed global validation)"
+    return " (Note: Maps 4 and 5 were omitted because the solver returned no candidate modifications)"
 
-    if has_candidates:
-        return " (Note: Maps 4 and 5 were skipped because candidate modifications were returned without global certification)"
 
-    return " (Note: Maps 4 and 5 were skipped because the solver did not return a usable globally certified solution)"
+def format_artifact_status(result: ClosedLoopResult) -> str:
+    if not result.success:
+        return f"Candidate modifications — {result.solver_status}; not globally certified"
+    if result.solver_status == "OPTIMAL":
+        return "Certified global optimum"
+    if result.solver_status == "OPTIMAL_INACCURATE":
+        return "Path validated; minimum intervention not certified"
+    return f"Global path validated — {result.solver_status}"
 
 
 def run_isp(
@@ -230,6 +232,16 @@ def run_isp(
     img3 = results_dir / "3_both_paths.png"
     img4 = results_dir / "4_isp_modifications.png"
     img5 = results_dir / "5_isp_with_user_path.png"
+    modifications = isp_result.modifications
+    has_candidate_modifications = modifications is not None and any(
+        (
+            modifications.terrain_nodes,
+            modifications.obstacle_nodes,
+            modifications.slope_edges,
+        )
+    )
+    img4.unlink(missing_ok=True)
+    img5.unlink(missing_ok=True)
 
     render_tactical_map(
         grid=grid,
@@ -255,21 +267,22 @@ def run_isp(
 
     saved_images = [img1, img2, img3]
 
-    if isp_result.success and isp_result.modifications:
-        mod_grid = ISPValidator.apply_modifications(grid, isp_result.modifications)
+    if has_candidate_modifications and modifications is not None:
+        mod_grid = ISPValidator.apply_modifications(grid, modifications)
+        artifact_status = format_artifact_status(isp_result)
         render_tactical_map(
             grid=grid,
-            modifications=isp_result.modifications,
+            modifications=modifications,
             modified_grid=mod_grid,
-            title="4. ISP Modifications Only",
+            title=f"4. ISP Modifications Only\n{artifact_status}",
             save_path=str(img4),
         )
         render_tactical_map(
             grid=grid,
             user_path=p_user,
-            modifications=isp_result.modifications,
+            modifications=modifications,
             modified_grid=mod_grid,
-            title="5. ISP Modifications with Alternative Path",
+            title=f"5. ISP Modifications with Alternative Path\n{artifact_status}",
             save_path=str(img5),
         )
         saved_images.extend([img4, img5])

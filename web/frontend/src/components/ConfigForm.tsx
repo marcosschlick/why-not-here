@@ -141,6 +141,12 @@ export function ConfigForm({
   const [outputDirError, setOutputDirError] = useState<string | null>(null);
   const [isBrowsing, setIsBrowsing] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const isConfigurationNameError = Boolean(
+    outputDirError?.startsWith("Configuration name"),
+  );
+  const isOutputDirectoryError = Boolean(
+    outputDirError && !isConfigurationNameError,
+  );
 
   const [planner, setPlanner] = useState<string>(
     initialConfig?.DEFAULT_PLANNER ?? "ASTAR",
@@ -379,20 +385,12 @@ export function ConfigForm({
         ? configurationDestination.trim()
         : outputDir.trim();
     if (!trimmed) {
-      setOutputDirError(
-        "Output directory is required. Please specify a directory.",
-      );
-      setFeedback(
-        "Please specify an output directory",
-      );
-      setTimeout(() => setFeedback(null), 3000);
+      setOutputDirError("Select an output directory to continue.");
       return;
     }
 
     if (workflowMode === "create" && !configurationName.trim()) {
       setOutputDirError("Configuration name is required.");
-      setFeedback("Please enter a configuration name");
-      setTimeout(() => setFeedback(null), 3000);
       return;
     }
 
@@ -419,20 +417,12 @@ export function ConfigForm({
         ? configurationDestination.trim()
         : outputDir.trim();
     if (!trimmed) {
-      setOutputDirError(
-        "Output directory is required. Please specify a directory.",
-      );
-      setFeedback(
-        "Please specify an output directory",
-      );
-      setTimeout(() => setFeedback(null), 3000);
+      setOutputDirError("Select an output directory to continue.");
       return;
     }
 
     if (workflowMode === "create" && !configurationName.trim()) {
       setOutputDirError("Configuration name is required.");
-      setFeedback("Please enter a configuration name");
-      setTimeout(() => setFeedback(null), 3000);
       return;
     }
 
@@ -460,12 +450,6 @@ export function ConfigForm({
           ? `Configuration name "${configurationName.trim()}" is already in the batch queue.`
           : `Output directory "${trimmed}" is already in the batch queue. Please specify a unique directory.`,
       );
-      setFeedback(
-        workflowMode === "create"
-          ? "Configuration name already in queue"
-          : `Directory "${trimmed}" already in queue`,
-      );
-      setTimeout(() => setFeedback(null), 4000);
       return;
     }
     setOutputDirError(null);
@@ -521,9 +505,7 @@ export function ConfigForm({
   async function handleImportBrowse() {
     const selectedOutputDir = outputDir.trim();
     if (!selectedOutputDir) {
-      setOutputDirError(
-        "Output directory is required. Please select it before importing a run configuration.",
-      );
+      setOutputDirError("Select an output directory before importing a configuration.");
       return;
     }
 
@@ -558,7 +540,7 @@ export function ConfigForm({
               if (!destination || !name) {
                 setOutputDirError(
                   !destination
-                    ? "Output directory is required. Please specify a directory."
+                    ? "Select an output directory to continue."
                     : "Configuration name is required.",
                 );
                 return;
@@ -799,9 +781,7 @@ export function ConfigForm({
               className={`form-group ${
                 workflowMode === "create" ? "is-active" : "is-inactive"
               } ${
-                workflowMode === "create" &&
-                outputDirError &&
-                !configurationName.trim()
+                workflowMode === "create" && isConfigurationNameError
                   ? "has-error"
                   : ""
               }`}
@@ -818,23 +798,31 @@ export function ConfigForm({
                 value={configurationName}
                 onChange={(event) => {
                   onConfigurationNameChange(event.target.value);
-                  setOutputDirError(null);
+                  if (isConfigurationNameError) setOutputDirError(null);
                 }}
                 placeholder="Example: north-route-study"
                 required
                 disabled={workflowMode !== "create"}
-                aria-invalid={Boolean(
-                  workflowMode === "create" &&
-                    outputDirError &&
-                    !configurationName.trim(),
-                )}
+                aria-invalid={workflowMode === "create" && isConfigurationNameError}
+                aria-describedby={
+                  workflowMode === "create" && isConfigurationNameError
+                    ? "configuration-name-error"
+                    : undefined
+                }
               />
+              {workflowMode === "create" && isConfigurationNameError && (
+                <span
+                  id="configuration-name-error"
+                  className="field-error-message"
+                  role="alert"
+                >
+                  {outputDirError}
+                </span>
+              )}
             </div>
 
             <div
-              className={`form-group is-active ${
-                outputDirError ? "has-error" : ""
-              }`}
+              className={`form-group is-active ${isOutputDirectoryError ? "has-error" : ""}`}
             >
               <label id="destinationDirLabel">
                 <span>Output Directory</span>
@@ -854,7 +842,12 @@ export function ConfigForm({
                   placeholder="Click Browse... to select output directory"
                   required
                   aria-labelledby="destinationDirLabel"
-                  aria-invalid={Boolean(outputDirError)}
+                  aria-invalid={isOutputDirectoryError}
+                  aria-describedby={
+                    isOutputDirectoryError
+                      ? "output-directory-error"
+                      : undefined
+                  }
                 />
                 <button
                   type="button"
@@ -865,11 +858,6 @@ export function ConfigForm({
                   {isBrowsing ? "Opening..." : "Browse..."}
                 </button>
               </div>
-              {outputDirError && (
-                <span className="field-error-message" role="alert">
-                  {outputDirError}
-                </span>
-              )}
             </div>
           </div>
         </div>
@@ -1327,6 +1315,25 @@ export function ConfigForm({
           {feedback && <span className="action-feedback">{feedback}</span>}
         </div>
       </fieldset>
+
+      {isOutputDirectoryError && (
+        <div
+          id="output-directory-error"
+          className="validation-toast"
+          role="alert"
+          aria-live="assertive"
+        >
+          <span>{outputDirError}</span>
+          <button
+            type="button"
+            className="alert-close"
+            onClick={() => setOutputDirError(null)}
+            aria-label="Dismiss notification"
+          >
+            &times;
+          </button>
+        </div>
+      )}
 
       {cleaningDirInfo && (
         <div
