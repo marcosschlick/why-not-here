@@ -22,9 +22,15 @@ def generate_map(verbose: bool = True, persist_artifacts: bool = True) -> Grid:
         max_slope_deg=config.MAX_SLOPE_DEG,
         elevation_scale=config.MAP_ELEVATION_SCALE,
         elevation_freq=config.MAP_ELEVATION_FREQ,
-        biome_freq=config.MAP_BIOME_FREQ,
-        obstacle_freq=config.MAP_OBSTACLE_FREQ,
-        obstacle_threshold=config.MAP_OBSTACLE_THRESHOLD,
+        elevation_octaves=config.MAP_ELEVATION_OCTAVES,
+        moisture_freq=config.MAP_MOISTURE_FREQ,
+        moisture_octaves=config.MAP_MOISTURE_OCTAVES,
+        roughness_freq=config.MAP_ROUGHNESS_FREQ,
+        roughness_octaves=config.MAP_ROUGHNESS_OCTAVES,
+        terrain_thresholds=config.MAP_TERRAIN_THRESHOLDS,
+        roughness_thresholds=config.MAP_ROUGHNESS_THRESHOLDS,
+        min_main_component_ratio=config.MAP_MIN_MAIN_COMPONENT_RATIO,
+        max_generation_attempts=config.MAP_MAX_GENERATION_ATTEMPTS,
     )
 
     if persist_artifacts:

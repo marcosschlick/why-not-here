@@ -62,7 +62,7 @@ class ISPSemantics:
         self.obstacle_nodes: list[tuple[int, int]] = []
         self.obstacle_to_idx: dict[tuple[int, int], int] = {}
         for u in unique_path_nodes:
-            if grid.get_cell(u).is_blocked:
+            if grid.get_cell(u).obstacle != 0:
                 idx = len(self.obstacle_nodes)
                 self.obstacle_nodes.append(u)
                 self.obstacle_to_idx[u] = idx

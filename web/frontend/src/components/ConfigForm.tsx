@@ -188,19 +188,16 @@ export function ConfigForm({
     initialConfig?.MAP_DEFAULT_SEED ?? 42,
   );
   const [mapElevationScale, setMapElevationScale] = useState<number>(
-    initialConfig?.MAP_ELEVATION_SCALE ?? 2.0,
+    initialConfig?.MAP_ELEVATION_SCALE ?? 4.0,
   );
   const [mapElevationFreq, setMapElevationFreq] = useState<number>(
     initialConfig?.MAP_ELEVATION_FREQ ?? 0.06,
   );
-  const [mapBiomeFreq, setMapBiomeFreq] = useState<number>(
-    initialConfig?.MAP_BIOME_FREQ ?? 0.03,
+  const [mapMoistureFreq, setMapMoistureFreq] = useState<number>(
+    initialConfig?.MAP_MOISTURE_FREQ ?? 0.03,
   );
-  const [mapObstacleFreq, setMapObstacleFreq] = useState<number>(
-    initialConfig?.MAP_OBSTACLE_FREQ ?? 0.05,
-  );
-  const [mapObstacleThreshold, setMapObstacleThreshold] = useState<number>(
-    initialConfig?.MAP_OBSTACLE_THRESHOLD ?? 0.85,
+  const [mapRoughnessFreq, setMapRoughnessFreq] = useState<number>(
+    initialConfig?.MAP_ROUGHNESS_FREQ ?? 0.05,
   );
 
   const [cleaningDirInfo, setCleaningDirInfo] = useState<{
@@ -285,6 +282,14 @@ export function ConfigForm({
     if (terrainDraft.some((terrain) => !Number.isFinite(Number(terrain.speed)))) {
       return "Terrain speeds must be finite numbers.";
     }
+    if (
+      terrainDraft.some(
+        (terrain) =>
+          terrain.name.trim() === "WATER_RIVER" && Number(terrain.speed) > 0,
+      )
+    ) {
+      return "WATER_RIVER must remain impassable with a speed at or below zero.";
+    }
     if (terrainDraft.some((terrain) => !/^#[0-9a-f]{6}$/i.test(terrain.color))) {
       return "Each terrain needs a valid hexadecimal color.";
     }
@@ -342,9 +347,8 @@ export function ConfigForm({
       INCREMENTAL_ASTAR_SCOPE: incrementalAstarScope,
       MAP_ELEVATION_SCALE: Number(mapElevationScale),
       MAP_ELEVATION_FREQ: Number(mapElevationFreq),
-      MAP_BIOME_FREQ: Number(mapBiomeFreq),
-      MAP_OBSTACLE_FREQ: Number(mapObstacleFreq),
-      MAP_OBSTACLE_THRESHOLD: Number(mapObstacleThreshold),
+      MAP_MOISTURE_FREQ: Number(mapMoistureFreq),
+      MAP_ROUGHNESS_FREQ: Number(mapRoughnessFreq),
     };
   }
 
@@ -1034,54 +1038,40 @@ export function ConfigForm({
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="mapBiomeFreq">
-                        <span>Biome Frequency</span>
-                        <span className="form-group-hint">Spatial biome distribution</span>
+                      <label htmlFor="mapMoistureFreq">
+                        <span>Moisture Frequency</span>
+                        <span className="form-group-hint">
+                          Spatial moisture distribution
+                        </span>
                       </label>
                       <input
-                        id="mapBiomeFreq"
+                        id="mapMoistureFreq"
                         type="number"
                         min={0.001}
                         step={0.01}
-                        value={mapBiomeFreq}
-                        onChange={(e) => setMapBiomeFreq(Number(e.target.value))}
-                        required
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="mapObstacleFreq">
-                        <span>Obstacle Frequency</span>
-                        <span className="form-group-hint">
-                          Cluster distribution scale
-                        </span>
-                      </label>
-                      <input
-                        id="mapObstacleFreq"
-                        type="number"
-                        step={0.01}
-                        value={mapObstacleFreq}
-                        onChange={(e) => setMapObstacleFreq(Number(e.target.value))}
-                        required
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="mapObstacleThreshold">
-                        <span>Obstacle Threshold</span>
-                        <span className="form-group-hint">
-                          Threshold cutoff (0–1)
-                        </span>
-                      </label>
-                      <input
-                        id="mapObstacleThreshold"
-                        type="number"
-                        step={0.05}
-                        min={0}
-                        max={1}
-                        value={mapObstacleThreshold}
+                        value={mapMoistureFreq}
                         onChange={(e) =>
-                          setMapObstacleThreshold(Number(e.target.value))
+                          setMapMoistureFreq(Number(e.target.value))
+                        }
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="mapRoughnessFreq">
+                        <span>Roughness Frequency</span>
+                        <span className="form-group-hint">
+                          Contextual obstacle distribution
+                        </span>
+                      </label>
+                      <input
+                        id="mapRoughnessFreq"
+                        type="number"
+                        min={0.001}
+                        step={0.01}
+                        value={mapRoughnessFreq}
+                        onChange={(e) =>
+                          setMapRoughnessFreq(Number(e.target.value))
                         }
                         required
                       />
@@ -1207,6 +1197,7 @@ export function ConfigForm({
                                 type="number"
                                 step="any"
                                 value={terrain.speed}
+                                disabled={terrain.name.trim() === "WATER_RIVER"}
                                 onChange={(e) =>
                                   setTerrainDraft((current) =>
                                     current.map((entry, rowIndex) =>

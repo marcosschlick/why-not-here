@@ -1198,6 +1198,9 @@ kbd,
 .cell-status-obstacle {
   color: var(--text-danger) !important;
 }
+.cell-status-impassable {
+  color: var(--map-river) !important;
+}
 .cell-status-free {
   color: var(--azure-blue) !important;
 }

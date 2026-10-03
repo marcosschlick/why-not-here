@@ -22,9 +22,15 @@ export interface SystemConfig {
   INCREMENTAL_ASTAR_SCOPE?: string;
   MAP_ELEVATION_SCALE?: number;
   MAP_ELEVATION_FREQ?: number;
-  MAP_BIOME_FREQ?: number;
-  MAP_OBSTACLE_FREQ?: number;
-  MAP_OBSTACLE_THRESHOLD?: number;
+  MAP_ELEVATION_OCTAVES?: number;
+  MAP_MOISTURE_FREQ?: number;
+  MAP_MOISTURE_OCTAVES?: number;
+  MAP_ROUGHNESS_FREQ?: number;
+  MAP_ROUGHNESS_OCTAVES?: number;
+  MAP_TERRAIN_THRESHOLDS?: Record<string, number>;
+  MAP_ROUGHNESS_THRESHOLDS?: Record<string, number>;
+  MAP_MIN_MAIN_COMPONENT_RATIO?: number;
+  MAP_MAX_GENERATION_ATTEMPTS?: number;
   [key: string]: unknown;
 }
 

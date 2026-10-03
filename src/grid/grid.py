@@ -139,7 +139,8 @@ class Grid:
     def load_obstacle_matrix(self, matrix: list[list[int]]) -> None:
         for i in range(self.h):
             for j in range(self.w):
-                self.cells[i][j].obstacle = matrix[i][j]
+                cell = self.cells[i][j]
+                cell.obstacle = 0 if cell.terrain == "WATER_RIVER" else matrix[i][j]
 
     def to_dict(self) -> dict:
         return {

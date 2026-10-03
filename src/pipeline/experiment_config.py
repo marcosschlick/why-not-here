@@ -20,9 +20,15 @@ CONFIG_REGISTRY = {
     "MAP_DEFAULT_SEED": "config_map.py",
     "MAP_ELEVATION_SCALE": "config_map.py",
     "MAP_ELEVATION_FREQ": "config_map.py",
-    "MAP_BIOME_FREQ": "config_map.py",
-    "MAP_OBSTACLE_FREQ": "config_map.py",
-    "MAP_OBSTACLE_THRESHOLD": "config_map.py",
+    "MAP_ELEVATION_OCTAVES": "config_map.py",
+    "MAP_MOISTURE_FREQ": "config_map.py",
+    "MAP_MOISTURE_OCTAVES": "config_map.py",
+    "MAP_ROUGHNESS_FREQ": "config_map.py",
+    "MAP_ROUGHNESS_OCTAVES": "config_map.py",
+    "MAP_TERRAIN_THRESHOLDS": "config_map.py",
+    "MAP_ROUGHNESS_THRESHOLDS": "config_map.py",
+    "MAP_MIN_MAIN_COMPONENT_RATIO": "config_map.py",
+    "MAP_MAX_GENERATION_ATTEMPTS": "config_map.py",
     "DEFAULT_PLANNER": "config_planning.py",
     "TARGET_TERRAIN": "config_isp.py",
     "BASE_TERRAIN": "config_terrain.py",
@@ -74,11 +80,42 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("DEFAULT_SOLVER must be either 'HIGHS' or 'GUROBI'.")
     candidate["DEFAULT_SOLVER"] = solver
 
-    for key in ("CELL_SIZE", "CLOSED_LOOP_TIMEOUT_SEC", "MAP_BIOME_FREQ"):
+    positive_float_keys = (
+        "CELL_SIZE",
+        "CLOSED_LOOP_TIMEOUT_SEC",
+        "MAP_ELEVATION_SCALE",
+        "MAP_ELEVATION_FREQ",
+        "MAP_MOISTURE_FREQ",
+        "MAP_ROUGHNESS_FREQ",
+    )
+    for key in positive_float_keys:
         value = float(candidate[key])
         if not math.isfinite(value) or value <= 0.0:
             raise ValueError(f"{key} must be a finite number greater than zero.")
         candidate[key] = value
+
+    for key in (
+        "MAP_ELEVATION_OCTAVES",
+        "MAP_MOISTURE_OCTAVES",
+        "MAP_ROUGHNESS_OCTAVES",
+        "MAP_MAX_GENERATION_ATTEMPTS",
+        "MAP_H",
+        "MAP_W",
+    ):
+        value = int(candidate[key])
+        if value < 1:
+            raise ValueError(f"{key} must be greater than zero.")
+        candidate[key] = value
+
+    component_ratio = float(candidate["MAP_MIN_MAIN_COMPONENT_RATIO"])
+    if not math.isfinite(component_ratio) or not 0.0 < component_ratio <= 1.0:
+        raise ValueError("MAP_MIN_MAIN_COMPONENT_RATIO must be greater than 0 and at most 1.")
+    candidate["MAP_MIN_MAIN_COMPONENT_RATIO"] = component_ratio
+
+    connectivity = int(candidate["CONNECTIVITY"])
+    if connectivity not in (4, 8):
+        raise ValueError("CONNECTIVITY must be either 4 or 8.")
+    candidate["CONNECTIVITY"] = connectivity
 
     max_slope = float(candidate["MAX_SLOPE_DEG"])
     if not math.isfinite(max_slope) or not 0.0 <= max_slope <= 90.0:
@@ -107,6 +144,9 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"Terrain speed for {name!r} must be finite.")
         terrains[name] = speed
 
+    if terrains.get("WATER_RIVER", 0.0) > 0.0:
+        raise ValueError("WATER_RIVER must have a speed at or below zero.")
+
     traversable = {name for name, speed in terrains.items() if speed > 0.0}
     if not traversable:
         raise ValueError("At least one terrain must have a speed greater than zero.")
@@ -130,6 +170,39 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("TARGET_TERRAIN must exist and have a speed greater than zero.")
     if base_terrain not in traversable:
         raise ValueError("BASE_TERRAIN must exist and have a speed greater than zero.")
+
+    threshold_specs = {
+        "MAP_TERRAIN_THRESHOLDS": {
+            "LOWLAND_ELEVATION_MAX",
+            "WATER_MOISTURE_MIN",
+            "MUD_MOISTURE_MIN",
+            "ROCKY_ELEVATION_MIN",
+            "ROCKY_MOISTURE_MAX",
+            "FOREST_MOISTURE_MIN",
+            "DRY_MOISTURE_MAX",
+            "GRASSLAND_ELEVATION_MIN",
+        },
+        "MAP_ROUGHNESS_THRESHOLDS": {
+            "FOREST",
+            "ROCKY",
+            "GRASSLAND",
+            "GRASS",
+            "DRY_VEGETATION",
+            "MUD",
+            "SAND",
+        },
+    }
+    for key, expected_names in threshold_specs.items():
+        raw_thresholds = candidate[key]
+        if not isinstance(raw_thresholds, dict) or set(raw_thresholds) != expected_names:
+            raise ValueError(f"{key} must define exactly: {', '.join(sorted(expected_names))}.")
+        thresholds: dict[str, float] = {}
+        for name, raw_value in raw_thresholds.items():
+            value = float(raw_value)
+            if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+                raise ValueError(f"{key}.{name} must be between 0 and 1.")
+            thresholds[name] = value
+        candidate[key] = thresholds
 
     candidate["TERRAINS"] = terrains
     candidate["TERRAIN_COLORS"] = colors
@@ -166,7 +239,8 @@ def _publish_derived_configuration() -> None:
     derived_values = {
         "IMPASSABLE_TERRAINS": {
             name for name, speed in terrains.items() if speed <= 0.0
-        },
+        }
+        | {"WATER_RIVER"},
         "V_MAX": max(terrains.values()),
         "TARGET_SPEED": terrains[config.TARGET_TERRAIN],
     }

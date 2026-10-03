@@ -318,12 +318,20 @@ export function ResultsView({
       currentMapData.goal[0] === hoveredCell[0] &&
       currentMapData.goal[1] === hoveredCell[1],
   );
+  const hoveredTerrain =
+    hoveredCell && currentMapData
+      ? currentMapData.terrain[hoveredCell[0]]?.[hoveredCell[1]] ?? "-"
+      : "-";
+  const hoveredTerrainSpeed = currentMapData?.config.TERRAINS?.[hoveredTerrain];
+  const hoveredTerrainBlocked =
+    hoveredTerrain === "WATER_RIVER" ||
+    (hoveredTerrainSpeed !== undefined && hoveredTerrainSpeed <= 0);
 
   const hoveredInfo = hoveredCell && currentMapData ? (
     <span>
       Cell [{hoveredCell[0]}, {hoveredCell[1]}] &bull; Terrain{" "}
       <strong>
-        {currentMapData.terrain[hoveredCell[0]]?.[hoveredCell[1]] ?? "-"}
+        {hoveredTerrain}
       </strong>
       {isCellTerrainModified && (
         <strong className="mod-badge terrain" style={{ marginLeft: "0.35rem" }}>
@@ -337,7 +345,11 @@ export function ResultsView({
         m
       </strong>{" "}
       &bull; Status{" "}
-      {currentMapData.obstacle[hoveredCell[0]]?.[hoveredCell[1]] === 1 ? (
+      {hoveredTerrainBlocked ? (
+        <strong className="cell-status cell-status-impassable">
+          Impassable terrain
+        </strong>
+      ) : currentMapData.obstacle[hoveredCell[0]]?.[hoveredCell[1]] === 1 ? (
         <strong className="cell-status cell-status-obstacle">Obstacle</strong>
       ) : (
         <strong className="cell-status cell-status-free">Free</strong>

@@ -23,19 +23,30 @@ import type {
 
 function isSameMap(a?: SystemConfig | null, b?: SystemConfig | null): boolean {
   if (!a || !b) return false;
-  return (
-    Number(a.MAP_H) === Number(b.MAP_H) &&
-    Number(a.MAP_W) === Number(b.MAP_W) &&
-    Number(a.CONNECTIVITY) === Number(b.CONNECTIVITY) &&
-    Number(a.MAP_DEFAULT_SEED) === Number(b.MAP_DEFAULT_SEED) &&
-    Number(a.MAP_ELEVATION_SCALE ?? 2.0) ===
-      Number(b.MAP_ELEVATION_SCALE ?? 2.0) &&
-    Number(a.MAP_ELEVATION_FREQ ?? 0.06) ===
-      Number(b.MAP_ELEVATION_FREQ ?? 0.06) &&
-    Number(a.MAP_OBSTACLE_FREQ ?? 0.05) ===
-      Number(b.MAP_OBSTACLE_FREQ ?? 0.05) &&
-    Number(a.MAP_OBSTACLE_THRESHOLD ?? 0.85) ===
-      Number(b.MAP_OBSTACLE_THRESHOLD ?? 0.85)
+  const mapConfigKeys: (keyof SystemConfig)[] = [
+    "MAP_H",
+    "MAP_W",
+    "CELL_SIZE",
+    "CONNECTIVITY",
+    "MAX_SLOPE_DEG",
+    "DEFAULT_TERRAIN",
+    "TERRAINS",
+    "TERRAIN_COLORS",
+    "MAP_DEFAULT_SEED",
+    "MAP_ELEVATION_SCALE",
+    "MAP_ELEVATION_FREQ",
+    "MAP_ELEVATION_OCTAVES",
+    "MAP_MOISTURE_FREQ",
+    "MAP_MOISTURE_OCTAVES",
+    "MAP_ROUGHNESS_FREQ",
+    "MAP_ROUGHNESS_OCTAVES",
+    "MAP_TERRAIN_THRESHOLDS",
+    "MAP_ROUGHNESS_THRESHOLDS",
+    "MAP_MIN_MAIN_COMPONENT_RATIO",
+    "MAP_MAX_GENERATION_ATTEMPTS",
+  ];
+  return mapConfigKeys.every(
+    (key) => JSON.stringify(a[key] ?? null) === JSON.stringify(b[key] ?? null),
   );
 }
 

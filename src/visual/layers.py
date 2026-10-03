@@ -48,10 +48,10 @@ def find_steep_cells(grid: Grid) -> set[tuple[int, int]]:
     for i in range(grid.h):
         for j in range(grid.w):
             u = (i, j)
-            if grid.cells[i][j].obstacle != 0:
+            if grid.cells[i][j].is_blocked:
                 continue
             for v in grid.get_neighbors(u, only_traversable=False):
-                if grid.get_cell(v).obstacle != 0:
+                if grid.get_cell(v).is_blocked:
                     continue
                 if abs(grid.get_slope(u, v)) > grid.max_slope_deg:
                     steep_cells.add(u)

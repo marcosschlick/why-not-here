@@ -13,11 +13,24 @@ class GenerateMapRequest(BaseModel):
     MAP_H: int = Field(default=64, ge=4, le=1024)
     MAP_W: int = Field(default=128, ge=4, le=1024)
     CONNECTIVITY: int = Field(default=8)
+    CELL_SIZE: float | None = Field(default=None, gt=0)
+    MAX_SLOPE_DEG: float | None = Field(default=None, ge=0, le=90)
     DEFAULT_REDUCTION_METHOD: str = Field(default="NONE")
     USE_INCREMENTAL_SOLVER: bool = Field(default=False)
     INCREMENTAL_ASTAR_SCOPE: str = Field(default="GLOBAL")
     OUTPUT_DIR: str = Field(default="")
     MAP_DEFAULT_SEED: int | None = Field(default=None)
+    MAP_ELEVATION_SCALE: float | None = Field(default=None, gt=0)
+    MAP_ELEVATION_FREQ: float | None = Field(default=None, gt=0)
+    MAP_ELEVATION_OCTAVES: int | None = Field(default=None, ge=1)
+    MAP_MOISTURE_FREQ: float | None = Field(default=None, gt=0)
+    MAP_MOISTURE_OCTAVES: int | None = Field(default=None, ge=1)
+    MAP_ROUGHNESS_FREQ: float | None = Field(default=None, gt=0)
+    MAP_ROUGHNESS_OCTAVES: int | None = Field(default=None, ge=1)
+    MAP_TERRAIN_THRESHOLDS: dict[str, float] | None = None
+    MAP_ROUGHNESS_THRESHOLDS: dict[str, float] | None = None
+    MAP_MIN_MAIN_COMPONENT_RATIO: float | None = Field(default=None, gt=0, le=1)
+    MAP_MAX_GENERATION_ATTEMPTS: int | None = Field(default=None, ge=1)
     persist_artifacts: bool = True
     extra_config: dict[str, Any] | None = None
 

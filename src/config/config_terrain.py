@@ -33,8 +33,10 @@ TERRAIN_COLORS = {
 # Default base terrain for nominal traversability
 BASE_TERRAIN = "GRASS"
 
-# Automatically derived impassable terrains (zero or negative nominal speed).
-IMPASSABLE_TERRAINS = {name for name, speed in TERRAINS.items() if speed <= 0.0}
+# Water stays impassable even if a runtime terrain registry changes its speed.
+IMPASSABLE_TERRAINS = {
+    name for name, speed in TERRAINS.items() if speed <= 0.0
+} | {"WATER_RIVER"}
 
 # Maximum nominal speed derived automatically from the fastest terrain
 V_MAX = max(TERRAINS.values())

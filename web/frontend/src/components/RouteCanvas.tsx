@@ -362,6 +362,14 @@ export function RouteCanvas({
     onPathChange(previousPath);
   }
 
+  const hoveredTerrain = hoveredCell
+    ? terrain[hoveredCell[0]]?.[hoveredCell[1]] || "-"
+    : "-";
+  const hoveredTerrainSpeed = mapData.config.TERRAINS?.[hoveredTerrain];
+  const hoveredTerrainBlocked =
+    hoveredTerrain === "WATER_RIVER" ||
+    (hoveredTerrainSpeed !== undefined && hoveredTerrainSpeed <= 0);
+
   const hoveredInfo = hoveredCell ? (
     <span>
       Cell{" "}
@@ -374,13 +382,17 @@ export function RouteCanvas({
         </strong>
       )}{" "}
       &bull; Terrain{" "}
-      <strong>{terrain[hoveredCell[0]]?.[hoveredCell[1]] || "-"}</strong> &bull;
+      <strong>{hoveredTerrain}</strong> &bull;
       Elevation{" "}
       <strong>
         {elevation[hoveredCell[0]]?.[hoveredCell[1]]?.toFixed(1) ?? "-"}m
       </strong>{" "}
       &bull; Status{" "}
-      {obstacle[hoveredCell[0]]?.[hoveredCell[1]] === 1 ? (
+      {hoveredTerrainBlocked ? (
+        <strong className="cell-status cell-status-impassable">
+          Impassable terrain
+        </strong>
+      ) : obstacle[hoveredCell[0]]?.[hoveredCell[1]] === 1 ? (
         <strong className="cell-status cell-status-obstacle">Obstacle</strong>
       ) : (
         <strong className="cell-status cell-status-free">Free</strong>

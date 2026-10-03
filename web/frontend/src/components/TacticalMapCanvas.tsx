@@ -216,7 +216,11 @@ export function TacticalMapCanvas({
         }
         ctx.fillRect(x, y, width, height);
 
-        if (isObstacle && effectiveCellSize >= 8) {
+        if (
+          isObstacle &&
+          terrainName !== "WATER_RIVER" &&
+          effectiveCellSize >= 8
+        ) {
           drawHatch(ctx, x, y, width, height, "rgba(248,248,248,0.28)");
         }
 

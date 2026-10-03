@@ -22,19 +22,24 @@ Defines spatial matrix dimensions, cell resolution, and default cell properties.
 
 ## 2. Procedural Map Generation (`src/config/config_map.py`)
 
-Controls pseudorandom seed, Perlin noise scales, and biome thresholds for terrain synthesis.
+Controls the independent Perlin fields, terrain classification thresholds, contextual obstacles, and connectivity retries.
 
-| Parameter                | Type               | Default Value                                                                                                     | Description                                                          |
-| :----------------------- | :----------------- | :---------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------- |
-| `MAP_DEFAULT_SEED`       | `int`              | `42`                                                                                                              | Random seed for reproducible procedural map generation.              |
-| `MAP_ELEVATION_SCALE`    | `float`            | `2.0`                                                                                                             | Maximum elevation amplitude in meters.                               |
-| `MAP_ELEVATION_FREQ`     | `float`            | `0.06`                                                                                                            | Spatial frequency for Perlin noise elevation.                        |
-| `MAP_ELEVATION_OCTAVES`  | `int`              | `3`                                                                                                               | Number of noise octaves for elevation detail.                        |
-| `MAP_BIOME_FREQ`         | `float`            | `0.03`                                                                                                            | Spatial frequency for biome noise distribution.                      |
-| `MAP_BIOME_OCTAVES`      | `int`              | `2`                                                                                                               | Number of noise octaves for biome distribution.                      |
-| `MAP_BIOME_THRESHOLDS`   | `dict[str, float]` | `{"WATER_RIVER": 0.20, "MUD": 0.32, "SAND": 0.45, "DRY_VEGETATION": 0.60, "GRASS": 0.80, "COMPACTED_SOIL": 1.00}` | Normalized cumulative thresholds for terrain classification.         |
-| `MAP_OBSTACLE_FREQ`      | `float`            | `0.05`                                                                                                            | Spatial frequency for obstacle cluster Perlin noise.                 |
-| `MAP_OBSTACLE_THRESHOLD` | `float`            | `0.85`                                                                                                            | Noise threshold above which a cell is assigned as an obstacle (`1`). |
+| Parameter                      | Type               | Default Value | Description                                                                 |
+| :----------------------------- | :----------------- | :------------ | :-------------------------------------------------------------------------- |
+| `MAP_DEFAULT_SEED`             | `int`              | `42`          | Seed for reproducible generation and deterministic retry seeds.             |
+| `MAP_ELEVATION_SCALE`          | `float`            | `4.0`         | Elevation amplitude in meters.                                              |
+| `MAP_ELEVATION_FREQ`           | `float`            | `0.06`        | Spatial frequency for the elevation Perlin field.                            |
+| `MAP_ELEVATION_OCTAVES`        | `int`              | `3`           | Number of elevation noise octaves.                                           |
+| `MAP_MOISTURE_FREQ`            | `float`            | `0.03`        | Spatial frequency for the normalized moisture Perlin field.                  |
+| `MAP_MOISTURE_OCTAVES`         | `int`              | `2`           | Number of moisture noise octaves.                                             |
+| `MAP_ROUGHNESS_FREQ`           | `float`            | `0.05`        | Spatial frequency for the normalized roughness Perlin field.                 |
+| `MAP_ROUGHNESS_OCTAVES`        | `int`              | `2`           | Number of roughness noise octaves.                                            |
+| `MAP_TERRAIN_THRESHOLDS`       | `dict[str, float]` | See config    | Normalized elevation and moisture cutoffs used by the ordered classifier.    |
+| `MAP_ROUGHNESS_THRESHOLDS`     | `dict[str, float]` | See config    | Per-terrain roughness cutoffs; lower values create more obstacles.           |
+| `MAP_MIN_MAIN_COMPONENT_RATIO` | `float`            | `0.80`        | Minimum fraction of traversable cells in the largest valid component.        |
+| `MAP_MAX_GENERATION_ATTEMPTS`  | `int`              | `5`           | Maximum deterministic seed attempts before generation fails with an error.   |
+
+`MAP_TERRAIN_THRESHOLDS` contains `LOWLAND_ELEVATION_MAX=0.28`, `WATER_MOISTURE_MIN=0.70`, `MUD_MOISTURE_MIN=0.48`, `ROCKY_ELEVATION_MIN=0.76`, `ROCKY_MOISTURE_MAX=0.40`, `FOREST_MOISTURE_MIN=0.66`, `DRY_MOISTURE_MAX=0.34`, and `GRASSLAND_ELEVATION_MIN=0.58`. `MAP_ROUGHNESS_THRESHOLDS` contains `FOREST=0.74`, `ROCKY=0.72`, `GRASSLAND=0.88`, `GRASS=0.90`, `DRY_VEGETATION=0.90`, `MUD=0.97`, and `SAND=0.98`.
 
 ---
 
@@ -48,7 +53,7 @@ Defines traversability speeds, slope thresholds, and mechanical limits based on 
 | `TERRAINS`            | `dict[str, float]` | Ten built-in terrain speeds          | Nominal traversal speeds in m/s for each terrain type.                             |
 | `TERRAIN_COLORS`      | `dict[str, str]`   | Hex colors for all built-in terrains | User-editable `#RRGGBB` map palette shared by the Web canvas and Python renderers. |
 | `BASE_TERRAIN`        | `str`              | `"GRASS"`                            | Reference terrain type for base traversability calculations.                       |
-| `IMPASSABLE_TERRAINS` | `set[str]`         | `{"WATER_RIVER"}`                    | Dynamically derived set of terrain types with nominal speed $\le 0.0\text{ m/s}$.  |
+| `IMPASSABLE_TERRAINS` | `set[str]`         | `{"WATER_RIVER"}`                    | Terrain types with nominal speed $\le 0.0\text{ m/s}$, always including water.       |
 | `V_MAX`               | `float`            | `1.2`                                | Dynamically derived maximum nominal speed across all terrains in m/s.              |
 
 ---
@@ -147,11 +152,13 @@ Standardizes export, import, and reproduction of experiments across both the Web
 | `CELL_SIZE`                                   | `float`             | Metric resolution per cell.                                                                                                            |
 | `MAX_SLOPE_DEG`                               | `float`             | Maximum traversable slope in degrees.                                                                                                  |
 | `CLOSED_LOOP_TIMEOUT_SEC`                     | `float`             | Overall timeout for closed-loop ISP execution in seconds.                                                                              |
-| `MAP_BIOME_FREQ`                              | `float`             | Spatial frequency used to distribute procedural biomes.                                                                                |
+| `MAP_ELEVATION_OCTAVES`, `MAP_MOISTURE_FREQ`, `MAP_MOISTURE_OCTAVES` | `int` / `float` | Elevation and moisture field settings. |
 | `CONNECTIVITY`                                | `int`               | Grid neighborhood model (`4` or `8`).                                                                                                  |
 | `MAP_DEFAULT_SEED`                            | `int`               | Procedural map seed.                                                                                                                   |
 | `MAP_ELEVATION_SCALE`, `MAP_ELEVATION_FREQ`   | `float`             | Perlin noise amplitude and frequency for elevation.                                                                                    |
-| `MAP_OBSTACLE_FREQ`, `MAP_OBSTACLE_THRESHOLD` | `float`             | Obstacle cluster noise frequency and threshold.                                                                                        |
+| `MAP_ROUGHNESS_FREQ`, `MAP_ROUGHNESS_OCTAVES`, `MAP_ROUGHNESS_THRESHOLDS` | `float` / `int` / `dict` | Roughness field and contextual obstacle settings. |
+| `MAP_TERRAIN_THRESHOLDS`                      | `dict[str, float]`  | Elevation and moisture cutoffs for terrain classification.                                                                              |
+| `MAP_MIN_MAIN_COMPONENT_RATIO`, `MAP_MAX_GENERATION_ATTEMPTS` | `float` / `int` | Connectivity acceptance and retry limits. |
 | `DEFAULT_SOLVER`                              | `str`               | MIP solver backend (`"HIGHS"` or `"GUROBI"`). HiGHS is the default; Gurobi is the backend alternative. SCIP and CBC are not supported. |
 | `SOLVER_TIMEOUT_SEC`                          | `float`             | Solver time limit in seconds.                                                                                                          |
 | `USE_INCREMENTAL_SOLVER`                      | `bool`              | `True` for iterative cutting-plane, `False` for monolithic MILP.                                                                       |
@@ -160,7 +167,7 @@ Standardizes export, import, and reproduction of experiments across both the Web
 | `DEFAULT_REDUCTION_METHOD`                    | `str`               | Active reduction method (`"NONE"`, `"BBOX"`, `"FLOODFILL"`, `"SPARSIFIED"`, `"PATH_ONLY"`).                                            |
 | `BBOX_MARGIN`                                 | `int`               | Cell padding around bounding box.                                                                                                      |
 | `TARGET_TERRAIN`                              | `str`               | Semantic target terrain for soil upgrades.                                                                                             |
-| `DEFAULT_TERRAIN`                             | `str`               | Terrain assigned to uninitialized cells and used as the procedural biome fallback.                                                     |
+| `DEFAULT_TERRAIN`                             | `str`               | Terrain assigned to uninitialized cells and used when a classified terrain is unavailable.                                            |
 | `BASE_TERRAIN`                                | `str`               | Traversable reference terrain for ISP traversability calculations.                                                                     |
 | `TERRAINS`, `TERRAIN_COLORS`                  | `dict`              | Terrain speeds and `#RRGGBB` colors, included in each exported experiment.                                                             |
 | `DEFAULT_PLANNER`                             | `str`               | Path planner algorithm (`"ASTAR"` or `"DIJKSTRA"`).                                                                                    |
@@ -169,4 +176,4 @@ Standardizes export, import, and reproduction of experiments across both the Web
 | `goal`                                        | `[row, col]`        | Destination coordinate pair.                                                                                                           |
 | `p_user`                                      | `[[row, col], ...]` | Full alternative trajectory from start to goal.                                                                                        |
 
-Experiment JSON files include the terrain registry and the configuration fields listed above so a custom terrain setup can be reproduced. Legacy JSON files without optional configuration fields remain valid and use the built-in defaults. Runtime edits are held in memory and do not rewrite Python configuration modules. The `OUTPUT_DIR` field must contain a user-selected path whenever an API request persists artifacts.
+Experiment JSON files include the terrain registry and the configuration fields listed above so a custom terrain setup can be reproduced. Legacy JSON files without optional configuration fields remain valid and use the built-in defaults. Runtime edits are held in memory and do not rewrite Python configuration modules. Water remains impassable through `IMPASSABLE_TERRAINS` and is stored with `obstacle=0`; serialized maps from before this separation are normalized when loaded. The `OUTPUT_DIR` field must contain a user-selected path whenever an API request persists artifacts.
