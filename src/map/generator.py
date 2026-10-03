@@ -3,7 +3,6 @@ import math
 from ..config import (
     CELL_SIZE,
     CONNECTIVITY,
-    DEFAULT_TERRAIN,
     IMPASSABLE_TERRAINS,
     MAP_DEFAULT_SEED,
     MAP_ELEVATION_FREQ,
@@ -29,8 +28,14 @@ from .terrain import classify_terrain_matrix, generate_moisture_field
 from .validation import largest_traversable_component_ratio
 
 
-def _derive_seed(seed: int, attempt: int, field_offset: int) -> int:
-    return (seed + attempt * 1_000_003 + field_offset) % (2**32)
+def _derive_attempt_seed(seed: int, attempt: int) -> int:
+    if attempt == 0:
+        return seed
+    return (seed + attempt * 1_000_003) % (2**32)
+
+
+def _derive_field_seed(seed: int, field_offset: int) -> int:
+    return (seed + field_offset) % (2**32)
 
 
 def generate_map(
@@ -85,10 +90,11 @@ def generate_map(
 
     best_ratio = 0.0
     for attempt in range(max_generation_attempts):
+        effective_seed = _derive_attempt_seed(seed_value, attempt)
         elevation_normalized, elevation_meters = generate_elevation_field(
             height=rows,
             width=cols,
-            seed=_derive_seed(seed_value, attempt, 0),
+            seed=_derive_field_seed(effective_seed, 0),
             frequency=elevation_freq,
             octaves=elevation_octaves,
             scale=elevation_scale,
@@ -96,7 +102,7 @@ def generate_map(
         moisture_field = generate_moisture_field(
             height=rows,
             width=cols,
-            seed=_derive_seed(seed_value, attempt, 101),
+            seed=_derive_field_seed(effective_seed, 101),
             frequency=moisture_freq,
             octaves=moisture_octaves,
         )
@@ -105,12 +111,11 @@ def generate_map(
             moisture_field=moisture_field,
             thresholds=terrain_threshold_values,
             available_terrains=set(TERRAINS),
-            default_terrain=DEFAULT_TERRAIN,
         )
         roughness_field = generate_roughness_field(
             height=rows,
             width=cols,
-            seed=_derive_seed(seed_value, attempt, 202),
+            seed=_derive_field_seed(effective_seed, 202),
             frequency=roughness_freq,
             octaves=roughness_octaves,
         )
@@ -131,6 +136,9 @@ def generate_map(
         grid.load_elevation_matrix(elevation_meters.tolist())
         grid.load_terrain_matrix(terrain_matrix)
         grid.load_obstacle_matrix(obstacle_matrix)
+        grid.base_seed = seed_value
+        grid.effective_seed = effective_seed
+        grid.generation_attempt = attempt
 
         component_ratio = largest_traversable_component_ratio(grid)
         best_ratio = max(best_ratio, component_ratio)

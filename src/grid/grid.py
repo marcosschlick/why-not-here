@@ -37,6 +37,9 @@ class Grid:
             self.cells.append(row)
 
         self.leveled_slopes: set[tuple[tuple[int, int], tuple[int, int]]] = set()
+        self.base_seed: int | None = None
+        self.effective_seed: int | None = None
+        self.generation_attempt: int | None = None
 
     def get_cell(self, u: tuple[int, int]) -> Cell:
         return self.cells[u[0]][u[1]]
@@ -139,8 +142,7 @@ class Grid:
     def load_obstacle_matrix(self, matrix: list[list[int]]) -> None:
         for i in range(self.h):
             for j in range(self.w):
-                cell = self.cells[i][j]
-                cell.obstacle = 0 if cell.terrain == "WATER_RIVER" else matrix[i][j]
+                self.cells[i][j].obstacle = matrix[i][j]
 
     def to_dict(self) -> dict:
         return {
@@ -161,17 +163,16 @@ class Grid:
         grid = cls(
             h=data["h"],
             w=data["w"],
-            cell_size=data.get("cell_size", 1.0),
-            connectivity=data.get("connectivity", 8),
-            max_slope_deg=data.get("max_slope_deg", 20.0),
+            cell_size=data["cell_size"],
+            connectivity=data["connectivity"],
+            max_slope_deg=data["max_slope_deg"],
         )
-        if data.get("speeds"):
-            grid.speeds = data["speeds"]
+        grid.speeds = data["speeds"]
         grid.load_terrain_matrix(data["terrain"])
         grid.load_elevation_matrix(data["elevation"])
         grid.load_obstacle_matrix(data["obstacle"])
         grid.leveled_slopes = {
-            (tuple(e[0]), tuple(e[1])) for e in data.get("leveled_slopes", [])
+            (tuple(e[0]), tuple(e[1])) for e in data["leveled_slopes"]
         }
         return grid
 

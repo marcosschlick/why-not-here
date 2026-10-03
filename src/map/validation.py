@@ -12,7 +12,7 @@ def largest_traversable_component_ratio(grid: Grid) -> float:
     if not remaining:
         return 0.0
 
-    total = len(remaining)
+    total = grid.h * grid.w
     largest = 0
     while remaining:
         start = remaining.pop()

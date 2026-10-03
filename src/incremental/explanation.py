@@ -1,4 +1,3 @@
-from src.config import IMPASSABLE_TERRAINS
 from src.grid.grid import Grid
 from src.isp.semantics import SemanticModifications
 
@@ -8,7 +7,6 @@ TERRAIN_NAMES = {
     "DRY_VEGETATION": "dry vegetation",
     "SAND": "sand",
     "MUD": "mud",
-    "WATER_RIVER": "river/stream",
 }
 
 
@@ -23,7 +21,12 @@ def generate_explanation_text(
         return "No feasible intervention was found to make the alternative route p' optimal."
 
     has_terrain = bool(modifications.terrain_nodes)
-    has_obstacle = bool(modifications.obstacle_nodes)
+    obstacle_nodes = modifications.obstacle_nodes
+    if grid is not None:
+        obstacle_nodes = [
+            u for u in obstacle_nodes if grid.get_cell(u).obstacle != 0
+        ]
+    has_obstacle = bool(obstacle_nodes)
     has_slope = bool(modifications.slope_edges)
 
     if not has_terrain and not has_obstacle and not has_slope:
@@ -61,34 +64,12 @@ def generate_explanation_text(
             )
 
     if has_obstacle:
-        water_count = 0
-        obs_count = 0
-        if grid is not None:
-            for u in modifications.obstacle_nodes:
-                if grid.get_cell(u).terrain in IMPASSABLE_TERRAINS:
-                    water_count += 1
-                else:
-                    obs_count += 1
-        else:
-            obs_count = len(modifications.obstacle_nodes)
-
-        if water_count > 0:
-            if water_count == 1:
-                lines.append("- Build a traversable crossing at 1 river/stream cell.")
-            else:
-                lines.append(
-                    f"- Build traversable crossings at {water_count} river/stream cells."
-                )
-        if obs_count > 0:
-            if obs_count == 1:
-                lines.append(
-                    "- Remove the impassable obstacle blocking 1 cell on the alternative route."
-                )
-            else:
-                lines.append(
-                    f"- Remove impassable obstacles blocking {obs_count} cells "
-                    "on the alternative route."
-                )
+        obstacle_count = len(obstacle_nodes)
+        obstacle_cell_label = "cell" if obstacle_count == 1 else "cells"
+        lines.append(
+            f"- Remove physical obstacles blocking {obstacle_count} "
+            f"{obstacle_cell_label} on the alternative route."
+        )
 
     if has_slope:
         slope_count = len(modifications.slope_edges)

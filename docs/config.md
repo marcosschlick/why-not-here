@@ -36,10 +36,12 @@ Controls the independent Perlin fields, terrain classification thresholds, conte
 | `MAP_ROUGHNESS_OCTAVES`        | `int`              | `2`           | Number of roughness noise octaves.                                            |
 | `MAP_TERRAIN_THRESHOLDS`       | `dict[str, float]` | See config    | Normalized elevation and moisture cutoffs used by the ordered classifier.    |
 | `MAP_ROUGHNESS_THRESHOLDS`     | `dict[str, float]` | See config    | Per-terrain roughness cutoffs; lower values create more obstacles.           |
-| `MAP_MIN_MAIN_COMPONENT_RATIO` | `float`            | `0.80`        | Minimum fraction of traversable cells in the largest valid component.        |
+| `MAP_MIN_MAIN_COMPONENT_RATIO` | `float`            | `0.70`        | Minimum fraction of all grid cells in the largest traversable component.     |
 | `MAP_MAX_GENERATION_ATTEMPTS`  | `int`              | `5`           | Maximum deterministic seed attempts before generation fails with an error.   |
 
 `MAP_TERRAIN_THRESHOLDS` contains `LOWLAND_ELEVATION_MAX=0.28`, `WATER_MOISTURE_MIN=0.70`, `MUD_MOISTURE_MIN=0.48`, `ROCKY_ELEVATION_MIN=0.76`, `ROCKY_MOISTURE_MAX=0.40`, `FOREST_MOISTURE_MIN=0.66`, `DRY_MOISTURE_MAX=0.34`, and `GRASSLAND_ELEVATION_MIN=0.58`. `MAP_ROUGHNESS_THRESHOLDS` contains `FOREST=0.74`, `ROCKY=0.72`, `GRASSLAND=0.88`, `GRASS=0.90`, `DRY_VEGETATION=0.90`, `MUD=0.97`, and `SAND=0.98`.
+
+`WATER_RIVER` represents impassable aquatic regions classified from low elevation and high moisture; it does not represent a simulated river network. Slope angles follow `θ = atan(Δz / d)` (converted to degrees for the traversability limit). Their distribution depends on elevation scale, elevation frequency, and `CELL_SIZE`; the current calibration uses `CELL_SIZE=1.0` and is not intended to remain physically equivalent at every resolution.
 
 ---
 
@@ -84,7 +86,7 @@ The MILP objective assigns unit cost to each binary terrain, obstacle, and slope
 
 The Web terrain registry keeps the `TERRAINS` and `TERRAIN_COLORS` keys in sync. Terrain names must be unique, colors use `#RRGGBB`, and speeds at or below `0.0` are impassable. `DEFAULT_TERRAIN` must exist in the registry. `BASE_TERRAIN` and `TARGET_TERRAIN` must reference terrains with positive speeds. `IMPASSABLE_TERRAINS`, `V_MAX`, and `TARGET_SPEED` are recalculated whenever the registry or selected terrains change. The current default, base, and target terrains cannot be removed until another terrain is selected.
 
-Procedural biome assignment continues to use the built-in biome threshold order. Removed biome names are skipped, and the selected `DEFAULT_TERRAIN` is used when no remaining biome threshold matches. Custom terrains are available as defaults and ISP targets, and their chosen colors are used whenever they appear in map data.
+Procedural terrain classification uses normalized elevation and moisture fields. Every terrain produced by the classifier must exist in `TERRAINS`; generation reports a clear error when a required terrain is missing. `DEFAULT_TERRAIN` remains the terrain for uninitialized cells. Custom terrains are available as defaults and ISP targets, and their chosen colors are used whenever they appear in map data.
 
 ---
 
@@ -176,4 +178,4 @@ Standardizes export, import, and reproduction of experiments across both the Web
 | `goal`                                        | `[row, col]`        | Destination coordinate pair.                                                                                                           |
 | `p_user`                                      | `[[row, col], ...]` | Full alternative trajectory from start to goal.                                                                                        |
 
-Experiment JSON files include the terrain registry and the configuration fields listed above so a custom terrain setup can be reproduced. Legacy JSON files without optional configuration fields remain valid and use the built-in defaults. Runtime edits are held in memory and do not rewrite Python configuration modules. Water remains impassable through `IMPASSABLE_TERRAINS` and is stored with `obstacle=0`; serialized maps from before this separation are normalized when loaded. The `OUTPUT_DIR` field must contain a user-selected path whenever an API request persists artifacts.
+Experiment JSON files include the terrain registry and the configuration fields listed above so a custom terrain setup can be reproduced. Legacy JSON files without optional configuration fields remain valid and use the built-in defaults. Runtime edits are held in memory and do not rewrite Python configuration modules. Water remains impassable through `IMPASSABLE_TERRAINS` and uses `obstacle=0`; map JSON loading copies the stored obstacle matrix directly. Generated maps expose their base seed, effective seed, and zero-based generation attempt through the returned `Grid`, logs, and generation API responses. The `OUTPUT_DIR` field must contain a user-selected path whenever an API request persists artifacts.

@@ -2,6 +2,17 @@ import numpy as np
 
 from .noise import perlin_noise_2d
 
+GENERATED_TERRAINS = (
+    "WATER_RIVER",
+    "MUD",
+    "SAND",
+    "ROCKY",
+    "FOREST",
+    "DRY_VEGETATION",
+    "GRASSLAND",
+    "GRASS",
+)
+
 
 def generate_moisture_field(
     height: int,
@@ -51,8 +62,11 @@ def classify_terrain_matrix(
     moisture_field: np.ndarray,
     thresholds: dict[str, float],
     available_terrains: set[str],
-    default_terrain: str,
 ) -> list[list[str]]:
+    for terrain in GENERATED_TERRAINS:
+        if terrain not in available_terrains:
+            raise ValueError(f"Unknown generated terrain: {terrain}")
+
     height, width = elevation_field.shape
     terrain_matrix: list[list[str]] = []
     for row in range(height):
@@ -63,8 +77,8 @@ def classify_terrain_matrix(
                 float(moisture_field[row, col]),
                 thresholds,
             )
-            terrain_row.append(
-                terrain if terrain in available_terrains else default_terrain
-            )
+            if terrain not in available_terrains:
+                raise ValueError(f"Unknown generated terrain: {terrain}")
+            terrain_row.append(terrain)
         terrain_matrix.append(terrain_row)
     return terrain_matrix

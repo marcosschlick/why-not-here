@@ -33,6 +33,14 @@ def generate_map(verbose: bool = True, persist_artifacts: bool = True) -> Grid:
         max_generation_attempts=config.MAP_MAX_GENERATION_ATTEMPTS,
     )
 
+    if verbose:
+        print(
+            "Generation accepted: "
+            f"base_seed={grid.base_seed}, "
+            f"effective_seed={grid.effective_seed}, "
+            f"generation_attempt={grid.generation_attempt}"
+        )
+
     if persist_artifacts:
         _start, _goal = prepare_endpoints(grid)
         _p_star, _cost_star, _ = plan_path(

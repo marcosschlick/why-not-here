@@ -1,4 +1,4 @@
-from ..config import BASE_TERRAIN, IMPASSABLE_TERRAINS, TARGET_TERRAIN
+from ..config import TARGET_TERRAIN
 from ..grid import Grid
 from .types import SemanticModifications
 
@@ -24,14 +24,16 @@ def apply_semantic_modifications(
         | set(modifications.slope_edges)
         | {(v, u) for u, v in modifications.slope_edges}
     )
+    new_grid.base_seed = grid.base_seed
+    new_grid.effective_seed = grid.effective_seed
+    new_grid.generation_attempt = grid.generation_attempt
 
     for u in modifications.terrain_nodes:
         new_grid.get_cell(u).terrain = TARGET_TERRAIN
 
     for u in modifications.obstacle_nodes:
         cell = new_grid.get_cell(u)
-        cell.obstacle = 0
-        if cell.terrain in IMPASSABLE_TERRAINS:
-            cell.terrain = BASE_TERRAIN
+        if cell.obstacle != 0:
+            cell.obstacle = 0
 
     return new_grid

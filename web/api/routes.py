@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from src import config
+from src.grid import Grid
 from src.isp.precheck import validate_alternative_path
 from src.pipeline.experiment_config import (
     apply_experiment_config,
@@ -41,6 +42,14 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api")
+
+
+def _generation_metadata(grid: Grid) -> dict[str, int | None]:
+    return {
+        "base_seed": grid.base_seed,
+        "effective_seed": grid.effective_seed,
+        "generation_attempt": grid.generation_attempt,
+    }
 
 
 def sanitize_floats(obj: Any) -> Any:
@@ -178,6 +187,7 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
             "optimal_cost": safe_optimal_cost,
             "map_image_url": map_image_url,
             "config": get_all_configurations(),
+            "generation": _generation_metadata(grid),
             "user_path": [list(pt) for pt in p_user],
         }
         return sanitize_floats(response_data)
@@ -255,6 +265,7 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
             "optimal_cost": safe_optimal_cost,
             "map_image_url": map_image_url,
             "config": get_all_configurations(),
+            "generation": _generation_metadata(grid),
         }
         return sanitize_floats(response_data)
     except Exception as exc:

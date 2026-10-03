@@ -48,6 +48,13 @@ export interface MapData {
   optimal_cost?: number | null;
   map_image_url: string;
   config: SystemConfig;
+  generation?: MapGenerationMetadata;
+}
+
+export interface MapGenerationMetadata {
+  base_seed: number | null;
+  effective_seed: number | null;
+  generation_attempt: number | null;
 }
 
 export interface SemanticModificationsData {
@@ -104,6 +111,7 @@ export interface ExecutionStatus {
   error: string | null;
   last_result: LastResult | null;
   artifacts: string[];
+  generation_runs?: MapGenerationMetadata[];
 }
 
 export interface DirectoryListing {

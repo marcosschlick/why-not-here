@@ -18,6 +18,7 @@ class PipelineRunner:
             "error": None,
             "last_result": None,
             "artifacts": [],
+            "generation_runs": [],
         }
 
     def is_running(self) -> bool:
@@ -31,6 +32,7 @@ class PipelineRunner:
             self.state["total_runs"] = runs
             self.state["status"] = "started"
             self.state["error"] = None
+            self.state["generation_runs"] = []
 
         worker_thread = threading.Thread(
             target=self._run_loop, args=(runs,), daemon=True
@@ -43,7 +45,14 @@ class PipelineRunner:
                 with self.lock:
                     self.state["current_run"] = index
                     self.state["status"] = f"Running {index} of {runs}"
-                generate_map(verbose=False)
+                grid = generate_map(verbose=False)
+                generation = {
+                    "base_seed": grid.base_seed,
+                    "effective_seed": grid.effective_seed,
+                    "generation_attempt": grid.generation_attempt,
+                }
+                with self.lock:
+                    self.state["generation_runs"].append(generation)
                 result = run_isp(verbose=False)
                 if result:
                     mod_counts = None
@@ -83,6 +92,7 @@ class PipelineRunner:
     def get_status(self) -> dict[str, Any]:
         with self.lock:
             snapshot = dict(self.state)
+            snapshot["generation_runs"] = list(self.state["generation_runs"])
             if not snapshot["artifacts"]:
                 snapshot["artifacts"] = collect_artifacts()
             return snapshot
