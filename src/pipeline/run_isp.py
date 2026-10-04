@@ -274,15 +274,17 @@ def run_isp(
             grid=grid,
             modifications=modifications,
             modified_grid=mod_grid,
+            endpoints=(start, goal),
             title=f"4. ISP Modifications Only\n{artifact_status}",
             save_path=str(img4),
         )
         render_tactical_map(
             grid=grid,
+            optimal_path=p_star,
             user_path=p_user,
             modifications=modifications,
             modified_grid=mod_grid,
-            title=f"5. ISP Modifications with Alternative Path\n{artifact_status}",
+            title=f"5. ISP Modifications with Both Routes\n{artifact_status}",
             save_path=str(img5),
         )
         saved_images.extend([img4, img5])

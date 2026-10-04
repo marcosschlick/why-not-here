@@ -18,6 +18,26 @@ This document defines the official 5-color palette for the project.
 
 ## Code Tokens
 
+On tactical maps, use Azure Blue (`#327DE1`) for the optimal route and map-only
+Vermilion (`#D55E00`) for the alternative route. Draw both as solid lines with
+the same width of 0.14 cell widths. In cells shared by both paths, offset the
+lines by 0.12 cell widths to opposite sides so both colors remain visible.
+Vermilion is specific to the route map and does not add a token to the official
+five-color palette.
+
+For semantic map changes, use map-specific colors: Pink (`#CC79A7`) for changed
+terrain, Orange (`#E69F00`) for removed obstacles, Teal (`#009E73`) for leveled
+slopes, and Sky Blue (`#56B4E9`) for traversable water. Draw every change as a
+filled circle with a 0.39-cell radius, a Bright Snow (`#F8F8F8`) halo with a
+0.46-cell radius, and a Shadow Grey (`#282828`) edge 0.035 cells wide. Center
+terrain, obstacle, and water changes on their cells. Center one slope marker at
+the midpoint of each leveled edge. Use the same circles in map legends; slope
+counts represent leveled edges. These colors are specific to the tactical map
+and do not add tokens to the official palette.
+
+Preserve the existing start diamond and goal circle colors and shapes, each
+with a 0.4-cell radius.
+
 ### CSS Custom Properties
 
 ```css
@@ -27,6 +47,16 @@ This document defines the official 5-color palette for the project.
   --lobster-pink: #db5461;
   --bright-snow: #f8f8f8;
   --shadow-grey: #282828;
+  --map-start: #00b0ff;
+  --map-start-edge: #003366;
+  --map-goal: #ffd700;
+  --map-goal-edge: #664400;
+  --map-route: #d55e00;
+  --map-optimal-route: #327de1;
+  --map-change-terrain: #cc79a7;
+  --map-change-obstacle: #e69f00;
+  --map-change-slope: #009e73;
+  --map-change-water: #56b4e9;
 }
 ```
 

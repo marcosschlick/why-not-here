@@ -60,19 +60,38 @@ def render_tactical_map(
     ax.set_xlabel("Column (j)", fontsize=10)
     ax.set_ylabel("Row (i)", fontsize=10)
 
+    build_tactical_legend(
+        ax=ax,
+        grid=target_grid,
+        modifications=modifications,
+        show_optimal_path=bool(optimal_path),
+        show_alternative_path=bool(user_path),
+        show_endpoints=bool(optimal_path or user_path or endpoints),
+    )
+
+    plt.tight_layout()
+    fig.canvas.draw()
+    cell_width_pixels = abs(
+        ax.transData.transform((1, 0))[0] - ax.transData.transform((0, 0))[0]
+    )
+    cell_width_points = cell_width_pixels * 72 / dpi
+    route_width = cell_width_points * 0.14
+    edge_width = cell_width_points * 0.035
+
     if modifications is not None:
-        draw_modifications(ax, modifications, path_lw=layout["path_lw"])
+        draw_modifications(ax, modifications, edge_width)
+
+    shared_cells = set(optimal_path or []) & set(user_path or [])
 
     if optimal_path:
         draw_path(
             ax=ax,
             path=optimal_path,
             color=OPTIMAL_PATH_COLOR,
-            label="Optimal Path p*",
-            linestyle="-",
-            linewidth=layout["path_lw"],
-            marker_size=layout["marker_size"],
+            linewidth=route_width,
             zorder=5,
+            shared_cells=shared_cells,
+            offset_side=1,
         )
 
     if user_path:
@@ -80,27 +99,32 @@ def render_tactical_map(
             ax=ax,
             path=user_path,
             color=USER_PATH_COLOR,
-            label="Alternative Path p'",
-            linestyle="--",
-            linewidth=layout["path_lw"],
-            marker_size=layout["marker_size"],
+            linewidth=route_width,
             zorder=5,
+            shared_cells=shared_cells,
+            offset_side=-1,
         )
 
     if optimal_path:
-        draw_endpoints(ax, optimal_path[0], optimal_path[-1], size=layout["endpoint_s"])
+        draw_endpoints(
+            ax,
+            optimal_path[0],
+            optimal_path[-1],
+            radius=0.4,
+            edge_width=edge_width,
+        )
     elif user_path:
-        draw_endpoints(ax, user_path[0], user_path[-1], size=layout["endpoint_s"])
+        draw_endpoints(
+            ax,
+            user_path[0],
+            user_path[-1],
+            radius=0.4,
+            edge_width=edge_width,
+        )
     elif endpoints:
-        draw_endpoints(ax, endpoints[0], endpoints[1], size=layout["endpoint_s"])
-
-    build_tactical_legend(
-        ax=ax,
-        grid=target_grid,
-        modifications=modifications,
-    )
-
-    plt.tight_layout()
+        draw_endpoints(
+            ax, endpoints[0], endpoints[1], radius=0.4, edge_width=edge_width
+        )
 
     if save_path:
         path = Path(save_path)

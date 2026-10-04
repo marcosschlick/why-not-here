@@ -53,55 +53,161 @@ const START_RGB: Rgb = [0, 176, 255];
 const START_EDGE_RGB: Rgb = [0, 51, 102];
 const GOAL_RGB: Rgb = [255, 215, 0];
 const GOAL_EDGE_RGB: Rgb = [102, 68, 0];
-const USER_PATH_RGB: Rgb = [255, 23, 68];
-const OPTIMAL_PATH_RGB: Rgb = [0, 230, 118];
-const ISP_TERRAIN_RGB: Rgb = [0, 229, 255];
-const ISP_OBSTACLE_RGB: Rgb = [255, 23, 68];
-const ISP_SLOPE_RGB: Rgb = [170, 0, 255];
-const ISP_WATER_RGB: Rgb = [255, 193, 7];
+const USER_PATH_RGB: Rgb = [213, 94, 0];
+const OPTIMAL_PATH_RGB: Rgb = [50, 125, 225];
+const MODIFICATION_TERRAIN_RGB: Rgb = [204, 121, 167];
+const MODIFICATION_OBSTACLE_RGB: Rgb = [230, 159, 0];
+const MODIFICATION_SLOPE_RGB: Rgb = [0, 158, 115];
+const MODIFICATION_WATER_RGB: Rgb = [86, 180, 233];
+const MODIFICATION_HALO_RGB: Rgb = [248, 248, 248];
+const MODIFICATION_EDGE_RGB: Rgb = [40, 40, 40];
 const GRID_RGB: Rgb = [255, 255, 255];
+const MODIFICATION_RADIUS = 0.39;
+const MODIFICATION_HALO_RADIUS = 0.46;
+const CELL_EDGE_WIDTH = 0.035;
+const ROUTE_WIDTH = 0.14;
+const ENDPOINT_RADIUS = 0.4;
+
+function pathWithSharedOffset(
+  path: GridPoint[],
+  sharedCells: Set<string>,
+  offsetSide: number,
+): { x: number; y: number }[] {
+  return path.map(([row, col], index) => {
+    const point = { x: col, y: row };
+    if (!sharedCells.has(`${row},${col}`)) return point;
+
+    const previous = path[index - 1] ?? path[index];
+    const next = path[index + 1] ?? path[index];
+    let tangentX = next[1] - previous[1];
+    let tangentY = next[0] - previous[0];
+    if (Math.hypot(tangentX, tangentY) === 0) {
+      tangentX = next[1] - col || col - previous[1];
+      tangentY = next[0] - row || row - previous[0];
+    }
+
+    const tangentLength = Math.hypot(tangentX, tangentY);
+    if (tangentLength === 0) return point;
+    if (tangentX < 0 || (tangentX === 0 && tangentY < 0)) {
+      tangentX *= -1;
+      tangentY *= -1;
+    }
+
+    const beforeIsShared =
+      index > 0 &&
+      sharedCells.has(`${path[index - 1][0]},${path[index - 1][1]}`);
+    const afterIsShared =
+      index + 1 < path.length &&
+      sharedCells.has(`${path[index + 1][0]},${path[index + 1][1]}`);
+    const transition = beforeIsShared && afterIsShared ? 1 : 0.5;
+    const offset = (0.12 * offsetSide * transition) / tangentLength;
+    return {
+      x: col - tangentY * offset,
+      y: row + tangentX * offset,
+    };
+  });
+}
 
 function drawPath(
   ctx: CanvasRenderingContext2D,
   path: GridPoint[],
   color: Rgb,
   cellSize: number,
-  alpha = 1,
-  lineWidth = Math.max(2, cellSize * 0.4),
-  dashed = false,
+  lineWidth: number,
+  sharedCells: Set<string>,
+  offsetSide: number,
 ) {
   if (path.length === 0) return;
 
+  const points = pathWithSharedOffset(path, sharedCells, offsetSide).map(
+    ({ x, y }) => ({
+      x: x * cellSize + cellSize / 2,
+      y: y * cellSize + cellSize / 2,
+    }),
+  );
+
   ctx.beginPath();
-  path.forEach(([row, col], index) => {
-    const x = col * cellSize + cellSize / 2;
-    const y = row * cellSize + cellSize / 2;
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = rgba(color, alpha);
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const next = points[index + 1];
+    const incomingX = current.x - previous.x;
+    const incomingY = current.y - previous.y;
+    const outgoingX = next.x - current.x;
+    const outgoingY = next.y - current.y;
+    const incomingLength = Math.hypot(incomingX, incomingY);
+    const outgoingLength = Math.hypot(outgoingX, outgoingY);
+    const cross = incomingX * outgoingY - incomingY * outgoingX;
+
+    if (incomingLength === 0 || outgoingLength === 0) {
+      ctx.lineTo(current.x, current.y);
+      continue;
+    }
+
+    if (Math.abs(cross) < 1e-6) {
+      ctx.lineTo(current.x, current.y);
+      continue;
+    }
+
+    const radius = Math.min(
+      cellSize * 0.28,
+      incomingLength * 0.4,
+      outgoingLength * 0.4,
+    );
+    const entryX = current.x - (incomingX / incomingLength) * radius;
+    const entryY = current.y - (incomingY / incomingLength) * radius;
+    const exitX = current.x + (outgoingX / outgoingLength) * radius;
+    const exitY = current.y + (outgoingY / outgoingLength) * radius;
+
+    ctx.lineTo(entryX, entryY);
+    ctx.quadraticCurveTo(current.x, current.y, exitX, exitY);
+  }
+  const lastPoint = points[points.length - 1];
+  ctx.lineTo(lastPoint.x, lastPoint.y);
+  ctx.strokeStyle = rgba(color);
   ctx.lineWidth = lineWidth;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.setLineDash(
-    dashed ? [Math.max(3, cellSize * 0.6), Math.max(2, cellSize * 0.35)] : [],
-  );
   ctx.stroke();
-  ctx.setLineDash([]);
+}
 
-  if (cellSize >= 8) {
-    ctx.fillStyle = rgba(color, alpha);
-    for (const [row, col] of path) {
-      ctx.beginPath();
-      ctx.arc(
-        col * cellSize + cellSize / 2,
-        row * cellSize + cellSize / 2,
-        Math.max(1.5, cellSize * 0.16),
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    }
+function drawModificationCircle(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  color: Rgb,
+  cellSize: number,
+) {
+  ctx.beginPath();
+  ctx.arc(
+    centerX,
+    centerY,
+    cellSize * MODIFICATION_HALO_RADIUS,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fillStyle = rgba(MODIFICATION_HALO_RGB);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, cellSize * MODIFICATION_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = rgba(color);
+  ctx.fill();
+  ctx.strokeStyle = rgba(MODIFICATION_EDGE_RGB);
+  ctx.lineWidth = cellSize * CELL_EDGE_WIDTH;
+  ctx.stroke();
+}
+
+function drawModificationCells(
+  ctx: CanvasRenderingContext2D,
+  points: GridPoint[],
+  color: Rgb,
+  cellSize: number,
+) {
+  for (const [row, col] of points) {
+    const centerX = col * cellSize + cellSize / 2;
+    const centerY = row * cellSize + cellSize / 2;
+    drawModificationCircle(ctx, centerX, centerY, color, cellSize);
   }
 }
 
@@ -237,116 +343,71 @@ export function TacticalMapCanvas({
       }
     }
 
+    const terrainNodes = modifications?.terrain_nodes ?? [];
+    const obstacleNodes = modifications?.obstacle_nodes ?? [];
+    const slopeEdges = modifications?.slope_edges ?? [];
+    const waterNodes = modifications?.water_nodes ?? [];
+
+    for (const [from, to] of slopeEdges) {
+      const centerX = ((from[1] + to[1] + 1) * effectiveCellSize) / 2;
+      const centerY = ((from[0] + to[0] + 1) * effectiveCellSize) / 2;
+      drawModificationCircle(
+        ctx,
+        centerX,
+        centerY,
+        MODIFICATION_SLOPE_RGB,
+        effectiveCellSize,
+      );
+    }
+    drawModificationCells(
+      ctx,
+      terrainNodes,
+      MODIFICATION_TERRAIN_RGB,
+      effectiveCellSize,
+    );
+    drawModificationCells(
+      ctx,
+      obstacleNodes,
+      MODIFICATION_OBSTACLE_RGB,
+      effectiveCellSize,
+    );
+    drawModificationCells(
+      ctx,
+      waterNodes,
+      MODIFICATION_WATER_RGB,
+      effectiveCellSize,
+    );
+    const userPathCells = new Set(
+      userPath.map(([row, col]) => `${row},${col}`),
+    );
+    const sharedCells = new Set(
+      optimalPath
+        .filter(([row, col]) => userPathCells.has(`${row},${col}`))
+        .map(([row, col]) => `${row},${col}`),
+    );
+    const routeLineWidth = effectiveCellSize * ROUTE_WIDTH;
     drawPath(
       ctx,
       optimalPath,
       OPTIMAL_PATH_RGB,
       effectiveCellSize,
-      0.9,
-      Math.max(2, effectiveCellSize * 0.28),
-    );
-    drawPath(
-      ctx,
-      userPath,
-      USER_PATH_RGB,
-      effectiveCellSize,
-      0.35,
-      Math.max(3, effectiveCellSize * 0.7),
-    );
-    drawPath(
-      ctx,
-      userPath,
-      USER_PATH_RGB,
-      effectiveCellSize,
+      routeLineWidth,
+      sharedCells,
       1,
-      Math.max(2, effectiveCellSize * 0.4),
-      true,
     );
-
-    const terrainNodes = modifications?.terrain_nodes ?? [];
-    const obstacleNodes = modifications?.obstacle_nodes ?? [];
-    const slopeEdges = modifications?.slope_edges ?? [];
-    const waterNodes = modifications?.water_nodes ?? [];
-    for (const [row, col] of terrainNodes) {
-      const x = col * effectiveCellSize;
-      const y = row * effectiveCellSize;
-      ctx.fillStyle = rgba(ISP_TERRAIN_RGB, 0.38);
-      ctx.fillRect(x, y, effectiveCellSize, effectiveCellSize);
-      ctx.strokeStyle = rgba(ISP_TERRAIN_RGB);
-      ctx.lineWidth = Math.max(2, effectiveCellSize * 0.12);
-      ctx.strokeRect(
-        x + ctx.lineWidth / 2,
-        y + ctx.lineWidth / 2,
-        effectiveCellSize - ctx.lineWidth,
-        effectiveCellSize - ctx.lineWidth,
-      );
-    }
-
-    for (const [row, col] of obstacleNodes) {
-      const x = col * effectiveCellSize;
-      const y = row * effectiveCellSize;
-      ctx.fillStyle = rgba(ISP_OBSTACLE_RGB, 0.34);
-      ctx.fillRect(x, y, effectiveCellSize, effectiveCellSize);
-      drawHatch(
-        ctx,
-        x,
-        y,
-        effectiveCellSize,
-        effectiveCellSize,
-        rgba(ISP_OBSTACLE_RGB, 0.9),
-      );
-      ctx.strokeStyle = rgba(ISP_OBSTACLE_RGB);
-      ctx.lineWidth = Math.max(2, effectiveCellSize * 0.12);
-      ctx.strokeRect(
-        x + ctx.lineWidth / 2,
-        y + ctx.lineWidth / 2,
-        effectiveCellSize - ctx.lineWidth,
-        effectiveCellSize - ctx.lineWidth,
-      );
-    }
-
-    for (const [row, col] of waterNodes) {
-      const x = col * effectiveCellSize;
-      const y = row * effectiveCellSize;
-      ctx.fillStyle = rgba(ISP_WATER_RGB, 0.18);
-      ctx.fillRect(x, y, effectiveCellSize, effectiveCellSize);
-      drawHatch(
-        ctx,
-        x,
-        y,
-        effectiveCellSize,
-        effectiveCellSize,
-        rgba(ISP_WATER_RGB, 0.9),
-      );
-      ctx.strokeStyle = rgba(ISP_WATER_RGB);
-      ctx.lineWidth = Math.max(2, effectiveCellSize * 0.12);
-      ctx.strokeRect(
-        x + ctx.lineWidth / 2,
-        y + ctx.lineWidth / 2,
-        effectiveCellSize - ctx.lineWidth,
-        effectiveCellSize - ctx.lineWidth,
-      );
-    }
-
-    for (const [from, to] of slopeEdges) {
-      ctx.beginPath();
-      ctx.moveTo(
-        from[1] * effectiveCellSize + effectiveCellSize / 2,
-        from[0] * effectiveCellSize + effectiveCellSize / 2,
-      );
-      ctx.lineTo(
-        to[1] * effectiveCellSize + effectiveCellSize / 2,
-        to[0] * effectiveCellSize + effectiveCellSize / 2,
-      );
-      ctx.strokeStyle = rgba(ISP_SLOPE_RGB);
-      ctx.lineWidth = Math.max(2.5, effectiveCellSize * 0.22);
-      ctx.lineCap = "round";
-      ctx.stroke();
-    }
+    drawPath(
+      ctx,
+      userPath,
+      USER_PATH_RGB,
+      effectiveCellSize,
+      routeLineWidth,
+      sharedCells,
+      -1,
+    );
 
     const startX = start[1] * effectiveCellSize + effectiveCellSize / 2;
     const startY = start[0] * effectiveCellSize + effectiveCellSize / 2;
-    const markerRadius = Math.max(6, effectiveCellSize * 0.85);
+    const markerRadius = effectiveCellSize * ENDPOINT_RADIUS;
     ctx.save();
     ctx.translate(startX, startY);
     ctx.beginPath();
@@ -358,15 +419,8 @@ export function TacticalMapCanvas({
     ctx.fillStyle = rgba(START_RGB);
     ctx.fill();
     ctx.strokeStyle = rgba(START_EDGE_RGB);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = effectiveCellSize * CELL_EDGE_WIDTH;
     ctx.stroke();
-    if (effectiveCellSize >= 12) {
-      ctx.fillStyle = rgba(GRID_RGB);
-      ctx.font = `bold ${Math.max(8, effectiveCellSize * 0.6)}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("S", 0, 0);
-    }
     ctx.restore();
 
     const goalX = goal[1] * effectiveCellSize + effectiveCellSize / 2;
@@ -376,15 +430,8 @@ export function TacticalMapCanvas({
     ctx.fillStyle = rgba(GOAL_RGB);
     ctx.fill();
     ctx.strokeStyle = rgba(GOAL_EDGE_RGB);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = effectiveCellSize * CELL_EDGE_WIDTH;
     ctx.stroke();
-    if (effectiveCellSize >= 12) {
-      ctx.fillStyle = rgba(GOAL_EDGE_RGB);
-      ctx.font = `bold ${Math.max(8, effectiveCellSize * 0.6)}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("G", goalX, goalY);
-    }
   }, [
     cellSize,
     deviceScale,
@@ -508,20 +555,59 @@ export function TacticalMapLegend({
   mapData,
   modifications,
   showOptimalPath,
+  showAlternativePath = true,
 }: {
   mapData: MapData;
   modifications?: SemanticModificationsData | null;
   showOptimalPath?: boolean;
+  showAlternativePath?: boolean;
 }) {
-  const hasTerrainChanges = (modifications?.terrain_nodes?.length ?? 0) > 0;
-  const hasObstacleChanges = (modifications?.obstacle_nodes?.length ?? 0) > 0;
-  const hasSlopeChanges = (modifications?.slope_edges?.length ?? 0) > 0;
+  const terrainCount =
+    modifications?.terrain ?? modifications?.terrain_nodes?.length ?? 0;
+  const obstacleCount =
+    modifications?.obstacle ?? modifications?.obstacle_nodes?.length ?? 0;
+  const slopeCount =
+    modifications?.slope ?? modifications?.slope_edges?.length ?? 0;
   const waterCount =
     modifications?.water ?? modifications?.water_nodes?.length ?? 0;
-  const hasWaterChanges = waterCount > 0;
+  const hasChanges = terrainCount + obstacleCount + slopeCount + waterCount > 0;
 
   return (
     <div className="canvas-legend" aria-label="Map legend">
+      {(showOptimalPath || showAlternativePath) && (
+        <div className="legend-group">
+          <span className="legend-group-label">Routes</span>
+          {showOptimalPath && (
+            <span className="legend-item">
+              <span className="legend-color legend-optimal-route" />
+              p* · Optimal
+            </span>
+          )}
+          {showAlternativePath && (
+            <span className="legend-item">
+              <span className="legend-color legend-route" />
+              p′ · Alternative
+            </span>
+          )}
+          {showOptimalPath && showAlternativePath && (
+            <span className="legend-item">
+              <span className="legend-color legend-shared-route" />
+              Shared section
+            </span>
+          )}
+        </div>
+      )}
+      <div className="legend-group">
+        <span className="legend-group-label">Endpoints</span>
+        <span className="legend-item">
+          <span className="legend-color legend-start" />
+          Start
+        </span>
+        <span className="legend-item">
+          <span className="legend-color legend-goal" />
+          Goal
+        </span>
+      </div>
       <div className="legend-group">
         <span className="legend-group-label">Terrain</span>
         {Object.entries(mapData.speeds ?? mapData.config.TERRAINS ?? {}).map(
@@ -534,67 +620,44 @@ export function TacticalMapLegend({
                     mapData.config.TERRAIN_COLORS?.[name] ?? "#808080",
                 }}
               />
-              {name.toLowerCase().replaceAll("_", " ")} ({speed} m/s)
+              {name.toLowerCase().replaceAll("_", " ")} (
+              {Number(speed).toLocaleString("en-US", {
+                maximumSignificantDigits: 6,
+              })}{" "}
+              m/s)
             </span>
           ),
         )}
-      </div>
-      <div className="legend-group">
-        <span className="legend-group-label">Markers</span>
         <span className="legend-item">
           <span className="legend-color legend-obstacle" />
           Obstacle
         </span>
-        <span className="legend-item">
-          <span className="legend-color legend-start" />
-          Start (S)
-        </span>
-        <span className="legend-item">
-          <span className="legend-color legend-goal" />
-          Goal (G)
-        </span>
-        {showOptimalPath && (
-          <span className="legend-item">
-            <span className="legend-color legend-optimal-route" />
-            Initial Optimal Route (p*)
-          </span>
-        )}
-        <span className="legend-item">
-          <span className="legend-color legend-route" />
-          Alternative Route (p&apos;)
-        </span>
       </div>
-      {(hasTerrainChanges ||
-        hasObstacleChanges ||
-        hasSlopeChanges ||
-        hasWaterChanges) && (
+      {hasChanges && (
         <div className="legend-group">
-          <span className="legend-group-label">ISP Modifications</span>
-          {hasTerrainChanges && (
+          <span className="legend-group-label">Changes</span>
+          {terrainCount > 0 && (
             <span className="legend-item">
-              <span className="legend-color legend-isp-terrain" />
-              Terrain modified
+              <span className="legend-color legend-change-cell legend-change-terrain" />
+              Terrain changed ({terrainCount})
             </span>
           )}
-          {hasObstacleChanges && (
+          {obstacleCount > 0 && (
             <span className="legend-item">
-              <span className="legend-color legend-isp-obstacle" />
-              Obstacle removed
+              <span className="legend-color legend-change-cell legend-change-obstacle" />
+              Obstacle cleared ({obstacleCount})
             </span>
           )}
-          {hasSlopeChanges && (
+          {slopeCount > 0 && (
             <span className="legend-item">
-              <span className="legend-color legend-isp-slope" />
-              Slope leveled
+              <span className="legend-color legend-change-cell legend-change-slope" />
+              Slope leveled ({slopeCount})
             </span>
           )}
-          {hasWaterChanges && (
+          {waterCount > 0 && (
             <span className="legend-item">
-              <span
-                className="legend-color"
-                style={{ backgroundColor: "#FFC107" }}
-              />
-              {`Water made traversable (${waterCount})`}
+              <span className="legend-color legend-change-cell legend-change-water" />
+              Water opened ({waterCount})
             </span>
           )}
         </div>

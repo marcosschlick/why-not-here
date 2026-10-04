@@ -603,6 +603,7 @@ export function RouteCanvas({
         <div className="cell-inspector">{hoveredInfo}</div>
         <TacticalMapLegend
           mapData={mapData}
+          showAlternativePath={userPath.length > 0}
           showOptimalPath={
             showOptimalRoute &&
             Boolean(mapData.optimal_path && mapData.optimal_path.length > 0)

@@ -1,79 +1,240 @@
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+from matplotlib.legend_handler import HandlerBase
+from matplotlib.lines import Line2D
 
 from ..grid import Grid
 from ..isp import SemanticModifications
-from .style import ISP_WATER_COLOR, OBSTACLE_COLOR, terrain_color_rgb
+from .style import (
+    GOAL_COLOR,
+    GOAL_EDGE_COLOR,
+    MODIFICATION_EDGE_COLOR,
+    MODIFICATION_HALO_COLOR,
+    MODIFICATION_OBSTACLE_COLOR,
+    MODIFICATION_SLOPE_COLOR,
+    MODIFICATION_TERRAIN_COLOR,
+    MODIFICATION_WATER_COLOR,
+    OBSTACLE_COLOR,
+    OPTIMAL_PATH_COLOR,
+    START_COLOR,
+    START_EDGE_COLOR,
+    USER_PATH_COLOR,
+    terrain_color_rgb,
+)
+
+
+class SharedRouteHandle(Line2D):
+    def __init__(self) -> None:
+        super().__init__([], [], label="Shared section")
+
+
+class SharedRouteHandler(HandlerBase):
+    def create_artists(
+        self,
+        legend,
+        original_handle,
+        xdescent,
+        ydescent,
+        width,
+        height,
+        fontsize,
+        transform,
+    ):
+        line_start = xdescent
+        line_end = xdescent + width
+        optimal_y = ydescent + height * 0.68
+        alternative_y = ydescent + height * 0.35
+        return [
+            Line2D(
+                [line_start, line_end],
+                [optimal_y, optimal_y],
+                color=OPTIMAL_PATH_COLOR,
+                linewidth=2,
+                solid_capstyle="round",
+                transform=transform,
+            ),
+            Line2D(
+                [line_start, line_end],
+                [alternative_y, alternative_y],
+                color=USER_PATH_COLOR,
+                linewidth=2,
+                solid_capstyle="round",
+                transform=transform,
+            ),
+        ]
+
+
+class ModificationDotHandle(Line2D):
+    def __init__(self, color: str, label: str) -> None:
+        super().__init__([], [], marker="o", markerfacecolor=color, label=label)
+
+
+class ModificationDotHandler(HandlerBase):
+    def create_artists(
+        self,
+        legend,
+        original_handle,
+        xdescent,
+        ydescent,
+        width,
+        height,
+        fontsize,
+        transform,
+    ):
+        center = (xdescent + width / 2, ydescent + height / 2)
+        outer_radius = min(width, height) * 0.46
+        inner_radius = outer_radius * (0.39 / 0.46)
+        return [
+            mpatches.Circle(
+                center,
+                radius=outer_radius,
+                facecolor=MODIFICATION_HALO_COLOR,
+                edgecolor="none",
+                transform=transform,
+            ),
+            mpatches.Circle(
+                center,
+                radius=inner_radius,
+                facecolor=original_handle.get_markerfacecolor(),
+                edgecolor=MODIFICATION_EDGE_COLOR,
+                linewidth=0.65,
+                transform=transform,
+            ),
+        ]
 
 
 def build_tactical_legend(
     ax: plt.Axes,
     grid: Grid,
     modifications: SemanticModifications | None,
+    show_optimal_path: bool,
+    show_alternative_path: bool,
+    show_endpoints: bool,
 ) -> None:
-    legend_handles: list[mpatches.Patch] = [
+    handles = []
+    section_labels = set()
+
+    def add_section(label: str) -> None:
+        handles.append(
+            mpatches.Patch(
+                facecolor="none",
+                edgecolor="none",
+                label=label,
+            )
+        )
+        section_labels.add(label)
+
+    if show_optimal_path or show_alternative_path:
+        add_section("Routes")
+        if show_optimal_path:
+            handles.append(
+                Line2D(
+                    [],
+                    [],
+                    color=OPTIMAL_PATH_COLOR,
+                    linewidth=2,
+                    solid_capstyle="round",
+                    label="p* · Optimal",
+                )
+            )
+        if show_alternative_path:
+            handles.append(
+                Line2D(
+                    [],
+                    [],
+                    color=USER_PATH_COLOR,
+                    linewidth=2,
+                    solid_capstyle="round",
+                    label="p′ · Alternative",
+                )
+            )
+        if show_optimal_path and show_alternative_path:
+            handles.append(SharedRouteHandle())
+
+    if show_endpoints:
+        add_section("Endpoints")
+        handles.extend(
+            (
+                Line2D(
+                    [],
+                    [],
+                    linestyle="none",
+                    marker="D",
+                    markersize=7,
+                    markerfacecolor=START_COLOR,
+                    markeredgecolor=START_EDGE_COLOR,
+                    label="Start",
+                ),
+                Line2D(
+                    [],
+                    [],
+                    linestyle="none",
+                    marker="o",
+                    markersize=7,
+                    markerfacecolor=GOAL_COLOR,
+                    markeredgecolor=GOAL_EDGE_COLOR,
+                    label="Goal",
+                ),
+            )
+        )
+
+    add_section("Terrain")
+    handles.extend(
         mpatches.Patch(
             color=terrain_color_rgb(name),
-            label=f"{name} ({speed:g} m/s)",
+            label=f"{name.lower().replace('_', ' ')} ({speed:g} m/s)",
         )
         for name, speed in grid.speeds.items()
-    ]
-    legend_handles.append(mpatches.Patch(color=OBSTACLE_COLOR, label="Obstacle"))
+    )
+    handles.append(mpatches.Patch(color=OBSTACLE_COLOR, label="Obstacle"))
 
     if modifications is not None:
-        if modifications.terrain_nodes:
-            legend_handles.append(
-                mpatches.Patch(
-                    facecolor="#00E5FF",
-                    edgecolor="#00B0FF",
-                    alpha=0.45,
-                    label=f"ISP Paved ({len(modifications.terrain_nodes)})",
+        changes = (
+            (
+                len(modifications.terrain_nodes),
+                MODIFICATION_TERRAIN_COLOR,
+                "Terrain changed",
+            ),
+            (
+                len(modifications.obstacle_nodes),
+                MODIFICATION_OBSTACLE_COLOR,
+                "Obstacle cleared",
+            ),
+            (
+                len(modifications.slope_edges),
+                MODIFICATION_SLOPE_COLOR,
+                "Slope leveled",
+            ),
+            (
+                len(modifications.water_nodes),
+                MODIFICATION_WATER_COLOR,
+                "Water opened",
+            ),
+        )
+        if any(count > 0 for count, _, _ in changes):
+            add_section("Changes")
+            for count, color, label in changes:
+                if count == 0:
+                    continue
+                handles.append(
+                    ModificationDotHandle(color, f"{label} ({count})")
                 )
-            )
-        if modifications.obstacle_nodes:
-            legend_handles.append(
-                mpatches.Patch(
-                    facecolor="#FF1744",
-                    edgecolor="#D50000",
-                    hatch="xx",
-                    alpha=0.45,
-                    label=f"ISP Cleared Obstacle ({len(modifications.obstacle_nodes)})",
-                )
-            )
-        if modifications.slope_edges:
-            legend_handles.append(
-                mpatches.Patch(
-                    facecolor="#AA00FF",
-                    edgecolor="#AA00FF",
-                    label=f"ISP Leveled Slope ({len(modifications.slope_edges)})",
-                )
-            )
-        if modifications.water_nodes:
-            legend_handles.append(
-                mpatches.Patch(
-                    facecolor=ISP_WATER_COLOR,
-                    edgecolor=ISP_WATER_COLOR,
-                    hatch="..",
-                    alpha=0.45,
-                    label=f"ISP Water Made Traversable ({len(modifications.water_nodes)})",
-                )
-            )
 
-    plot_handles, plot_labels = ax.get_legend_handles_labels()
-    combined_handles = legend_handles + plot_handles
-    combined_labels = [h.get_label() for h in legend_handles] + plot_labels
-
-    unique_legend = {}
-    for lbl, hnd in zip(combined_labels, combined_handles):
-        if lbl not in unique_legend:
-            unique_legend[lbl] = hnd
-
-    ax.legend(
-        unique_legend.values(),
-        unique_legend.keys(),
+    legend = ax.legend(
+        handles=handles,
         loc="upper left",
         bbox_to_anchor=(1.02, 1.0),
         borderaxespad=0,
-        fontsize=9,
-        framealpha=0.9,
+        fontsize=8.5,
+        handlelength=1.5,
+        labelspacing=0.5,
+        framealpha=0.92,
+        handler_map={
+            SharedRouteHandle: SharedRouteHandler(),
+            ModificationDotHandle: ModificationDotHandler(),
+        },
     )
+    for label in legend.get_texts():
+        if label.get_text() in section_labels:
+            label.set_fontweight("bold")
+            label.set_color("#282828")

@@ -47,7 +47,7 @@ function ArtifactCard({
     "2_user_path.png": "2. Alternative Candidate Path",
     "3_both_paths.png": "3. Path Comparison",
     "4_isp_modifications.png": "4. Semantic Modifications",
-    "5_isp_with_user_path.png": "5. Route with ISP Modifications",
+    "5_isp_with_user_path.png": "5. Both Routes with ISP Modifications",
     "map.png": "Procedural Base Map",
   };
   const displayTitle = titleMap[filename] || filename;
@@ -593,6 +593,7 @@ export function ResultsView({
             <TacticalMapLegend
               mapData={currentMapData}
               modifications={visibleModifications}
+              showAlternativePath={currentUserPath.length > 0}
               showOptimalPath={Boolean(
                 currentMapData.optimal_path &&
                   currentMapData.optimal_path.length > 0,
