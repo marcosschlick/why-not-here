@@ -58,6 +58,7 @@ const OPTIMAL_PATH_RGB: Rgb = [0, 230, 118];
 const ISP_TERRAIN_RGB: Rgb = [0, 229, 255];
 const ISP_OBSTACLE_RGB: Rgb = [255, 23, 68];
 const ISP_SLOPE_RGB: Rgb = [170, 0, 255];
+const ISP_WATER_RGB: Rgb = [255, 193, 7];
 const GRID_RGB: Rgb = [255, 255, 255];
 
 function drawPath(
@@ -279,6 +280,7 @@ export function TacticalMapCanvas({
     const terrainNodes = modifications?.terrain_nodes ?? [];
     const obstacleNodes = modifications?.obstacle_nodes ?? [];
     const slopeEdges = modifications?.slope_edges ?? [];
+    const waterNodes = modifications?.water_nodes ?? [];
     for (const [row, col] of terrainNodes) {
       const x = col * effectiveCellSize;
       const y = row * effectiveCellSize;
@@ -308,6 +310,29 @@ export function TacticalMapCanvas({
         rgba(ISP_OBSTACLE_RGB, 0.9),
       );
       ctx.strokeStyle = rgba(ISP_OBSTACLE_RGB);
+      ctx.lineWidth = Math.max(2, effectiveCellSize * 0.12);
+      ctx.strokeRect(
+        x + ctx.lineWidth / 2,
+        y + ctx.lineWidth / 2,
+        effectiveCellSize - ctx.lineWidth,
+        effectiveCellSize - ctx.lineWidth,
+      );
+    }
+
+    for (const [row, col] of waterNodes) {
+      const x = col * effectiveCellSize;
+      const y = row * effectiveCellSize;
+      ctx.fillStyle = rgba(ISP_WATER_RGB, 0.18);
+      ctx.fillRect(x, y, effectiveCellSize, effectiveCellSize);
+      drawHatch(
+        ctx,
+        x,
+        y,
+        effectiveCellSize,
+        effectiveCellSize,
+        rgba(ISP_WATER_RGB, 0.9),
+      );
+      ctx.strokeStyle = rgba(ISP_WATER_RGB);
       ctx.lineWidth = Math.max(2, effectiveCellSize * 0.12);
       ctx.strokeRect(
         x + ctx.lineWidth / 2,
@@ -505,6 +530,9 @@ export function TacticalMapLegend({
   const hasTerrainChanges = (modifications?.terrain_nodes?.length ?? 0) > 0;
   const hasObstacleChanges = (modifications?.obstacle_nodes?.length ?? 0) > 0;
   const hasSlopeChanges = (modifications?.slope_edges?.length ?? 0) > 0;
+  const waterCount =
+    modifications?.water ?? modifications?.water_nodes?.length ?? 0;
+  const hasWaterChanges = waterCount > 0;
 
   return (
     <div className="canvas-legend" aria-label="Map legend">
@@ -557,7 +585,10 @@ export function TacticalMapLegend({
           Alternative Route (p&apos;)
         </span>
       </div>
-      {(hasTerrainChanges || hasObstacleChanges || hasSlopeChanges) && (
+      {(hasTerrainChanges ||
+        hasObstacleChanges ||
+        hasSlopeChanges ||
+        hasWaterChanges) && (
         <div className="legend-group">
           <span className="legend-group-label">ISP Modifications</span>
           {hasTerrainChanges && (
@@ -576,6 +607,15 @@ export function TacticalMapLegend({
             <span className="legend-item">
               <span className="legend-color legend-isp-slope" />
               Slope leveled
+            </span>
+          )}
+          {hasWaterChanges && (
+            <span className="legend-item">
+              <span
+                className="legend-color"
+                style={{ backgroundColor: "#FFC107" }}
+              />
+              {`Water made traversable (${waterCount})`}
             </span>
           )}
         </div>

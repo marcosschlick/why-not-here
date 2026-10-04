@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import cvxpy as cp
 import numpy as np
@@ -9,6 +9,7 @@ class SemanticModifications:
     terrain_nodes: list[tuple[int, int]]
     obstacle_nodes: list[tuple[int, int]]
     slope_edges: list[tuple[tuple[int, int], tuple[int, int]]]
+    water_nodes: list[tuple[int, int]] = field(default_factory=list)
 
 
 @dataclass
@@ -22,3 +23,4 @@ class MIPFormulation:
     z_terrain: cp.Variable | None
     z_obstacle: cp.Variable | None
     z_slope: cp.Variable | None
+    z_water: cp.Variable | None

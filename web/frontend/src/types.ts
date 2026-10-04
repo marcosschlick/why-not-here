@@ -38,6 +38,7 @@ export interface GridLayersData {
   elevation: number[][];
   terrain: string[][];
   obstacle: number[][];
+  water_overrides?: [number, number][];
   steep_cells?: [number, number][];
   cell_size?: number;
   max_slope_deg?: number;
@@ -68,9 +69,11 @@ export interface SemanticModificationsData {
   terrain: number;
   obstacle: number;
   slope: number;
+  water?: number;
   terrain_nodes?: [number, number][];
   obstacle_nodes?: [number, number][];
   slope_edges?: [[number, number], [number, number]][];
+  water_nodes?: [number, number][];
 }
 
 export interface LastResult {

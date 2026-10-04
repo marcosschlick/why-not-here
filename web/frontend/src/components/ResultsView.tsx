@@ -266,13 +266,15 @@ export function ResultsView({
   const currentModificationCount = currentModifications
     ? currentModifications.terrain +
       currentModifications.obstacle +
-      currentModifications.slope
+      currentModifications.slope +
+      (currentModifications.water ?? 0)
     : 0;
   const hasCandidateModifications =
     currentModificationCount > 0 ||
     (currentModifications?.terrain_nodes?.length ?? 0) > 0 ||
     (currentModifications?.obstacle_nodes?.length ?? 0) > 0 ||
-    (currentModifications?.slope_edges?.length ?? 0) > 0;
+    (currentModifications?.slope_edges?.length ?? 0) > 0 ||
+    (currentModifications?.water_nodes?.length ?? 0) > 0;
   const isInfeasible = currentResult?.solver_status === "INFEASIBLE";
   const isCandidateSolution =
     isFailed && !isOptimal && hasCandidateModifications;
@@ -321,6 +323,12 @@ export function ResultsView({
         ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
       ),
   );
+  const isCellWaterModified = Boolean(
+    hoveredCell &&
+      visibleModifications?.water_nodes?.some(
+        ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
+      ),
+  );
   const isStart = Boolean(
     hoveredCell &&
       currentMapData &&
@@ -339,8 +347,14 @@ export function ResultsView({
       : "-";
   const hoveredTerrainSpeed = currentMapData?.config.TERRAINS?.[hoveredTerrain];
   const hoveredTerrainBlocked =
-    hoveredTerrain === "WATER_RIVER" ||
-    hoveredTerrainSpeed === undefined || hoveredTerrainSpeed <= 0;
+    !isCellWaterModified &&
+    (hoveredTerrain === "WATER_RIVER" ||
+      hoveredTerrainSpeed === undefined ||
+      hoveredTerrainSpeed <= 0);
+  const hoveredObstacleBlocked =
+    (currentMapData?.obstacle[hoveredCell?.[0] ?? -1]?.[
+      hoveredCell?.[1] ?? -1
+    ] ?? 0) !== 0 && !isCellObstacleModified;
 
   const hoveredInfo = hoveredCell && currentMapData ? (
     <span>
@@ -360,12 +374,16 @@ export function ResultsView({
         m
       </strong>{" "}
       &bull; Status{" "}
-      {hoveredTerrainBlocked ? (
+      {hoveredObstacleBlocked ? (
+        <strong className="cell-status cell-status-obstacle">Obstacle</strong>
+      ) : hoveredTerrainBlocked ? (
         <strong className="cell-status cell-status-impassable">
           Impassable terrain
         </strong>
-      ) : (currentMapData.obstacle[hoveredCell[0]]?.[hoveredCell[1]] ?? 0) !== 0 ? (
-        <strong className="cell-status cell-status-obstacle">Obstacle</strong>
+      ) : isCellWaterModified ? (
+        <strong className="cell-status cell-status-free">
+          Traversable water at base-terrain speed
+        </strong>
       ) : (
         <strong className="cell-status cell-status-free">Free</strong>
       )}
@@ -375,6 +393,11 @@ export function ResultsView({
           style={{ marginLeft: "0.35rem" }}
         >
           Cleared
+        </strong>
+      )}
+      {isCellWaterModified && (
+        <strong className="mod-badge water" style={{ marginLeft: "0.35rem" }}>
+          Water override
         </strong>
       )}
       {isStart && (

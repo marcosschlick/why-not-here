@@ -63,10 +63,10 @@ class ISPSolver(BaseISPSolver):
         num_edges = len(formulation.isp.edges)
 
         pi = cp.Variable(num_nodes)
-        B_T = lil_matrix((num_edges, num_nodes), dtype=np.float64)
+        A_T = lil_matrix((num_edges, num_nodes), dtype=np.float64)
         for k, (u, v) in enumerate(formulation.isp.edges):
-            B_T[k, formulation.isp.node_to_idx[u]] = 1.0
-            B_T[k, formulation.isp.node_to_idx[v]] = -1.0
+            A_T[k, formulation.isp.node_to_idx[u]] = 1.0
+            A_T[k, formulation.isp.node_to_idx[v]] = -1.0
 
         start_idx = formulation.isp.node_to_idx[start]
         goal_idx = formulation.isp.node_to_idx[goal]
@@ -76,7 +76,7 @@ class ISPSolver(BaseISPSolver):
         b_vec[goal_idx] = -1.0
 
         constraints = [
-            B_T.tocsr() @ pi <= formulation.w_prime,
+            A_T.tocsr() @ pi <= formulation.w_prime,
             formulation.w_prime @ formulation.x_alt == b_vec @ pi,
             formulation.w_prime >= formulation.w_min,
             pi[goal_idx] == 0.0,

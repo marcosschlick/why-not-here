@@ -1,6 +1,6 @@
 import numpy as np
 
-from ..config import BASE_TERRAIN, TARGET_TERRAIN
+from ..config import BASE_TERRAIN, TARGET_TERRAIN, WATER_TERRAIN
 from ..grid import Grid
 from .modifier import apply_semantic_modifications
 from .types import SemanticModifications
@@ -67,6 +67,17 @@ class ISPSemantics:
                 self.obstacle_nodes.append(u)
                 self.obstacle_to_idx[u] = idx
 
+        self.water_nodes: list[tuple[int, int]] = []
+        self.water_to_idx: dict[tuple[int, int], int] = {}
+        for u in unique_path_nodes:
+            if (
+                grid.get_cell(u).terrain == WATER_TERRAIN
+                and u not in grid.water_overrides
+            ):
+                idx = len(self.water_nodes)
+                self.water_nodes.append(u)
+                self.water_to_idx[u] = idx
+
         self.edges: list[tuple[tuple[int, int], tuple[int, int]]] = []
         self.edge_to_idx: dict[tuple[tuple[int, int], tuple[int, int]], int] = {}
 
@@ -120,8 +131,12 @@ class ISPSemantics:
         self.num_terrain_vars = len(self.terrain_nodes)
         self.num_obstacle_vars = len(self.obstacle_nodes)
         self.num_slope_vars = len(self.slope_edges)
+        self.num_water_vars = len(self.water_nodes)
         self.total_z_vars = (
-            self.num_terrain_vars + self.num_obstacle_vars + self.num_slope_vars
+            self.num_terrain_vars
+            + self.num_obstacle_vars
+            + self.num_slope_vars
+            + self.num_water_vars
         )
         self.big_m = self._compute_big_m()
 
@@ -178,7 +193,9 @@ class ISPSemantics:
         z_obstacle = z[
             self.num_terrain_vars : self.num_terrain_vars + self.num_obstacle_vars
         ]
-        z_slope = z[self.num_terrain_vars + self.num_obstacle_vars :]
+        slope_end = self.num_terrain_vars + self.num_obstacle_vars + self.num_slope_vars
+        z_slope = z[self.num_terrain_vars + self.num_obstacle_vars : slope_end]
+        z_water = z[slope_end : slope_end + self.num_water_vars]
 
         terrain_nodes = [
             u for u in self.terrain_nodes if z_terrain[self.terrain_to_idx[u]] > 0.5
@@ -189,11 +206,15 @@ class ISPSemantics:
         slope_edges = [
             edge for edge in self.slope_edges if z_slope[self.slope_to_idx[edge]] > 0.5
         ]
+        water_nodes = [
+            u for u in self.water_nodes if z_water[self.water_to_idx[u]] > 0.5
+        ]
 
         return SemanticModifications(
             terrain_nodes=terrain_nodes,
             obstacle_nodes=obstacle_nodes,
             slope_edges=slope_edges,
+            water_nodes=water_nodes,
         )
 
     @staticmethod

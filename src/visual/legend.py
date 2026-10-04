@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 from ..grid import Grid
 from ..isp import SemanticModifications
-from .style import OBSTACLE_COLOR, terrain_color_rgb
+from .style import ISP_WATER_COLOR, OBSTACLE_COLOR, terrain_color_rgb
 
 
 def build_tactical_legend(
@@ -58,6 +58,16 @@ def build_tactical_legend(
                     facecolor="#AA00FF",
                     edgecolor="#AA00FF",
                     label=f"ISP Leveled Slope ({len(modifications.slope_edges)})",
+                )
+            )
+        if modifications.water_nodes:
+            legend_handles.append(
+                mpatches.Patch(
+                    facecolor=ISP_WATER_COLOR,
+                    edgecolor=ISP_WATER_COLOR,
+                    hatch="..",
+                    alpha=0.45,
+                    label=f"ISP Water Made Traversable ({len(modifications.water_nodes)})",
                 )
             )
 

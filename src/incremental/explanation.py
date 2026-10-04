@@ -35,8 +35,9 @@ def generate_explanation_text(
         obstacle_nodes = [u for u in obstacle_nodes if grid.get_cell(u).obstacle != 0]
     has_obstacle = bool(obstacle_nodes)
     has_slope = bool(modifications.slope_edges)
+    has_water = bool(modifications.water_nodes)
 
-    if not has_terrain and not has_obstacle and not has_slope:
+    if not has_terrain and not has_obstacle and not has_slope and not has_water:
         if subgraph_only:
             return (
                 subgraph_message
@@ -97,6 +98,13 @@ def generate_explanation_text(
                 f"- Level {slope_count} steep-slope segments "
                 "that slow or prevent continuous robot traversal."
             )
+
+    if has_water:
+        water_count = len(modifications.water_nodes)
+        water_cell_label = "cell" if water_count == 1 else "cells"
+        lines.append(
+            f"- Make {water_count} water {water_cell_label} traversable at the base-terrain speed while preserving water terrain."
+        )
 
     if not subgraph_only:
         lines.append(

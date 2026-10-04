@@ -72,9 +72,11 @@ class PipelineRunner:
                             "terrain": len(result.modifications.terrain_nodes),
                             "obstacle": len(result.modifications.obstacle_nodes),
                             "slope": len(result.modifications.slope_edges),
+                            "water": len(result.modifications.water_nodes),
                             "terrain_nodes": result.modifications.terrain_nodes,
                             "obstacle_nodes": result.modifications.obstacle_nodes,
                             "slope_edges": result.modifications.slope_edges,
+                            "water_nodes": result.modifications.water_nodes,
                         }
                     with self.lock:
                         self.state["last_result"] = {

@@ -9,6 +9,7 @@ from .style import (
     ISP_OBSTACLE_COLOR,
     ISP_SLOPE_COLOR,
     ISP_TERRAIN_COLOR,
+    ISP_WATER_COLOR,
     OBSTACLE_COLOR,
     START_COLOR,
     START_EDGE_COLOR,
@@ -108,6 +109,22 @@ def draw_modifications(
             edgecolor=ISP_OBSTACLE_COLOR,
             linewidth=node_lw,
             hatch="xx",
+            linestyle="-",
+            zorder=6,
+        )
+        ax.add_patch(rect)
+
+    for u in modifications.water_nodes:
+        rect = plt.Rectangle(
+            (u[1] - 0.48, u[0] - 0.48),
+            0.96,
+            0.96,
+            fill=True,
+            facecolor=ISP_WATER_COLOR,
+            alpha=0.32,
+            edgecolor=ISP_WATER_COLOR,
+            linewidth=node_lw,
+            hatch="..",
             linestyle="-",
             zorder=6,
         )

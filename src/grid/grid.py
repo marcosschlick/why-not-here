@@ -37,6 +37,7 @@ class Grid:
             self.cells.append(row)
 
         self.leveled_slopes: set[tuple[tuple[int, int], tuple[int, int]]] = set()
+        self.water_overrides: set[tuple[int, int]] = set()
         self.base_seed: int | None = None
         self.effective_seed: int | None = None
         self.generation_attempt: int | None = None
@@ -59,8 +60,14 @@ class Grid:
         return math.degrees(math.atan(delta_z / d_uv))
 
     def is_traversable(self, u: tuple[int, int], v: tuple[int, int]) -> bool:
-        if self.get_cell(u).is_blocked or self.get_cell(v).is_blocked:
-            return False
+        for point in (u, v):
+            cell = self.get_cell(point)
+            if cell.obstacle != 0:
+                return False
+            if cell.terrain in config.IMPASSABLE_TERRAINS and not (
+                cell.terrain == config.WATER_TERRAIN and point in self.water_overrides
+            ):
+                return False
 
         if abs(self.get_slope(u, v)) > self.max_slope_deg:
             return False
@@ -68,11 +75,17 @@ class Grid:
         return self.get_velocity(u, v) > 0.0
 
     def get_velocity(self, u: tuple[int, int], v: tuple[int, int]) -> float:
-        v_u = self.speeds.get(self.get_cell(u).terrain, 0.0)
-        v_v = self.speeds.get(self.get_cell(v).terrain, 0.0)
+        v_u = self._get_effective_speed(u)
+        v_v = self._get_effective_speed(v)
         if v_u <= 0.0 or v_v <= 0.0:
             return 0.0
         return 2.0 / ((1.0 / v_u) + (1.0 / v_v))
+
+    def _get_effective_speed(self, point: tuple[int, int]) -> float:
+        cell = self.get_cell(point)
+        if cell.terrain == config.WATER_TERRAIN and point in self.water_overrides:
+            return self.speeds.get(config.BASE_TERRAIN, 0.0)
+        return self.speeds.get(cell.terrain, 0.0)
 
     def get_slope_penalty(self, u: tuple[int, int], v: tuple[int, int]) -> float:
         slope = self.get_slope(u, v)
@@ -156,6 +169,7 @@ class Grid:
             "elevation": self.elevation,
             "obstacle": self.obstacle,
             "leveled_slopes": [list(edge) for edge in sorted(self.leveled_slopes)],
+            "water_overrides": [list(point) for point in sorted(self.water_overrides)],
             "base_seed": self.base_seed,
             "effective_seed": self.effective_seed,
             "generation_attempt": self.generation_attempt,
@@ -183,6 +197,9 @@ class Grid:
         grid.load_obstacle_matrix(data["obstacle"])
         grid.leveled_slopes = {
             (tuple(e[0]), tuple(e[1])) for e in data["leveled_slopes"]
+        }
+        grid.water_overrides = {
+            (int(point[0]), int(point[1])) for point in data.get("water_overrides", [])
         }
         grid.base_seed = data["base_seed"]
         grid.effective_seed = data["effective_seed"]

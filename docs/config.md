@@ -55,6 +55,7 @@ Defines traversability speeds, slope thresholds, and mechanical limits based on 
 | `TERRAINS`            | `dict[str, float]` | Ten built-in terrain speeds          | Nominal traversal speeds in m/s for each terrain type.                             |
 | `TERRAIN_COLORS`      | `dict[str, str]`   | Hex colors for all built-in terrains | User-editable `#RRGGBB` map palette shared by the Web canvas and Python renderers. |
 | `BASE_TERRAIN`        | `str`              | `"GRASS"`                            | Reference terrain type for base traversability calculations.                       |
+| `WATER_TERRAIN`       | `str`              | `"WATER_RIVER"`                      | Terrain identifier used for explicit water-traversability overrides.                |
 | `IMPASSABLE_TERRAINS` | `set[str]`         | `{"WATER_RIVER"}`                    | Terrain types with nominal speed $\le 0.0\text{ m/s}$, always including water.       |
 | `V_MAX`               | `float`            | `1.2`                                | Dynamically derived maximum nominal speed across all terrains in m/s.              |
 

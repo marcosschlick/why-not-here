@@ -106,8 +106,14 @@ class BaseISPSolver:
             ] = np.clip(formulation.z_obstacle.value, 0.0, 1.0)
 
         if formulation.z_slope is not None and formulation.z_slope.value is not None:
-            z_val[isp.num_terrain_vars + isp.num_obstacle_vars :] = np.clip(
-                formulation.z_slope.value, 0.0, 1.0
+            slope_start = isp.num_terrain_vars + isp.num_obstacle_vars
+            slope_end = slope_start + isp.num_slope_vars
+            z_val[slope_start:slope_end] = np.clip(formulation.z_slope.value, 0.0, 1.0)
+
+        if formulation.z_water is not None and formulation.z_water.value is not None:
+            water_start = (
+                isp.num_terrain_vars + isp.num_obstacle_vars + isp.num_slope_vars
             )
+            z_val[water_start:] = np.clip(formulation.z_water.value, 0.0, 1.0)
 
         return isp.get_modifications(z_val)
