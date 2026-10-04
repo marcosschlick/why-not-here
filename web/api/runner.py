@@ -1,10 +1,16 @@
+import math
 import threading
 from typing import Any
 
+from src.pipeline.experiment_config import apply_experiment_config
 from src.pipeline.generate_map import generate_map
 from src.pipeline.run_isp import run_isp
 
 from .artifacts import collect_artifacts
+
+
+def _finite_round(value: float, digits: int) -> float | None:
+    return round(value, digits) if math.isfinite(value) else None
 
 
 class PipelineRunner:
@@ -32,6 +38,8 @@ class PipelineRunner:
             self.state["total_runs"] = runs
             self.state["status"] = "started"
             self.state["error"] = None
+            self.state["last_result"] = None
+            self.state["artifacts"] = []
             self.state["generation_runs"] = []
 
         worker_thread = threading.Thread(
@@ -41,6 +49,7 @@ class PipelineRunner:
 
     def _run_loop(self, runs: int) -> None:
         try:
+            apply_experiment_config({}, start=None, goal=None)
             for index in range(1, runs + 1):
                 with self.lock:
                     self.state["current_run"] = index
@@ -54,6 +63,8 @@ class PipelineRunner:
                 with self.lock:
                     self.state["generation_runs"].append(generation)
                 result = run_isp(verbose=False)
+                if result is None:
+                    raise RuntimeError("Pipeline did not produce an ISP result.")
                 if result:
                     mod_counts = None
                     if result.modifications:
@@ -61,6 +72,9 @@ class PipelineRunner:
                             "terrain": len(result.modifications.terrain_nodes),
                             "obstacle": len(result.modifications.obstacle_nodes),
                             "slope": len(result.modifications.slope_edges),
+                            "terrain_nodes": result.modifications.terrain_nodes,
+                            "obstacle_nodes": result.modifications.obstacle_nodes,
+                            "slope_edges": result.modifications.slope_edges,
                         }
                     with self.lock:
                         self.state["last_result"] = {
@@ -68,10 +82,10 @@ class PipelineRunner:
                             "solver_status": result.solver_status,
                             "runtime_sec": round(result.runtime_sec, 3),
                             "iterations": result.iterations,
-                            "original_optimal_cost": round(
+                            "original_optimal_cost": _finite_round(
                                 result.original_optimal_cost, 4
                             ),
-                            "final_alternative_cost": round(
+                            "final_alternative_cost": _finite_round(
                                 result.final_alternative_cost, 4
                             ),
                             "explanation_text": result.explanation_text,
@@ -93,8 +107,6 @@ class PipelineRunner:
         with self.lock:
             snapshot = dict(self.state)
             snapshot["generation_runs"] = list(self.state["generation_runs"])
-            if not snapshot["artifacts"]:
-                snapshot["artifacts"] = collect_artifacts()
             return snapshot
 
 

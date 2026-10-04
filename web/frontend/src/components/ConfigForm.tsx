@@ -13,6 +13,11 @@ interface TerrainDraft {
   color: string;
 }
 
+const GENERATED_TERRAINS = new Set([
+  "WATER_RIVER", "MUD", "SAND", "ROCKY", "FOREST",
+  "DRY_VEGETATION", "GRASSLAND", "GRASS",
+]);
+
 const DEFAULT_TERRAINS: Record<string, number> = {
   COMPACTED_SOIL: 1.2,
   GRASSLAND: 1.0,
@@ -264,7 +269,8 @@ export function ConfigForm({
     if (
       name === defaultTerrain ||
       name === targetTerrain ||
-      name === baseTerrain
+      name === baseTerrain ||
+      GENERATED_TERRAINS.has(name)
     ) {
       return;
     }
@@ -273,6 +279,9 @@ export function ConfigForm({
 
   function getTerrainDraftError(): string | null {
     const names = terrainDraft.map((terrain) => terrain.name.trim());
+    if ([...GENERATED_TERRAINS].some((name) => !names.includes(name))) {
+      return "All terrains required by the procedural classifier must remain registered.";
+    }
     if (names.some((name) => !name)) {
       return "Every terrain needs a name.";
     }
@@ -1085,7 +1094,7 @@ export function ConfigForm({
                     <div className="form-group">
                       <label htmlFor="defaultTerrain">
                         <span>Default Terrain</span>
-                        <span className="form-group-hint">New and fallback cells</span>
+                        <span className="form-group-hint">Uninitialized cells</span>
                       </label>
                       <select
                         id="defaultTerrain"
@@ -1174,7 +1183,8 @@ export function ConfigForm({
 
                   <div className="terrain-registry-list" aria-label="Terrain registry">
                     {terrainDraft.map((terrain, index) => {
-                      const locked = [defaultTerrain, targetTerrain, baseTerrain].includes(
+                      const generated = GENERATED_TERRAINS.has(terrain.name.trim());
+                      const locked = generated || [defaultTerrain, targetTerrain, baseTerrain].includes(
                         terrain.name.trim(),
                       );
                       return (
@@ -1186,6 +1196,7 @@ export function ConfigForm({
                               type="text"
                               maxLength={64}
                               value={terrain.name}
+                              disabled={generated}
                               onChange={(e) => updateTerrainName(index, e.target.value)}
                             />
                           </div>
@@ -1232,7 +1243,7 @@ export function ConfigForm({
                               className="btn btn-ghost btn-sm terrain-remove-button"
                               onClick={() => removeTerrain(index)}
                               disabled={locked}
-                              title={locked ? "Change the selected terrain before removing it." : "Remove terrain"}
+                              title={generated ? "Required by procedural generation." : locked ? "Change the selected terrain before removing it." : "Remove terrain"}
                               aria-label={`Remove ${terrain.name || "unnamed terrain"}`}
                             >
                               Remove

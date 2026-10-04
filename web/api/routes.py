@@ -6,11 +6,13 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException
 
 from src import config
 from src.grid import Grid
+from src.incremental import ISPValidator
 from src.isp.precheck import validate_alternative_path
 from src.pipeline.experiment_config import (
     apply_experiment_config,
@@ -26,6 +28,7 @@ from src.pipeline.utils import (
     prepare_endpoints,
 )
 from src.planning import plan_path
+from src.visual.layers import find_steep_cells
 
 from .artifacts import collect_artifacts
 from .config_manager import get_all_configurations, update_configurations
@@ -49,6 +52,20 @@ def _generation_metadata(grid: Grid) -> dict[str, int | None]:
         "base_seed": grid.base_seed,
         "effective_seed": grid.effective_seed,
         "generation_attempt": grid.generation_attempt,
+    }
+
+
+def _map_image_url(persist_artifacts: bool) -> str:
+    if not persist_artifacts:
+        return ""
+    return f"/output/map/map.png?dir={quote(config.OUTPUT_DIR, safe='')}"
+
+
+def _grid_layers(grid: Grid) -> dict[str, Any]:
+    return {
+        "cell_size": grid.cell_size,
+        "max_slope_deg": grid.max_slope_deg,
+        "steep_cells": sorted(find_steep_cells(grid)),
     }
 
 
@@ -119,7 +136,7 @@ def save_configurations_endpoint(
 
 @router.post("/config/import")
 def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any]:
-    raw_data = payload.model_dump(exclude_unset=False, exclude_none=True)
+    raw_data = payload.model_dump(exclude_unset=True)
     try:
         params, start, goal, p_user = validate_experiment_config(raw_data)
     except (TypeError, ValueError) as exc:
@@ -141,26 +158,20 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
             verbose=False,
             persist_artifacts=payload.persist_artifacts,
         )
-        is_valid, _, invalid_message = validate_alternative_path(grid, start, goal, p_user)
+        prepare_endpoints(grid)
+        is_valid, _, invalid_message = validate_alternative_path(
+            grid, start, goal, p_user
+        )
         if not is_valid:
             raise HTTPException(
                 status_code=400,
-                detail=invalid_message or "Alternative route is invalid for the imported map.",
+                detail=invalid_message
+                or "Alternative route is invalid for the imported map.",
             )
 
         optimal_path, optimal_cost, _ = plan_path(
             grid, start, goal, algorithm=config.DEFAULT_PLANNER
         )
-
-        map_image_in_out = get_project_path(config.OUTPUT_DIR) / "map" / "map.png"
-        if payload.persist_artifacts and map_image_in_out.exists():
-            dir_query = (
-                f"?dir={config.OUTPUT_DIR}" if config.OUTPUT_DIR != "output" else ""
-            )
-            map_image_url = f"/output/map/map.png{dir_query}"
-        else:
-            map_img_path = Path(config.DEFAULT_MAP_IMG)
-            map_image_url = f"/maps/{map_img_path.name}"
 
         safe_optimal_cost = (
             round(optimal_cost, 4)
@@ -185,7 +196,8 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
             "auto_path": auto_path,
             "optimal_path": optimal_path if optimal_path else [],
             "optimal_cost": safe_optimal_cost,
-            "map_image_url": map_image_url,
+            "map_image_url": _map_image_url(payload.persist_artifacts),
+            **_grid_layers(grid),
             "config": get_all_configurations(),
             "generation": _generation_metadata(grid),
             "user_path": [list(pt) for pt in p_user],
@@ -193,6 +205,8 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
         return sanitize_floats(response_data)
     except HTTPException:
         raise
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=500, detail=f"Failed to import configuration: {exc!s}"
@@ -202,14 +216,14 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
 @router.post("/map/generate")
 def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
     persist_artifacts = payload.persist_artifacts
-    updates: dict[str, Any] = payload.model_dump(exclude_unset=False, exclude_none=True)
+    updates: dict[str, Any] = payload.model_dump(exclude_unset=True, exclude_none=True)
     updates.pop("persist_artifacts", None)
     if "extra_config" in updates:
         extra = updates.pop("extra_config")
         if isinstance(extra, dict):
             updates.update(extra)
 
-    effective_output_dir = updates.get("OUTPUT_DIR", "")
+    effective_output_dir = updates.get("OUTPUT_DIR", config.OUTPUT_DIR)
     if persist_artifacts and not str(effective_output_dir or "").strip():
         raise HTTPException(
             status_code=400,
@@ -217,7 +231,7 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
         )
 
     try:
-        update_configurations(updates)
+        apply_experiment_config(updates, start=None, goal=None)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -232,16 +246,6 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
             grid, start, goal, algorithm=config.DEFAULT_PLANNER
         )
 
-        map_image_in_out = get_project_path(config.OUTPUT_DIR) / "map" / "map.png"
-        if persist_artifacts and map_image_in_out.exists():
-            dir_query = (
-                f"?dir={config.OUTPUT_DIR}" if config.OUTPUT_DIR != "output" else ""
-            )
-            map_image_url = f"/output/map/map.png{dir_query}"
-        else:
-            map_img_path = Path(config.DEFAULT_MAP_IMG)
-            map_image_url = f"/maps/{map_img_path.name}"
-
         safe_optimal_cost = (
             round(optimal_cost, 4)
             if optimal_cost is not None
@@ -263,11 +267,14 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
             "auto_path": auto_path,
             "optimal_path": optimal_path if optimal_path else [],
             "optimal_cost": safe_optimal_cost,
-            "map_image_url": map_image_url,
+            "map_image_url": _map_image_url(persist_artifacts),
+            **_grid_layers(grid),
             "config": get_all_configurations(),
             "generation": _generation_metadata(grid),
         }
         return sanitize_floats(response_data)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=500, detail=f"Failed to generate map: {exc!s}"
@@ -281,11 +288,17 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
             status_code=409, detail="Pipeline execution already in progress"
         )
 
-    if payload.config:
-        try:
-            update_configurations(payload.config)
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    start = payload.start
+    goal = payload.goal
+    if payload.user_path:
+        if start is None:
+            start = payload.user_path[0]
+        if goal is None:
+            goal = payload.user_path[-1]
+    try:
+        apply_experiment_config(payload.config or {}, start=start, goal=goal)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if not str(config.OUTPUT_DIR or "").strip():
         raise HTTPException(
@@ -297,8 +310,16 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
     if payload.user_path is not None:
         p_user = [tuple(p) for p in payload.user_path]
 
+    with runner.lock:
+        runner.state["last_result"] = None
+        runner.state["artifacts"] = []
+        runner.state["error"] = None
+        runner.state["status"] = "solving"
+
     try:
-        result = run_isp(verbose=False, user_path=p_user)
+        result = run_isp(
+            verbose=False, user_path=p_user, start=start, goal=goal
+        )
         if not result:
             raise HTTPException(
                 status_code=500,
@@ -350,6 +371,18 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
             "modifications": modifications,
         }
 
+        if result.modifications is not None:
+            map_json_path = get_project_path(config.OUTPUT_DIR) / "map" / "map.json"
+            original_grid = Grid.load(map_json_path)
+            prepare_endpoints(original_grid, start=start, goal=goal)
+            modified_grid = ISPValidator.apply_modifications(
+                original_grid, result.modifications
+            )
+            last_result["modified_grid"] = {
+                **modified_grid.to_dict(),
+                **_grid_layers(modified_grid),
+            }
+
         artifacts = collect_artifacts(config.OUTPUT_DIR)
 
         sanitized_result = sanitize_floats(last_result)
@@ -364,12 +397,14 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
             "result": sanitized_result,
             "artifacts": artifacts,
         }
-    except HTTPException:
-        raise
     except Exception as exc:
         with runner.lock:
             runner.state["error"] = str(exc)
             runner.state["status"] = "failed"
+        if isinstance(exc, HTTPException):
+            raise
+        if isinstance(exc, FileNotFoundError):
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         raise HTTPException(
             status_code=500, detail=f"Error executing ISP solver: {exc!s}"
         ) from exc
@@ -565,7 +600,7 @@ def browse_system_dialog(payload: BrowseRequest) -> dict[str, Any]:
 
     try:
         proc = subprocess.run(
-            [sys.executable, "-c", py_code],
+            [sys.executable, "-B", "-c", py_code],
             check=False,
             capture_output=True,
             text=True,

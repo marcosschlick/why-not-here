@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type {
   LastResult,
@@ -145,7 +145,22 @@ export function ResultsView({
   const currentMapImageUrl = isBatch
     ? activeBatchItem?.mapData?.map_image_url
     : mapImageUrl;
-  const currentMapData = isBatch ? activeBatchItem?.mapData : mapData;
+  const originalMapData = isBatch ? activeBatchItem?.mapData : mapData;
+  const modifiedGrid = currentResult?.modified_grid;
+  const currentMapData = useMemo(
+    () =>
+      originalMapData && modifiedGrid
+        ? {
+            ...originalMapData,
+            ...modifiedGrid,
+            config: {
+              ...originalMapData.config,
+              TERRAINS: modifiedGrid.speeds ?? originalMapData.config.TERRAINS,
+            },
+          }
+        : originalMapData,
+    [originalMapData, modifiedGrid],
+  );
   const currentUserPath = isBatch
     ? (activeBatchItem?.userPath ??
       activeBatchItem?.mapData?.auto_path ??
@@ -158,9 +173,9 @@ export function ResultsView({
     mapHeight,
     mapWidth,
   );
-  const [previousMapData, setPreviousMapData] = useState(currentMapData);
-  if (previousMapData !== currentMapData) {
-    setPreviousMapData(currentMapData);
+  const [previousMapData, setPreviousMapData] = useState(originalMapData);
+  if (previousMapData !== originalMapData) {
+    setPreviousMapData(originalMapData);
     setHoveredCell(null);
     setZoomLevel(1.0);
   }
@@ -325,7 +340,7 @@ export function ResultsView({
   const hoveredTerrainSpeed = currentMapData?.config.TERRAINS?.[hoveredTerrain];
   const hoveredTerrainBlocked =
     hoveredTerrain === "WATER_RIVER" ||
-    (hoveredTerrainSpeed !== undefined && hoveredTerrainSpeed <= 0);
+    hoveredTerrainSpeed === undefined || hoveredTerrainSpeed <= 0;
 
   const hoveredInfo = hoveredCell && currentMapData ? (
     <span>
@@ -349,7 +364,7 @@ export function ResultsView({
         <strong className="cell-status cell-status-impassable">
           Impassable terrain
         </strong>
-      ) : currentMapData.obstacle[hoveredCell[0]]?.[hoveredCell[1]] === 1 ? (
+      ) : (currentMapData.obstacle[hoveredCell[0]]?.[hoveredCell[1]] ?? 0) !== 0 ? (
         <strong className="cell-status cell-status-obstacle">Obstacle</strong>
       ) : (
         <strong className="cell-status cell-status-free">Free</strong>
@@ -553,6 +568,7 @@ export function ResultsView({
           <div className="canvas-footer-info">
             <div className="cell-inspector">{hoveredInfo}</div>
             <TacticalMapLegend
+              mapData={currentMapData}
               modifications={visibleModifications}
               showOptimalPath={Boolean(
                 currentMapData.optimal_path &&

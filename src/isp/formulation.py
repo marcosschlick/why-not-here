@@ -1,5 +1,6 @@
 import cvxpy as cp
 import numpy as np
+from scipy.sparse import csr_matrix, lil_matrix
 
 from ..config import (
     BASE_TERRAIN,
@@ -21,9 +22,9 @@ def compute_affine_edge_costs(
 ) -> tuple[
     np.ndarray,
     np.ndarray,
-    np.ndarray | None,
-    np.ndarray | None,
-    np.ndarray | None,
+    csr_matrix | None,
+    csr_matrix | None,
+    csr_matrix | None,
     list[tuple[int, int, int, float]],
 ]:
     num_edges = len(isp.edges)
@@ -31,17 +32,17 @@ def compute_affine_edge_costs(
     c_base = np.zeros(num_edges, dtype=np.float64)
 
     M_terrain = (
-        np.zeros((num_edges, isp.num_terrain_vars), dtype=np.float64)
+        lil_matrix((num_edges, isp.num_terrain_vars), dtype=np.float64)
         if isp.num_terrain_vars > 0
         else None
     )
     M_obs = (
-        np.zeros((num_edges, isp.num_obstacle_vars), dtype=np.float64)
+        lil_matrix((num_edges, isp.num_obstacle_vars), dtype=np.float64)
         if isp.num_obstacle_vars > 0
         else None
     )
     M_slope = (
-        np.zeros((num_edges, isp.num_slope_vars), dtype=np.float64)
+        lil_matrix((num_edges, isp.num_slope_vars), dtype=np.float64)
         if isp.num_slope_vars > 0
         else None
     )
@@ -123,7 +124,14 @@ def compute_affine_edge_costs(
                 if abs(delta_v) > 1e-6:
                     cross_items.append((k, t_idx, s_idx, delta_v))
 
-    return w_min, c_base, M_terrain, M_obs, M_slope, cross_items
+    return (
+        w_min,
+        c_base,
+        M_terrain.tocsr() if M_terrain is not None else None,
+        M_obs.tocsr() if M_obs is not None else None,
+        M_slope.tocsr() if M_slope is not None else None,
+        cross_items,
+    )
 
 
 def build_base_formulation(

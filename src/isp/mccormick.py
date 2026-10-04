@@ -1,5 +1,6 @@
 import cvxpy as cp
 import numpy as np
+from scipy.sparse import lil_matrix
 
 
 def linearize_mccormick_terms(
@@ -13,7 +14,7 @@ def linearize_mccormick_terms(
 
     num_cross = len(cross_items)
     y_cross = cp.Variable(num_cross, nonneg=True)
-    M_cross = np.zeros((num_edges, num_cross), dtype=np.float64)
+    M_cross = lil_matrix((num_edges, num_cross), dtype=np.float64)
     constraints: list[cp.Constraint] = []
 
     for ci, (k_edge, t_idx, s_idx, delta) in enumerate(cross_items):
@@ -22,5 +23,5 @@ def linearize_mccormick_terms(
         constraints.append(y_cross[ci] <= z_slope[s_idx])
         constraints.append(y_cross[ci] >= z_terrain[t_idx] + z_slope[s_idx] - 1.0)
 
-    cross_term = M_cross @ y_cross
+    cross_term = M_cross.tocsr() @ y_cross
     return cross_term, constraints

@@ -1,5 +1,3 @@
-COST_TOLERANCE = 1e-6
-
 # Default path planning algorithm ("ASTAR" or "DIJKSTRA")
 DEFAULT_PLANNER = "ASTAR"
 

@@ -368,7 +368,7 @@ export function RouteCanvas({
   const hoveredTerrainSpeed = mapData.config.TERRAINS?.[hoveredTerrain];
   const hoveredTerrainBlocked =
     hoveredTerrain === "WATER_RIVER" ||
-    (hoveredTerrainSpeed !== undefined && hoveredTerrainSpeed <= 0);
+    hoveredTerrainSpeed === undefined || hoveredTerrainSpeed <= 0;
 
   const hoveredInfo = hoveredCell ? (
     <span>
@@ -392,7 +392,7 @@ export function RouteCanvas({
         <strong className="cell-status cell-status-impassable">
           Impassable terrain
         </strong>
-      ) : obstacle[hoveredCell[0]]?.[hoveredCell[1]] === 1 ? (
+      ) : (obstacle[hoveredCell[0]]?.[hoveredCell[1]] ?? 0) !== 0 ? (
         <strong className="cell-status cell-status-obstacle">Obstacle</strong>
       ) : (
         <strong className="cell-status cell-status-free">Free</strong>
@@ -602,6 +602,7 @@ export function RouteCanvas({
       <div className="canvas-footer-info">
         <div className="cell-inspector">{hoveredInfo}</div>
         <TacticalMapLegend
+          mapData={mapData}
           showOptimalPath={
             showOptimalRoute &&
             Boolean(mapData.optimal_path && mapData.optimal_path.length > 0)

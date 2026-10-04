@@ -80,9 +80,23 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("DEFAULT_SOLVER must be either 'HIGHS' or 'GUROBI'.")
     candidate["DEFAULT_SOLVER"] = solver
 
+    for key, allowed in (
+        ("DEFAULT_PLANNER", {"ASTAR", "DIJKSTRA"}),
+        (
+            "DEFAULT_REDUCTION_METHOD",
+            {"NONE", "BBOX", "FLOODFILL", "SPARSIFIED", "PATH_ONLY"},
+        ),
+        ("INCREMENTAL_ASTAR_SCOPE", {"GLOBAL", "SUBGRAPH"}),
+    ):
+        value = str(candidate[key]).strip().upper()
+        if value not in allowed:
+            raise ValueError(f"{key} must be one of: {', '.join(sorted(allowed))}.")
+        candidate[key] = value
+
     positive_float_keys = (
         "CELL_SIZE",
         "CLOSED_LOOP_TIMEOUT_SEC",
+        "SOLVER_TIMEOUT_SEC",
         "MAP_ELEVATION_SCALE",
         "MAP_ELEVATION_FREQ",
         "MAP_MOISTURE_FREQ",
@@ -101,15 +115,25 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
         "MAP_MAX_GENERATION_ATTEMPTS",
         "MAP_H",
         "MAP_W",
+        "MAX_ISP_ITERATIONS",
     ):
         value = int(candidate[key])
         if value < 1:
             raise ValueError(f"{key} must be greater than zero.")
         candidate[key] = value
 
+    margin = int(candidate["BBOX_MARGIN"])
+    if margin < 0:
+        raise ValueError("BBOX_MARGIN must be at least zero.")
+    candidate["BBOX_MARGIN"] = margin
+    if not isinstance(candidate["OUTPUT_DIR"], str):
+        raise TypeError("OUTPUT_DIR must be a string.")
+
     component_ratio = float(candidate["MAP_MIN_MAIN_COMPONENT_RATIO"])
     if not math.isfinite(component_ratio) or not 0.0 < component_ratio <= 1.0:
-        raise ValueError("MAP_MIN_MAIN_COMPONENT_RATIO must be greater than 0 and at most 1.")
+        raise ValueError(
+            "MAP_MIN_MAIN_COMPONENT_RATIO must be greater than 0 and at most 1."
+        )
     candidate["MAP_MIN_MAIN_COMPONENT_RATIO"] = component_ratio
 
     connectivity = int(candidate["CONNECTIVITY"])
@@ -157,7 +181,10 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
     colors: dict[str, str] = {}
     for name in terrains:
         color = raw_colors.get(name, "#808080")
-        if not isinstance(color, str) or re.fullmatch(r"#[0-9A-Fa-f]{6}", color) is None:
+        if (
+            not isinstance(color, str)
+            or re.fullmatch(r"#[0-9A-Fa-f]{6}", color) is None
+        ):
             raise ValueError(f"Terrain color for {name!r} must use #RRGGBB format.")
         colors[name] = color.upper()
 
@@ -167,7 +194,9 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
     if default_terrain not in terrains:
         raise ValueError("DEFAULT_TERRAIN must exist in TERRAINS.")
     if target_terrain not in traversable:
-        raise ValueError("TARGET_TERRAIN must exist and have a speed greater than zero.")
+        raise ValueError(
+            "TARGET_TERRAIN must exist and have a speed greater than zero."
+        )
     if base_terrain not in traversable:
         raise ValueError("BASE_TERRAIN must exist and have a speed greater than zero.")
 
@@ -194,8 +223,13 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
     }
     for key, expected_names in threshold_specs.items():
         raw_thresholds = candidate[key]
-        if not isinstance(raw_thresholds, dict) or set(raw_thresholds) != expected_names:
-            raise ValueError(f"{key} must define exactly: {', '.join(sorted(expected_names))}.")
+        if (
+            not isinstance(raw_thresholds, dict)
+            or set(raw_thresholds) != expected_names
+        ):
+            raise ValueError(
+                f"{key} must define exactly: {', '.join(sorted(expected_names))}."
+            )
         thresholds: dict[str, float] = {}
         for name, raw_value in raw_thresholds.items():
             value = float(raw_value)
@@ -213,10 +247,13 @@ def _build_configuration_candidate(
     updates: dict[str, Any],
     base: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    unknown_keys = set(updates) - set(CONFIG_REGISTRY)
+    if unknown_keys:
+        raise ValueError(
+            f"Unknown configuration parameters: {', '.join(sorted(unknown_keys))}."
+        )
     candidate = copy.deepcopy(base if base is not None else get_all_configurations())
     for key, raw_value in updates.items():
-        if key not in CONFIG_REGISTRY:
-            continue
         candidate[key] = cast_parameter_value(candidate[key], raw_value)
     return _validate_configuration(candidate)
 
@@ -230,7 +267,9 @@ def _publish_configuration_value(key: str, value: Any) -> None:
         setattr(getattr(config, submodule_name), key, copy.deepcopy(value))
 
     for module_name, module in list(sys.modules.items()):
-        if (module_name == "src.config" or module_name.startswith("src.")) and hasattr(module, key):
+        if (module_name == "src.config" or module_name.startswith("src.")) and hasattr(
+            module, key
+        ):
             setattr(module, key, copy.deepcopy(value))
 
 
@@ -242,12 +281,13 @@ def _publish_derived_configuration() -> None:
         }
         | {"WATER_RIVER"},
         "V_MAX": max(terrains.values()),
-        "TARGET_SPEED": terrains[config.TARGET_TERRAIN],
     }
     for key, value in derived_values.items():
         setattr(config, key, copy.deepcopy(value))
         for module_name, module in list(sys.modules.items()):
-            if (module_name == "src.config" or module_name.startswith("src.")) and hasattr(module, key):
+            if (
+                module_name == "src.config" or module_name.startswith("src.")
+            ) and hasattr(module, key):
                 setattr(module, key, copy.deepcopy(value))
 
 
@@ -359,30 +399,44 @@ def validate_experiment_config(
     if not isinstance(data, dict):
         raise TypeError("Configuration payload must be a JSON object dictionary.")
 
-    flattened = dict(data)
-    if "config" in data and isinstance(data["config"], dict):
-        for k, v in data["config"].items():
-            if k not in flattened:
-                flattened[k] = v
+    allowed_keys = set(CONFIG_REGISTRY) | {
+        "start",
+        "goal",
+        "p_user",
+        "persist_artifacts",
+    }
+    unknown_keys = set(data) - allowed_keys
+    if unknown_keys:
+        raise ValueError(
+            f"Unknown experiment parameters: {', '.join(sorted(unknown_keys))}."
+        )
 
-    raw_start = flattened.get("start") or flattened.get("START_COORD")
+    raw_start = data.get("start")
     if not raw_start or not isinstance(raw_start, (list, tuple)) or len(raw_start) != 2:
-        raise ValueError("Configuration must contain a valid 2D 'start' coordinate [row, col].")
+        raise ValueError(
+            "Configuration must contain a valid 2D 'start' coordinate [row, col]."
+        )
     start = (int(raw_start[0]), int(raw_start[1]))
 
-    raw_goal = flattened.get("goal") or flattened.get("GOAL_COORD")
+    raw_goal = data.get("goal")
     if not raw_goal or not isinstance(raw_goal, (list, tuple)) or len(raw_goal) != 2:
-        raise ValueError("Configuration must contain a valid 2D 'goal' coordinate [row, col].")
+        raise ValueError(
+            "Configuration must contain a valid 2D 'goal' coordinate [row, col]."
+        )
     goal = (int(raw_goal[0]), int(raw_goal[1]))
 
-    raw_route = flattened.get("p_user") or flattened.get("user_path")
+    raw_route = data.get("p_user")
     if not raw_route or not isinstance(raw_route, list):
-        raise ValueError("Configuration must contain a valid non-empty 'p_user' coordinate route.")
+        raise ValueError(
+            "Configuration must contain a valid non-empty 'p_user' coordinate route."
+        )
 
     p_user: list[tuple[int, int]] = []
     for item in raw_route:
         if not isinstance(item, (list, tuple)) or len(item) != 2:
-            raise ValueError(f"Invalid coordinate in route: {item}. Expected [row, col].")
+            raise ValueError(
+                f"Invalid coordinate in route: {item}. Expected [row, col]."
+            )
         p_user.append((int(item[0]), int(item[1])))
 
     if not p_user:
@@ -398,7 +452,7 @@ def validate_experiment_config(
         )
 
     supplied_config = {
-        key: value for key, value in flattened.items() if key in CONFIG_REGISTRY
+        key: value for key, value in data.items() if key in CONFIG_REGISTRY
     }
     params = _build_configuration_candidate(
         supplied_config,
@@ -410,11 +464,15 @@ def validate_experiment_config(
 
     for node in (start, goal):
         if not (0 <= node[0] < map_h and 0 <= node[1] < map_w):
-            raise ValueError(f"Coordinate {node} falls outside map boundaries ({map_h}x{map_w}).")
+            raise ValueError(
+                f"Coordinate {node} falls outside map boundaries ({map_h}x{map_w})."
+            )
 
     for node in p_user:
         if not (0 <= node[0] < map_h and 0 <= node[1] < map_w):
-            raise ValueError(f"Route node {node} falls outside map boundaries ({map_h}x{map_w}).")
+            raise ValueError(
+                f"Route node {node} falls outside map boundaries ({map_h}x{map_w})."
+            )
 
     return params, start, goal, p_user
 
@@ -433,9 +491,13 @@ def apply_experiment_config(
         config.config_planning.GOAL_COORD = goal
 
     for mod_name, mod in list(sys.modules.items()):
-        if (mod_name == "src.config" or mod_name.startswith("src.")) and hasattr(mod, "START_COORD"):
+        if (mod_name == "src.config" or mod_name.startswith("src.")) and hasattr(
+            mod, "START_COORD"
+        ):
             mod.START_COORD = start
-        if (mod_name == "src.config" or mod_name.startswith("src.")) and hasattr(mod, "GOAL_COORD"):
+        if (mod_name == "src.config" or mod_name.startswith("src.")) and hasattr(
+            mod, "GOAL_COORD"
+        ):
             mod.GOAL_COORD = goal
 
     return applied

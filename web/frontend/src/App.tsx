@@ -187,7 +187,7 @@ export function App() {
         );
         setMapData(imported);
         setUserPath(
-          imported.user_path || imported.auto_path || [imported.start],
+          imported.user_path,
         );
         setConfig(imported.config);
         setCurrentStep("route_canvas");
@@ -225,8 +225,7 @@ export function App() {
               workflowMode === "create" ? item.name : undefined,
             status: "awaiting_route",
             mapData: imported,
-            userPath:
-              imported.user_path || imported.auto_path || [imported.start],
+            userPath: imported.user_path,
           };
           newQueueItems.push(queueItem);
           importedCount++;
@@ -263,7 +262,13 @@ export function App() {
     setErrorMessage(null);
 
     try {
-      const response = await solveISP(userPath, mapData.config);
+      await importConfig({
+        ...mapData.config,
+        start: mapData.start,
+        goal: mapData.goal,
+        p_user: userPath,
+      }, true);
+      const response = await solveISP(userPath, mapData.config, mapData.start, mapData.goal);
       setLastResult(response.result);
       setArtifacts(response.artifacts);
       setCacheKey(Date.now());
@@ -589,7 +594,18 @@ export function App() {
 
       try {
         const effectivePath = item.userPath || item.mapData?.auto_path || [];
-        const response = await solveISP(effectivePath, item.config);
+        if (!item.mapData) {
+          throw new Error("Batch item has no generated map.");
+        }
+        await importConfig({
+          ...item.config,
+          start: item.mapData.start,
+          goal: item.mapData.goal,
+          p_user: effectivePath,
+        }, true);
+        const response = await solveISP(
+          effectivePath, item.config, item.mapData.start, item.mapData.goal,
+        );
 
         setQueue((prev) =>
           prev.map((it, idx) =>
@@ -1031,8 +1047,7 @@ export function App() {
                   : mapData?.config || config;
               if (!activeConfig) return null;
               const reduction = formatReductionMethod(
-                activeConfig.DEFAULT_REDUCTION_METHOD ||
-                  (activeConfig.GRAPH_REDUCTION_METHOD as string),
+                activeConfig.DEFAULT_REDUCTION_METHOD,
               );
               const solverMode = activeConfig.USE_INCREMENTAL_SOLVER
                 ? "Iterative / Incremental MILP"

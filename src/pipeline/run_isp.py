@@ -44,7 +44,9 @@ def format_artifact_skip_note(result: ClosedLoopResult) -> str | None:
 
 def format_artifact_status(result: ClosedLoopResult) -> str:
     if not result.success:
-        return f"Candidate modifications — {result.solver_status}; not globally certified"
+        return (
+            f"Candidate modifications — {result.solver_status}; not globally certified"
+        )
     if result.solver_status == "OPTIMAL":
         return "Certified global optimum"
     if result.solver_status == "OPTIMAL_INACCURATE":
@@ -60,12 +62,6 @@ def run_isp(
 ) -> ClosedLoopResult | None:
     map_dir = get_project_path(config.OUTPUT_DIR) / "map"
     map_json_path = map_dir / "map.json"
-    if not map_json_path.exists():
-        map_json_path = get_project_path(config.DEFAULT_MAP_FILE)
-    if not map_json_path.exists():
-        print(f"Error: Map file not found at '{map_json_path}'. Run option 1 first.")
-        return None
-
     log_lines = []
 
     msg_load = f"[2] Loading map from '{map_json_path}'..."
@@ -74,13 +70,7 @@ def run_isp(
     log_lines.append(msg_load)
 
     grid = Grid.load(map_json_path)
-    if start is not None and goal is not None:
-        start = (int(start[0]), int(start[1]))
-        goal = (int(goal[0]), int(goal[1]))
-        grid.get_cell(start).obstacle = 0
-        grid.get_cell(goal).obstacle = 0
-    else:
-        start, goal = prepare_endpoints(grid)
+    start, goal = prepare_endpoints(grid, start=start, goal=goal)
 
     p_star, cost_star, expanded = plan_path(
         grid, start, goal, algorithm=config.DEFAULT_PLANNER
@@ -185,16 +175,20 @@ def run_isp(
             )
             final_alt_cost = p_cost
             if not is_globally_optimal:
-                solver_status = "SUBGRAPH_OPTIMAL_ONLY" if reduced_graph is not None else "SUBOPTIMAL"
+                solver_status = (
+                    "SUBGRAPH_OPTIMAL_ONLY"
+                    if reduced_graph is not None
+                    else "SUBOPTIMAL"
+                )
                 success = False
             else:
                 solver_status = solver.last_solver_status or "OPTIMAL"
         else:
             solver_status = solver.last_solver_status or "SOLVER_FAILED"
 
-        if success and modifications is not None:
-            explanation = ISPValidator.generate_explanation_text(modifications, grid)
-        elif solver_status == "SUBGRAPH_OPTIMAL_ONLY" and modifications is not None:
+        if modifications is not None and (
+            success or solver_status == "SUBGRAPH_OPTIMAL_ONLY"
+        ):
             explanation = ISPValidator.generate_explanation_text(modifications, grid)
         elif solver_status == "OPTIMAL_INACCURATE":
             explanation = (
@@ -248,7 +242,7 @@ def run_isp(
     render_tactical_map(
         grid=grid,
         optimal_path=p_star,
-        title="1. Optimal Path (A*)",
+        title=f"1. Optimal Path ({config.DEFAULT_PLANNER})",
         save_path=str(img1),
     )
 
@@ -302,11 +296,17 @@ def run_isp(
     elif isp_result.solver_status == "SUBGRAPH_OPTIMAL_ONLY":
         solution_quality = "SUBGRAPH_OPTIMAL_ONLY (Candidate solution optimal only within reduced subgraph, failed global validation)"
     elif isp_result.solver_status == "SUBOPTIMAL":
-        solution_quality = "SUBOPTIMAL (Candidate modifications failed global validation)"
+        solution_quality = (
+            "SUBOPTIMAL (Candidate modifications failed global validation)"
+        )
     elif isp_result.solver_status == "INFEASIBLE":
-        solution_quality = "INFEASIBLE (No viable semantic modifications found in intervention domain)"
+        solution_quality = (
+            "INFEASIBLE (No viable semantic modifications found in intervention domain)"
+        )
     elif isp_result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
-        solution_quality = f"{isp_result.solver_status} (Search stopped at resource limit)"
+        solution_quality = (
+            f"{isp_result.solver_status} (Search stopped at resource limit)"
+        )
     else:
         solution_quality = f"{isp_result.solver_status}"
 
@@ -327,9 +327,7 @@ def run_isp(
     )
     cost_star_str = f"{cost_star:.2f}s" if cost_star is not None else "-"
     cost_user_orig_str = (
-        f"{cost_user_orig:.2f}s"
-        if cost_user_orig < float("inf")
-        else "Impassable (∞)"
+        f"{cost_user_orig:.2f}s" if cost_user_orig < float("inf") else "Impassable (∞)"
     )
     final_alt_cost = isp_result.final_alternative_cost
     final_cost_str = (

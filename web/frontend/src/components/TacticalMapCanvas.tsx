@@ -197,7 +197,7 @@ export function TacticalMapCanvas({
         const height = Math.round((row + 1) * effectiveCellSize) - y;
         const terrainName =
           terrain[row]?.[col] || mapData.config.DEFAULT_TERRAIN || "GRASS";
-        const isObstacle = obstacle[row]?.[col] === 1;
+        const isObstacle = (obstacle[row]?.[col] ?? 0) !== 0;
         const cellElevation = elevation[row]?.[col] ?? 0;
         const baseTerrainColor = terrainColor(
           mapData.config.TERRAIN_COLORS?.[terrainName],
@@ -210,7 +210,7 @@ export function TacticalMapCanvas({
         if (terrainName === "WATER_RIVER") {
           ctx.fillStyle = shadedColor(baseTerrainColor, shade);
         } else if (isObstacle) {
-          ctx.fillStyle = rgba(OBSTACLE_RGB);
+          ctx.fillStyle = shadedColor(OBSTACLE_RGB, shade);
         } else {
           ctx.fillStyle = shadedColor(baseTerrainColor, shade);
         }
@@ -230,6 +230,24 @@ export function TacticalMapCanvas({
           ctx.strokeRect(x, y, width, height);
         }
       }
+    }
+
+    for (const [row, col] of mapData.steep_cells ?? []) {
+      const x = col * effectiveCellSize;
+      const y = row * effectiveCellSize;
+      ctx.fillStyle = "rgba(255,82,82,0.3)";
+      ctx.fillRect(x, y, effectiveCellSize, effectiveCellSize);
+      ctx.strokeStyle = "rgba(211,47,47,0.3)";
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(x, y, effectiveCellSize, effectiveCellSize);
+      drawHatch(
+        ctx,
+        x,
+        y,
+        effectiveCellSize,
+        effectiveCellSize,
+        "rgba(211,47,47,0.3)",
+      );
     }
 
     drawPath(
@@ -356,7 +374,6 @@ export function TacticalMapCanvas({
       ctx.textBaseline = "middle";
       ctx.fillText("G", goalX, goalY);
     }
-
   }, [
     cellSize,
     deviceScale,
@@ -447,7 +464,10 @@ export function TacticalMapCanvas({
   return (
     <div
       className={`tactical-map-canvas ${className}`}
-      style={{ width: `${logicalWidth + 2}px`, height: `${logicalHeight + 2}px` }}
+      style={{
+        width: `${logicalWidth + 2}px`,
+        height: `${logicalHeight + 2}px`,
+      }}
     >
       <canvas
         ref={canvasRef}
@@ -474,9 +494,11 @@ export function TacticalMapCanvas({
 }
 
 export function TacticalMapLegend({
+  mapData,
   modifications,
   showOptimalPath,
 }: {
+  mapData: MapData;
   modifications?: SemanticModificationsData | null;
   showOptimalPath?: boolean;
 }) {
@@ -488,30 +510,20 @@ export function TacticalMapLegend({
     <div className="canvas-legend" aria-label="Map legend">
       <div className="legend-group">
         <span className="legend-group-label">Terrain</span>
-        <span className="legend-item">
-          <span className="legend-color legend-compacted-soil" />
-          Compacted Soil
-        </span>
-        <span className="legend-item">
-          <span className="legend-color legend-grass" />
-          Grass
-        </span>
-        <span className="legend-item">
-          <span className="legend-color legend-dry-vegetation" />
-          Dry Vegetation
-        </span>
-        <span className="legend-item">
-          <span className="legend-color legend-sand" />
-          Sand
-        </span>
-        <span className="legend-item">
-          <span className="legend-color legend-mud" />
-          Mud
-        </span>
-        <span className="legend-item">
-          <span className="legend-color legend-river" />
-          River
-        </span>
+        {Object.entries(mapData.speeds ?? mapData.config.TERRAINS ?? {}).map(
+          ([name, speed]) => (
+            <span className="legend-item" key={name}>
+              <span
+                className="legend-color"
+                style={{
+                  backgroundColor:
+                    mapData.config.TERRAIN_COLORS?.[name] ?? "#808080",
+                }}
+              />
+              {name.toLowerCase().replaceAll("_", " ")} ({speed} m/s)
+            </span>
+          ),
+        )}
       </div>
       <div className="legend-group">
         <span className="legend-group-label">Markers</span>
@@ -519,6 +531,13 @@ export function TacticalMapLegend({
           <span className="legend-color legend-obstacle" />
           Obstacle
         </span>
+        {Boolean(mapData.steep_cells?.length) && (
+          <span className="legend-item">
+            <span className="legend-color legend-steep-slope" />
+            Slope &gt;{" "}
+            {mapData.max_slope_deg ?? mapData.config.MAX_SLOPE_DEG ?? 20}°
+          </span>
+        )}
         <span className="legend-item">
           <span className="legend-color legend-start" />
           Start (S)

@@ -34,15 +34,22 @@ export interface SystemConfig {
   [key: string]: unknown;
 }
 
-export interface MapData {
+export interface GridLayersData {
+  elevation: number[][];
+  terrain: string[][];
+  obstacle: number[][];
+  steep_cells?: [number, number][];
+  cell_size?: number;
+  max_slope_deg?: number;
+  speeds?: Record<string, number>;
+}
+
+export interface MapData extends GridLayersData {
   h: number;
   w: number;
   connectivity: number;
   start: [number, number];
   goal: [number, number];
-  elevation: number[][];
-  terrain: string[][];
-  obstacle: number[][];
   auto_path: [number, number][];
   optimal_path: [number, number][];
   optimal_cost?: number | null;
@@ -76,6 +83,7 @@ export interface LastResult {
   final_alternative_cost?: number | null;
   cost_baseline_text?: string;
   modifications?: SemanticModificationsData | null;
+  modified_grid?: GridLayersData;
 }
 
 export interface SolveResponse {

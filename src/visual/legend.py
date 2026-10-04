@@ -1,7 +1,6 @@
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 
-from .. import config
 from ..grid import Grid
 from ..isp import SemanticModifications
 from .style import OBSTACLE_COLOR, terrain_color_rgb
@@ -18,7 +17,7 @@ def build_tactical_legend(
             color=terrain_color_rgb(name),
             label=f"{name} ({speed:g} m/s)",
         )
-        for name, speed in config.TERRAINS.items()
+        for name, speed in grid.speeds.items()
     ]
     legend_handles.append(mpatches.Patch(color=OBSTACLE_COLOR, label="Obstacle"))
 

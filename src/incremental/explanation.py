@@ -1,3 +1,4 @@
+from src import config
 from src.grid.grid import Grid
 from src.isp.semantics import SemanticModifications
 
@@ -23,9 +24,7 @@ def generate_explanation_text(
     has_terrain = bool(modifications.terrain_nodes)
     obstacle_nodes = modifications.obstacle_nodes
     if grid is not None:
-        obstacle_nodes = [
-            u for u in obstacle_nodes if grid.get_cell(u).obstacle != 0
-        ]
+        obstacle_nodes = [u for u in obstacle_nodes if grid.get_cell(u).obstacle != 0]
     has_obstacle = bool(obstacle_nodes)
     has_slope = bool(modifications.slope_edges)
 
@@ -41,6 +40,7 @@ def generate_explanation_text(
     ]
 
     if has_terrain:
+        target_name = config.TARGET_TERRAIN.lower().replace("_", " ")
         terrain_count = len(modifications.terrain_nodes)
         terrain_cell_label = "cell" if terrain_count == 1 else "cells"
         if grid is not None:
@@ -54,13 +54,13 @@ def generate_explanation_text(
                 for name, cnt in counts.items()
             )
             lines.append(
-                f"- Convert {terrain_count} slow-terrain {terrain_cell_label} "
-                f"({details}) to the baseline terrain (compacted soil)."
+                f"- Convert {terrain_count} terrain {terrain_cell_label} "
+                f"({details}) to the target terrain ({target_name})."
             )
         else:
             lines.append(
-                f"- Convert {terrain_count} degraded-terrain {terrain_cell_label} "
-                "to the baseline terrain (compacted soil)."
+                f"- Convert {terrain_count} terrain {terrain_cell_label} "
+                f"to the target terrain ({target_name})."
             )
 
     if has_obstacle:
@@ -98,7 +98,7 @@ def generate_cost_baseline_justification(
         return (
             f"The optimal route p* is feasible (estimated traversal time: {cost_p_star:.2f} s), "
             "while the alternative route p' is impassable under current terrain conditions "
-            "(infinite traversal time due to obstacles or steep slopes)."
+            "(infinite traversal time due to impassable terrain, obstacles, or steep slopes)."
         )
     diff = cost_p_prime - cost_p_star
     if abs(diff) < 1e-4:

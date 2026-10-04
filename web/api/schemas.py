@@ -38,8 +38,10 @@ class GenerateMapRequest(BaseModel):
 class SolveISPRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    user_path: list[list[int]] | None = None
+    user_path: list[tuple[int, int]] | None = None
     config: dict[str, Any] | None = None
+    start: tuple[int, int] | None = None
+    goal: tuple[int, int] | None = None
 
 
 class SemanticModificationsData(BaseModel):
@@ -55,9 +57,9 @@ class ExportConfigRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     config: dict[str, Any] | None = None
-    start: list[int]
-    goal: list[int]
-    user_path: list[list[int]]
+    start: tuple[int, int]
+    goal: tuple[int, int]
+    user_path: list[tuple[int, int]]
 
 
 class SaveConfigItem(BaseModel):
@@ -76,11 +78,9 @@ class SaveConfigurationsRequest(BaseModel):
 class ImportConfigRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    config: dict[str, Any] | None = None
-    start: list[int] | None = None
-    goal: list[int] | None = None
-    user_path: list[list[int]] | None = None
-    p_user: list[list[int]] | None = None
+    start: tuple[int, int]
+    goal: tuple[int, int]
+    p_user: list[tuple[int, int]] = Field(min_length=1)
     persist_artifacts: bool = True
 
 

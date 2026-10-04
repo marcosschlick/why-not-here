@@ -55,6 +55,8 @@ export async function generateMap(
 export async function solveISP(
   userPath: [number, number][] | null,
   config?: Partial<SystemConfig>,
+  start?: [number, number],
+  goal?: [number, number],
 ): Promise<SolveResponse> {
   const response = await fetch("/api/isp/solve", {
     method: "POST",
@@ -64,6 +66,8 @@ export async function solveISP(
     body: JSON.stringify({
       user_path: userPath,
       config: config || null,
+      start,
+      goal,
     }),
   });
   if (!response.ok) {

@@ -155,11 +155,21 @@ class Grid:
             "terrain": self.terrain,
             "elevation": self.elevation,
             "obstacle": self.obstacle,
-            "leveled_slopes": [list(edge) for edge in self.leveled_slopes],
+            "leveled_slopes": [list(edge) for edge in sorted(self.leveled_slopes)],
+            "base_seed": self.base_seed,
+            "effective_seed": self.effective_seed,
+            "generation_attempt": self.generation_attempt,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "Grid":
+        missing_metadata = {
+            "base_seed", "effective_seed", "generation_attempt"
+        } - data.keys()
+        if missing_metadata:
+            raise ValueError(
+                f"Missing map metadata: {', '.join(sorted(missing_metadata))}."
+            )
         grid = cls(
             h=data["h"],
             w=data["w"],
@@ -174,6 +184,9 @@ class Grid:
         grid.leveled_slopes = {
             (tuple(e[0]), tuple(e[1])) for e in data["leveled_slopes"]
         }
+        grid.base_seed = data["base_seed"]
+        grid.effective_seed = data["effective_seed"]
+        grid.generation_attempt = data["generation_attempt"]
         return grid
 
     def save(self, filepath: str | Path) -> None:
@@ -187,7 +200,7 @@ class Grid:
         path = Path(filepath)
         if not path.exists():
             raise FileNotFoundError(
-                f"Map file not found: '{path}'. Please add a map to 'maps/' or generate one using Option 1 or 3."
+                f"Map file not found: '{path}'. Generate or persist a map in the selected output directory."
             )
 
         with open(path, "r", encoding="utf-8") as f:

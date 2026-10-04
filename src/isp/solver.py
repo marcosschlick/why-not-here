@@ -1,5 +1,6 @@
 import cvxpy as cp
 import numpy as np
+from scipy.sparse import lil_matrix
 
 from ..grid import Grid
 from ..planning import astar
@@ -59,7 +60,7 @@ class ISPSolver(BaseISPSolver):
         num_edges = len(formulation.isp.edges)
 
         pi = cp.Variable(num_nodes)
-        B_T = np.zeros((num_edges, num_nodes), dtype=np.float64)
+        B_T = lil_matrix((num_edges, num_nodes), dtype=np.float64)
         for k, (u, v) in enumerate(formulation.isp.edges):
             B_T[k, formulation.isp.node_to_idx[u]] = 1.0
             B_T[k, formulation.isp.node_to_idx[v]] = -1.0
@@ -72,7 +73,7 @@ class ISPSolver(BaseISPSolver):
         b_vec[goal_idx] = -1.0
 
         constraints = [
-            B_T @ pi <= formulation.w_prime,
+            B_T.tocsr() @ pi <= formulation.w_prime,
             formulation.w_prime @ formulation.x_alt == b_vec @ pi,
             formulation.w_prime >= formulation.w_min,
             pi[goal_idx] == 0.0,
