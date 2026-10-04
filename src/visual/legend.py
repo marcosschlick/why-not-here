@@ -9,7 +9,6 @@ from .style import ISP_WATER_COLOR, OBSTACLE_COLOR, terrain_color_rgb
 def build_tactical_legend(
     ax: plt.Axes,
     grid: Grid,
-    has_steep: bool,
     modifications: SemanticModifications | None,
 ) -> None:
     legend_handles: list[mpatches.Patch] = [
@@ -20,17 +19,6 @@ def build_tactical_legend(
         for name, speed in grid.speeds.items()
     ]
     legend_handles.append(mpatches.Patch(color=OBSTACLE_COLOR, label="Obstacle"))
-
-    if has_steep:
-        legend_handles.append(
-            mpatches.Patch(
-                facecolor="#FF5252",
-                edgecolor="#D32F2F",
-                hatch="//",
-                alpha=0.4,
-                label=f"Slope > {grid.max_slope_deg:.0f}°",
-            )
-        )
 
     if modifications is not None:
         if modifications.terrain_nodes:

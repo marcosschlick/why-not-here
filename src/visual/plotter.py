@@ -13,8 +13,6 @@ from .layers import (
     draw_endpoints,
     draw_modifications,
     draw_path,
-    draw_steep_slopes,
-    find_steep_cells,
 )
 from .legend import build_tactical_legend
 from .style import (
@@ -30,7 +28,6 @@ def render_tactical_map(
     user_path: list[tuple[int, int]] | None = None,
     modifications: SemanticModifications | None = None,
     modified_grid: Grid | None = None,
-    highlight_steep_slopes: bool = True,
     title: str = "Tactical Grid Map",
     save_path: str | Path | None = None,
     show: bool = False,
@@ -62,13 +59,6 @@ def render_tactical_map(
     ax.set_title(title, fontsize=12, fontweight="bold", pad=12)
     ax.set_xlabel("Column (j)", fontsize=10)
     ax.set_ylabel("Row (i)", fontsize=10)
-
-    has_steep = False
-    if highlight_steep_slopes:
-        steep_cells = find_steep_cells(target_grid)
-        if steep_cells:
-            has_steep = True
-            draw_steep_slopes(ax, steep_cells)
 
     if modifications is not None:
         draw_modifications(ax, modifications, path_lw=layout["path_lw"])
@@ -107,7 +97,6 @@ def render_tactical_map(
     build_tactical_legend(
         ax=ax,
         grid=target_grid,
-        has_steep=has_steep,
         modifications=modifications,
     )
 

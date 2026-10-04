@@ -66,6 +66,8 @@ def _grid_layers(grid: Grid) -> dict[str, Any]:
         "cell_size": grid.cell_size,
         "max_slope_deg": grid.max_slope_deg,
         "steep_cells": sorted(find_steep_cells(grid)),
+        "elevation_shade_min": config.MAP_ELEVATION_SHADE_MIN,
+        "elevation_shade_max": config.MAP_ELEVATION_SHADE_MAX,
     }
 
 

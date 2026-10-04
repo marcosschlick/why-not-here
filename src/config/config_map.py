@@ -1,5 +1,9 @@
 MAP_DEFAULT_SEED = 42
 
+# Shared lightness range for elevation shading in the Web and PNG renderers.
+MAP_ELEVATION_SHADE_MIN = 1.0
+MAP_ELEVATION_SHADE_MAX = 1.5
+
 # Elevation amplitude is calibrated to create occasional slopes above 20 degrees.
 MAP_ELEVATION_SCALE = 4.0
 MAP_ELEVATION_FREQ = 0.06

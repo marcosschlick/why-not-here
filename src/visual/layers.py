@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .. import config
 from ..grid import Grid
 from ..isp import SemanticModifications
 from .style import (
@@ -13,8 +14,6 @@ from .style import (
     OBSTACLE_COLOR,
     START_COLOR,
     START_EDGE_COLOR,
-    STEEP_SLOPE_EDGE_COLOR,
-    STEEP_SLOPE_FACE_COLOR,
     terrain_color_rgb,
 )
 
@@ -37,7 +36,10 @@ def create_grid_rgb_matrix(grid: Grid) -> np.ndarray:
                 base = terrain_color_rgb(cell.terrain)
 
             if elev_range > 0.0:
-                factor = 0.82 + 0.36 * ((cell.elevation - min_elev) / elev_range)
+                elevation_ratio = (cell.elevation - min_elev) / elev_range
+                factor = config.MAP_ELEVATION_SHADE_MIN + (
+                    config.MAP_ELEVATION_SHADE_MAX - config.MAP_ELEVATION_SHADE_MIN
+                ) * elevation_ratio
             else:
                 factor = 1.0
             rgb[i, j] = np.clip(base * factor, 0.0, 1.0)
@@ -58,22 +60,6 @@ def find_steep_cells(grid: Grid) -> set[tuple[int, int]]:
                     steep_cells.add(u)
                     steep_cells.add(v)
     return steep_cells
-
-
-def draw_steep_slopes(ax: plt.Axes, steep_cells: set[tuple[int, int]]) -> None:
-    for u in steep_cells:
-        rect = plt.Rectangle(
-            (u[1] - 0.5, u[0] - 0.5),
-            1.0,
-            1.0,
-            facecolor=STEEP_SLOPE_FACE_COLOR,
-            alpha=0.30,
-            edgecolor=STEEP_SLOPE_EDGE_COLOR,
-            linewidth=0.8,
-            hatch="//",
-            zorder=3,
-        )
-        ax.add_patch(rect)
 
 
 def draw_modifications(

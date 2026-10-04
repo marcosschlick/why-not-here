@@ -1250,15 +1250,6 @@ kbd,
 .legend-obstacle {
   background: var(--map-obstacle);
 }
-.legend-steep-slope {
-  background: repeating-linear-gradient(
-    135deg,
-    rgba(211, 47, 47, 0.3) 0,
-    rgba(211, 47, 47, 0.3) 0.1rem,
-    rgba(255, 82, 82, 0.3) 0.1rem,
-    rgba(255, 82, 82, 0.3) 0.3rem
-  );
-}
 .legend-isp-terrain {
   background: #00e5ff;
   border-color: #00e5ff;

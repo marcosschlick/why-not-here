@@ -189,6 +189,8 @@ export function TacticalMapCanvas({
       }
     }
     const elevationRange = maxElev - minElev;
+    const elevationShadeMin = mapData.elevation_shade_min ?? 1.0;
+    const elevationShadeMax = mapData.elevation_shade_max ?? 1.5;
 
     for (let row = 0; row < h; row++) {
       for (let col = 0; col < w; col++) {
@@ -205,7 +207,9 @@ export function TacticalMapCanvas({
         );
         const shade =
           elevationRange > 0
-            ? 0.82 + 0.36 * ((cellElevation - minElev) / elevationRange)
+            ? elevationShadeMin +
+              (elevationShadeMax - elevationShadeMin) *
+                ((cellElevation - minElev) / elevationRange)
             : 1;
 
         if (terrainName === "WATER_RIVER") {
@@ -231,24 +235,6 @@ export function TacticalMapCanvas({
           ctx.strokeRect(x, y, width, height);
         }
       }
-    }
-
-    for (const [row, col] of mapData.steep_cells ?? []) {
-      const x = col * effectiveCellSize;
-      const y = row * effectiveCellSize;
-      ctx.fillStyle = "rgba(255,82,82,0.3)";
-      ctx.fillRect(x, y, effectiveCellSize, effectiveCellSize);
-      ctx.strokeStyle = "rgba(211,47,47,0.3)";
-      ctx.lineWidth = 0.8;
-      ctx.strokeRect(x, y, effectiveCellSize, effectiveCellSize);
-      drawHatch(
-        ctx,
-        x,
-        y,
-        effectiveCellSize,
-        effectiveCellSize,
-        "rgba(211,47,47,0.3)",
-      );
     }
 
     drawPath(
@@ -559,13 +545,6 @@ export function TacticalMapLegend({
           <span className="legend-color legend-obstacle" />
           Obstacle
         </span>
-        {Boolean(mapData.steep_cells?.length) && (
-          <span className="legend-item">
-            <span className="legend-color legend-steep-slope" />
-            Slope &gt;{" "}
-            {mapData.max_slope_deg ?? mapData.config.MAX_SLOPE_DEG ?? 20}°
-          </span>
-        )}
         <span className="legend-item">
           <span className="legend-color legend-start" />
           Start (S)

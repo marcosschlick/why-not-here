@@ -42,6 +42,8 @@ export interface GridLayersData {
   steep_cells?: [number, number][];
   cell_size?: number;
   max_slope_deg?: number;
+  elevation_shade_min?: number;
+  elevation_shade_max?: number;
   speeds?: Record<string, number>;
 }
 
