@@ -15,8 +15,16 @@ def generate_explanation_text(
     modifications: SemanticModifications | None,
     grid: Grid | None = None,
     fallback_reason: str | None = None,
+    solver_status: str = "OPTIMAL",
 ) -> str:
+    subgraph_only = solver_status == "SUBGRAPH_OPTIMAL_ONLY"
+    subgraph_message = (
+        "The candidate makes the alternative route p' optimal only within the reduced subgraph. "
+        "Global optimality validation failed; there is no global optimality certification."
+    )
     if modifications is None:
+        if subgraph_only:
+            return subgraph_message
         if fallback_reason:
             return fallback_reason
         return "No feasible intervention was found to make the alternative route p' optimal."
@@ -29,10 +37,17 @@ def generate_explanation_text(
     has_slope = bool(modifications.slope_edges)
 
     if not has_terrain and not has_obstacle and not has_slope:
+        if subgraph_only:
+            return (
+                subgraph_message
+                + " No environmental changes were required within the subgraph."
+            )
         return "The alternative route p' already has the same estimated traversal time as the optimal route p*, so no environmental changes are needed."
 
     lines = [
-        (
+        subgraph_message + " Candidate interventions:"
+        if subgraph_only
+        else (
             "This contrastive explanation describes why the planner selected the optimal route p* "
             "over the alternative route p': conditions along p' increase the robot's traversal time. "
             "The minimum environmental changes needed to make the alternative route p' optimal are:"
@@ -83,9 +98,10 @@ def generate_explanation_text(
                 "that slow or prevent continuous robot traversal."
             )
 
-    lines.append(
-        "Without these changes, the alternative route has a higher traversal cost and increases mission time."
-    )
+    if not subgraph_only:
+        lines.append(
+            "Without these changes, the alternative route has a higher traversal cost and increases mission time."
+        )
     return "\n".join(lines)
 
 

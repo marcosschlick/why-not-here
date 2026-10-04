@@ -34,6 +34,13 @@ def validate_alternative_path(
             "The alternative path contains repeated nodes.",
         )
 
+    if len(alternative_path) == 1 and not grid.is_traversable(start, start):
+        return (
+            False,
+            "DISCONNECTED_GRAPH",
+            "Origin and destination coincide on an impassable cell; no valid path exists.",
+        )
+
     for index in range(len(alternative_path) - 1):
         u, v = alternative_path[index], alternative_path[index + 1]
         if v not in grid.get_neighbors(u):

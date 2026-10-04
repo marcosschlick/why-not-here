@@ -7,6 +7,7 @@ from ..planning import astar
 from ..reduction import ReducedGraph, prepare_subgraph
 from .base import BaseISPSolver
 from .precheck import check_geometric_feasibility, validate_alternative_path
+from .semantics import ISPSemantics
 from .types import SemanticModifications
 
 
@@ -38,6 +39,8 @@ class ISPSolver(BaseISPSolver):
             grid, alternative_path, cost_p_star, self.tolerance
         )
         if not is_geometrically_feasible:
+            if ISPSemantics(grid, alternative_path).total_z_vars == 0:
+                status = "INFEASIBLE"
             self.last_solver_status = status
             return False, None, float("inf")
 

@@ -197,6 +197,10 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(
             "TARGET_TERRAIN must exist and have a speed greater than zero."
         )
+    if any(terrains[name] > terrains[target_terrain] for name in traversable):
+        raise ValueError(
+            "TARGET_TERRAIN speed must be at least the speed of every traversable terrain."
+        )
     if base_terrain not in traversable:
         raise ValueError("BASE_TERRAIN must exist and have a speed greater than zero.")
 

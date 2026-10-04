@@ -4,6 +4,7 @@ from scipy.sparse import csr_matrix, lil_matrix
 
 from ..config import (
     BASE_TERRAIN,
+    IMPASSABLE_TERRAINS,
     TARGET_TERRAIN,
     V_MAX,
 )
@@ -72,8 +73,10 @@ def compute_affine_edge_costs(
         c_u1 = (d_uv / 2.0) * ((1.0 / v_target) - (1.0 / v_u_eff)) * (1.0 + slope_pen)
         c_v1 = (d_uv / 2.0) * ((1.0 / v_target) - (1.0 / v_v_eff)) * (1.0 + slope_pen)
 
-        o_u = 1.0 if grid.get_cell(u).is_blocked else 0.0
-        o_v = 1.0 if grid.get_cell(v).is_blocked else 0.0
+        o_u = 1.0 if grid.get_cell(u).obstacle != 0 else 0.0
+        o_v = 1.0 if grid.get_cell(v).obstacle != 0 else 0.0
+        t_u = 1.0 if grid.get_cell(u).terrain in IMPASSABLE_TERRAINS else 0.0
+        t_v = 1.0 if grid.get_cell(v).terrain in IMPASSABLE_TERRAINS else 0.0
 
         s_viol = (
             1.0
@@ -85,7 +88,7 @@ def compute_affine_edge_costs(
             else 0.0
         )
 
-        c_base[k] = t_cost0 + isp.big_m * (o_u + o_v + s_viol)
+        c_base[k] = t_cost0 + isp.big_m * (o_u + o_v + t_u + t_v + s_viol)
         if M_terrain is not None:
             if u in isp.terrain_to_idx:
                 M_terrain[k, isp.terrain_to_idx[u]] += c_u1
@@ -106,7 +109,6 @@ def compute_affine_edge_costs(
             isp.num_terrain_vars > 0
             and isp.num_slope_vars > 0
             and (u, v) in isp.slope_to_idx
-            and slope_pen > 1e-4
         ):
             s_idx = isp.slope_to_idx[(u, v)]
             if u in isp.terrain_to_idx:
@@ -114,14 +116,14 @@ def compute_affine_edge_costs(
                 delta_u = (
                     (d_uv / 2.0) * ((1.0 / v_u_eff) - (1.0 / v_target)) * slope_pen
                 )
-                if abs(delta_u) > 1e-6:
+                if delta_u != 0.0:
                     cross_items.append((k, t_idx, s_idx, delta_u))
             if v in isp.terrain_to_idx:
                 t_idx = isp.terrain_to_idx[v]
                 delta_v = (
                     (d_uv / 2.0) * ((1.0 / v_v_eff) - (1.0 / v_target)) * slope_pen
                 )
-                if abs(delta_v) > 1e-6:
+                if delta_v != 0.0:
                     cross_items.append((k, t_idx, s_idx, delta_v))
 
     return (
@@ -192,7 +194,7 @@ def build_base_formulation(
         v_base_default=v_base_default,
     )
 
-    w_prime = c_base.copy()
+    w_prime = cp.Constant(c_base)
     if z_terrain is not None and M_terrain is not None:
         w_prime = w_prime + M_terrain @ z_terrain
     if z_obstacle is not None and M_obs is not None:

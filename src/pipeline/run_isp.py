@@ -189,7 +189,9 @@ def run_isp(
         if modifications is not None and (
             success or solver_status == "SUBGRAPH_OPTIMAL_ONLY"
         ):
-            explanation = ISPValidator.generate_explanation_text(modifications, grid)
+            explanation = ISPValidator.generate_explanation_text(
+                modifications, grid, solver_status=solver_status
+            )
         elif solver_status == "OPTIMAL_INACCURATE":
             explanation = (
                 "The MILP solver returned OPTIMAL_INACCURATE; the run is inconclusive "

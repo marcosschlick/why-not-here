@@ -19,8 +19,13 @@ class ISPValidator:
 
     @staticmethod
     def compute_path_cost(grid: Grid, path: list[tuple[int, int]]) -> float:
-        if not path or len(path) < 2:
+        if not path:
             return 0.0
+        if len(path) == 1:
+            u = path[0]
+            if not (0 <= u[0] < grid.h and 0 <= u[1] < grid.w):
+                return float("inf")
+            return grid.get_cost(u, u)
         total_cost = 0.0
         for r in range(len(path) - 1):
             cost = grid.get_cost(path[r], path[r + 1])
@@ -33,8 +38,11 @@ class ISPValidator:
     def generate_explanation_text(
         modifications: SemanticModifications | None,
         grid: Grid | None = None,
+        solver_status: str = "OPTIMAL",
     ) -> str:
-        return generate_explanation_text(modifications, grid)
+        return generate_explanation_text(
+            modifications, grid, solver_status=solver_status
+        )
 
     @staticmethod
     def generate_cost_baseline_justification(
@@ -65,9 +73,6 @@ def validate_global_optimality(
             float("inf"),
             q_cost if q_global is not None else float("inf"),
         )
-
-    if start == goal and len(alternative_path) == 1:
-        return True, None, 0.0, 0.0
 
     p_cost = ISPValidator.compute_path_cost(mod_grid, alternative_path)
 
@@ -114,9 +119,6 @@ def validate_subgraph_optimality(
             float("inf"),
             q_cost if q_sub is not None else float("inf"),
         )
-
-    if start == goal and len(alternative_path) == 1:
-        return True, None, 0.0, 0.0
 
     p_cost = ISPValidator.compute_path_cost(mod_grid, alternative_path)
 
