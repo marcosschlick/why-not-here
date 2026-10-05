@@ -21,6 +21,9 @@ from .style import (
     terrain_color_rgb,
 )
 
+_ModificationPoint = tuple[float, float]
+_ModificationGroup = tuple[list[_ModificationPoint], list[_ModificationPoint]]
+
 
 def create_grid_rgb_matrix(grid: Grid) -> np.ndarray:
     elev_matrix = np.array(grid.elevation, dtype=np.float64)
@@ -73,21 +76,40 @@ def draw_modifications(
     modifications: SemanticModifications,
     edge_width: float,
 ) -> None:
-    for u, v in modifications.slope_edges:
-        _draw_modification_circle(
-            ax,
-            ((u[1] + v[1]) / 2, (u[0] + v[0]) / 2),
-            MODIFICATION_SLOPE_COLOR,
-            edge_width,
-        )
-    _draw_modification_cells(
-        ax, modifications.terrain_nodes, MODIFICATION_TERRAIN_COLOR, edge_width
+    origin_x = ax.transData.transform((0, 0))[0]
+    next_x = ax.transData.transform((1, 0))[0]
+    cell_width_points = abs(next_x - origin_x) * 72 / ax.figure.dpi
+    slope_points = [
+        ((u[0] + v[0]) / 2, (u[1] + v[1]) / 2)
+        for u, v in modifications.slope_edges
+    ]
+    _draw_modification_points(
+        ax,
+        slope_points,
+        MODIFICATION_SLOPE_COLOR,
+        edge_width,
+        cell_width_points,
     )
     _draw_modification_cells(
-        ax, modifications.obstacle_nodes, MODIFICATION_OBSTACLE_COLOR, edge_width
+        ax,
+        modifications.terrain_nodes,
+        MODIFICATION_TERRAIN_COLOR,
+        edge_width,
+        cell_width_points,
     )
     _draw_modification_cells(
-        ax, modifications.water_nodes, MODIFICATION_WATER_COLOR, edge_width
+        ax,
+        modifications.obstacle_nodes,
+        MODIFICATION_OBSTACLE_COLOR,
+        edge_width,
+        cell_width_points,
+    )
+    _draw_modification_cells(
+        ax,
+        modifications.water_nodes,
+        MODIFICATION_WATER_COLOR,
+        edge_width,
+        cell_width_points,
     )
 
 
@@ -96,9 +118,131 @@ def _draw_modification_cells(
     nodes: list[tuple[int, int]],
     color: str,
     edge_width: float,
+    cell_width_points: float,
 ) -> None:
-    for row, col in nodes:
-        _draw_modification_circle(ax, (col, row), color, edge_width)
+    _draw_modification_points(
+        ax,
+        [(float(row), float(col)) for row, col in nodes],
+        color,
+        edge_width,
+        cell_width_points,
+    )
+
+
+def _group_modification_points(points: list[_ModificationPoint]) -> list[_ModificationGroup]:
+    neighbors: list[list[int]] = [[] for _ in points]
+    buckets: dict[tuple[int, int], list[int]] = {}
+
+    for index, (row, col) in enumerate(points):
+        bucket_row = math.floor(row)
+        bucket_col = math.floor(col)
+        for nearby_row in range(bucket_row - 1, bucket_row + 2):
+            for nearby_col in range(bucket_col - 1, bucket_col + 2):
+                for candidate_index in buckets.get((nearby_row, nearby_col), []):
+                    candidate_row, candidate_col = points[candidate_index]
+                    if (
+                        abs(row - candidate_row) <= 1
+                        and abs(col - candidate_col) <= 1
+                    ):
+                        neighbors[index].append(candidate_index)
+                        neighbors[candidate_index].append(index)
+
+        buckets.setdefault((bucket_row, bucket_col), []).append(index)
+
+    visited: set[int] = set()
+    groups: list[_ModificationGroup] = []
+
+    def ordered_neighbors(current_index: int) -> list[int]:
+        current_row, current_col = points[current_index]
+
+        def neighbor_key(index: int) -> tuple[int, float, float, float, int]:
+            row, col = points[index]
+            row_distance = abs(current_row - row)
+            col_distance = abs(current_col - col)
+            changed_axes = int(row_distance > 0) + int(col_distance > 0)
+            distance = row_distance**2 + col_distance**2
+            return changed_axes, distance, row, col, index
+
+        return sorted(neighbors[current_index], key=neighbor_key)
+
+    for start in range(len(points)):
+        if start in visited:
+            continue
+
+        group_points = [points[start]]
+        path = [points[start]]
+        visited.add(start)
+        traversal = [(start, ordered_neighbors(start), 0)]
+
+        while traversal:
+            current_index, candidates, next_neighbor = traversal[-1]
+            if next_neighbor >= len(candidates):
+                traversal.pop()
+                if traversal:
+                    path.append(points[traversal[-1][0]])
+                continue
+
+            neighbor_index = candidates[next_neighbor]
+            traversal[-1] = (current_index, candidates, next_neighbor + 1)
+            if neighbor_index in visited:
+                continue
+
+            visited.add(neighbor_index)
+            group_points.append(points[neighbor_index])
+            path.append(points[neighbor_index])
+            traversal.append((neighbor_index, ordered_neighbors(neighbor_index), 0))
+
+        groups.append((group_points, path))
+
+    return groups
+
+
+def _draw_modification_points(
+    ax: plt.Axes,
+    points: list[_ModificationPoint],
+    color: str,
+    edge_width: float,
+    cell_width_points: float,
+) -> None:
+    for group_points, path in _group_modification_points(points):
+        if len(group_points) == 1:
+            row, col = group_points[0]
+            _draw_modification_circle(ax, (col, row), color, edge_width)
+            continue
+
+        _draw_modification_group(
+            ax,
+            path,
+            color,
+            edge_width,
+            cell_width_points,
+        )
+
+
+def _draw_modification_group(
+    ax: plt.Axes,
+    path: list[_ModificationPoint],
+    color: str,
+    edge_width: float,
+    cell_width_points: float,
+) -> None:
+    marker_width_points = cell_width_points * 0.78
+    columns = [col for row, col in path]
+    rows = [row for row, col in path]
+
+    def draw_group_path(line_color: str, line_width: float) -> None:
+        ax.plot(
+            columns,
+            rows,
+            color=line_color,
+            linewidth=line_width,
+            solid_capstyle="round",
+            solid_joinstyle="round",
+            zorder=6,
+        )
+
+    draw_group_path(MODIFICATION_EDGE_COLOR, marker_width_points + edge_width)
+    draw_group_path(color, marker_width_points)
 
 
 def _draw_modification_circle(
@@ -265,9 +409,14 @@ def draw_endpoints(
         )
     )
     ax.add_patch(
-        Circle(
-            (goal[1], goal[0]),
-            radius=radius,
+        Polygon(
+            (
+                (goal[1], goal[0] - radius),
+                (goal[1] + radius, goal[0]),
+                (goal[1], goal[0] + radius),
+                (goal[1] - radius, goal[0]),
+            ),
+            closed=True,
             facecolor=GOAL_COLOR,
             edgecolor=GOAL_EDGE_COLOR,
             linewidth=edge_width,

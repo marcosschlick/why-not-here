@@ -1241,19 +1241,21 @@ kbd,
   border: 1px solid color-mix(in srgb, var(--shadow-grey) 25%, transparent);
   border-radius: 0.2rem;
 }
-.legend-start {
+.legend-start,
+.legend-goal {
   width: 0.58rem;
   height: 0.58rem;
-  background: var(--map-start);
-  border-color: var(--map-start-edge);
   border-radius: 0.08rem;
   margin: 0 0.06rem;
   transform: rotate(45deg);
 }
+.legend-start {
+  background: var(--map-start);
+  border-color: var(--map-start-edge);
+}
 .legend-goal {
   background: var(--map-goal);
   border-color: var(--map-goal-edge);
-  border-radius: 50%;
 }
 .legend-optimal-route,
 .legend-route,

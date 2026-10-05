@@ -23,6 +23,8 @@ interface TacticalMapCanvasProps {
 }
 
 type Rgb = [number, number, number];
+type MarkerPoint = { row: number; col: number };
+type MarkerGroup = { points: MarkerPoint[]; path: MarkerPoint[] };
 
 const EMPTY_PATH: GridPoint[] = [];
 
@@ -63,6 +65,7 @@ const MODIFICATION_WATER_RGB: Rgb = [86, 180, 233];
 const MODIFICATION_EDGE_RGB: Rgb = [40, 40, 40];
 const GRID_RGB: Rgb = [255, 255, 255];
 const MODIFICATION_RADIUS = 0.39;
+const MODIFICATION_EDGE_WIDTH = 0.05;
 const CELL_EDGE_WIDTH = 0.035;
 const ROUTE_WIDTH = 0.14;
 const USER_PATH_OUTLINE_WIDTH = 0.2;
@@ -184,8 +187,163 @@ function drawModificationCircle(
   ctx.fillStyle = rgba(color);
   ctx.fill();
   ctx.strokeStyle = rgba(MODIFICATION_EDGE_RGB);
-  ctx.lineWidth = cellSize * CELL_EDGE_WIDTH;
+  ctx.lineWidth = cellSize * MODIFICATION_EDGE_WIDTH;
   ctx.stroke();
+}
+
+function groupModificationPoints(points: MarkerPoint[]): MarkerGroup[] {
+  const neighbors = points.map(() => [] as number[]);
+  const buckets = new Map<string, number[]>();
+
+  points.forEach((point, index) => {
+    const bucketRow = Math.floor(point.row);
+    const bucketCol = Math.floor(point.col);
+
+    for (let row = bucketRow - 1; row <= bucketRow + 1; row += 1) {
+      for (let col = bucketCol - 1; col <= bucketCol + 1; col += 1) {
+        const candidates = buckets.get(`${row},${col}`) ?? [];
+        for (const candidateIndex of candidates) {
+          const candidate = points[candidateIndex];
+          if (
+            Math.abs(point.row - candidate.row) <= 1 &&
+            Math.abs(point.col - candidate.col) <= 1
+          ) {
+            neighbors[index].push(candidateIndex);
+            neighbors[candidateIndex].push(index);
+          }
+        }
+      }
+    }
+
+    const key = `${bucketRow},${bucketCol}`;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(index);
+    buckets.set(key, bucket);
+  });
+
+  const visited = new Set<number>();
+  const groups: MarkerGroup[] = [];
+  const orderedNeighbors = (currentIndex: number) => {
+    const current = points[currentIndex];
+    return [...neighbors[currentIndex]].sort((left, right) => {
+      const leftPoint = points[left];
+      const rightPoint = points[right];
+      const leftRowDistance = Math.abs(current.row - leftPoint.row);
+      const leftColDistance = Math.abs(current.col - leftPoint.col);
+      const rightRowDistance = Math.abs(current.row - rightPoint.row);
+      const rightColDistance = Math.abs(current.col - rightPoint.col);
+      const leftAxes =
+        Number(leftRowDistance > 0) + Number(leftColDistance > 0);
+      const rightAxes =
+        Number(rightRowDistance > 0) + Number(rightColDistance > 0);
+      const leftDistance = leftRowDistance ** 2 + leftColDistance ** 2;
+      const rightDistance = rightRowDistance ** 2 + rightColDistance ** 2;
+
+      return (
+        leftAxes - rightAxes ||
+        leftDistance - rightDistance ||
+        leftPoint.row - rightPoint.row ||
+        leftPoint.col - rightPoint.col ||
+        left - right
+      );
+    });
+  };
+
+  for (let start = 0; start < points.length; start += 1) {
+    if (visited.has(start)) continue;
+
+    const groupPoints = [points[start]];
+    const path = [points[start]];
+    visited.add(start);
+    const traversal = [
+      { index: start, neighbors: orderedNeighbors(start), nextNeighbor: 0 },
+    ];
+
+    while (traversal.length > 0) {
+      const current = traversal[traversal.length - 1];
+      if (current.nextNeighbor >= current.neighbors.length) {
+        traversal.pop();
+        if (traversal.length > 0) {
+          path.push(points[traversal[traversal.length - 1].index]);
+        }
+        continue;
+      }
+
+      const neighborIndex = current.neighbors[current.nextNeighbor];
+      current.nextNeighbor += 1;
+      if (visited.has(neighborIndex)) continue;
+
+      visited.add(neighborIndex);
+      groupPoints.push(points[neighborIndex]);
+      path.push(points[neighborIndex]);
+      traversal.push({
+        index: neighborIndex,
+        neighbors: orderedNeighbors(neighborIndex),
+        nextNeighbor: 0,
+      });
+    }
+
+    groups.push({ points: groupPoints, path });
+  }
+
+  return groups;
+}
+
+function drawModificationGroup(
+  ctx: CanvasRenderingContext2D,
+  group: MarkerGroup,
+  color: Rgb,
+  cellSize: number,
+) {
+  if (group.points.length === 1) {
+    const point = group.points[0];
+    drawModificationCircle(
+      ctx,
+      (point.col + 0.5) * cellSize,
+      (point.row + 0.5) * cellSize,
+      color,
+      cellSize,
+    );
+    return;
+  }
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const drawPath = () => {
+    const firstPoint = group.path[0];
+    ctx.beginPath();
+    ctx.moveTo(
+      (firstPoint.col + 0.5) * cellSize,
+      (firstPoint.row + 0.5) * cellSize,
+    );
+    for (const point of group.path.slice(1)) {
+      ctx.lineTo((point.col + 0.5) * cellSize, (point.row + 0.5) * cellSize);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  };
+
+  ctx.strokeStyle = rgba(MODIFICATION_EDGE_RGB);
+  ctx.lineWidth =
+    cellSize * (MODIFICATION_RADIUS * 2 + MODIFICATION_EDGE_WIDTH);
+  drawPath();
+
+  ctx.strokeStyle = rgba(color);
+  ctx.lineWidth = cellSize * MODIFICATION_RADIUS * 2;
+  drawPath();
+  ctx.restore();
+}
+
+function drawModificationPoints(
+  ctx: CanvasRenderingContext2D,
+  points: MarkerPoint[],
+  color: Rgb,
+  cellSize: number,
+) {
+  for (const group of groupModificationPoints(points)) {
+    drawModificationGroup(ctx, group, color, cellSize);
+  }
 }
 
 function drawModificationCells(
@@ -194,11 +352,12 @@ function drawModificationCells(
   color: Rgb,
   cellSize: number,
 ) {
-  for (const [row, col] of points) {
-    const centerX = col * cellSize + cellSize / 2;
-    const centerY = row * cellSize + cellSize / 2;
-    drawModificationCircle(ctx, centerX, centerY, color, cellSize);
-  }
+  drawModificationPoints(
+    ctx,
+    points.map(([row, col]) => ({ row, col })),
+    color,
+    cellSize,
+  );
 }
 
 function drawHatch(
@@ -375,17 +534,15 @@ export function TacticalMapCanvas({
       -1,
     );
 
-    for (const [from, to] of slopeEdges) {
-      const centerX = ((from[1] + to[1] + 1) * effectiveCellSize) / 2;
-      const centerY = ((from[0] + to[0] + 1) * effectiveCellSize) / 2;
-      drawModificationCircle(
-        ctx,
-        centerX,
-        centerY,
-        MODIFICATION_SLOPE_RGB,
-        effectiveCellSize,
-      );
-    }
+    drawModificationPoints(
+      ctx,
+      slopeEdges.map(([from, to]) => ({
+        row: (from[0] + to[0]) / 2,
+        col: (from[1] + to[1]) / 2,
+      })),
+      MODIFICATION_SLOPE_RGB,
+      effectiveCellSize,
+    );
     drawModificationCells(
       ctx,
       terrainNodes,
@@ -426,7 +583,11 @@ export function TacticalMapCanvas({
     const goalX = goal[1] * effectiveCellSize + effectiveCellSize / 2;
     const goalY = goal[0] * effectiveCellSize + effectiveCellSize / 2;
     ctx.beginPath();
-    ctx.arc(goalX, goalY, markerRadius, 0, Math.PI * 2);
+    ctx.moveTo(goalX, goalY - markerRadius);
+    ctx.lineTo(goalX + markerRadius, goalY);
+    ctx.lineTo(goalX, goalY + markerRadius);
+    ctx.lineTo(goalX - markerRadius, goalY);
+    ctx.closePath();
     ctx.fillStyle = rgba(GOAL_RGB);
     ctx.fill();
     ctx.strokeStyle = rgba(GOAL_EDGE_RGB);

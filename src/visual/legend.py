@@ -180,7 +180,7 @@ def build_tactical_legend(
                     [],
                     [],
                     linestyle="none",
-                    marker="o",
+                    marker="D",
                     markersize=7,
                     markerfacecolor=GOAL_COLOR,
                     markeredgecolor=GOAL_EDGE_COLOR,

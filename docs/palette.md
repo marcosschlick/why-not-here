@@ -28,15 +28,21 @@ five-color palette.
 
 For semantic map changes, use map-specific colors: Pink (`#CC79A7`) for changed
 terrain, Orange (`#E69F00`) for removed obstacles, Teal (`#009E73`) for leveled
-slopes, and Sky Blue (`#56B4E9`) for traversable water. Draw every change as a
-filled circle with a 0.39-cell radius and a Shadow Grey (`#282828`) edge 0.035
-cells wide, with no halo. Center terrain, obstacle, and water changes on their
-cells. Center one slope marker at the midpoint of each leveled edge. Use the
-same circles in map legends; slope counts represent leveled edges. These colors
-are specific to the tactical map and do not add tokens to the official palette.
+slopes, and Sky Blue (`#56B4E9`) for traversable water. Draw an isolated change
+as a filled circle with a 0.39-cell radius and a Shadow Grey (`#282828`) edge
+0.05 cells wide, with no halo. Use the same edge width for grouped changes.
+Group changes of the same type transitively
+when both their row and column offsets are at most one. Connect grouped marker
+centers with rounded capsules 0.78 cells wide and show only the shared outer
+edge, preserving empty regions in the group's shape. Keep terrain, obstacle,
+slope, and water groups separate. Center terrain, obstacle, and water changes
+on their cells; center slope markers at the midpoints of their leveled edges.
+Use individual circles in map legends; slope counts represent leveled edges.
+These colors are specific to the tactical map and do not add tokens to the
+official palette.
 
-Preserve the existing start diamond and goal circle colors and shapes, each
-with a 0.4-cell radius.
+Preserve the start and goal as diamonds with their existing colors and a
+0.4-cell radius.
 
 ### CSS Custom Properties
 

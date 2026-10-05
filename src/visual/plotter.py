@@ -35,7 +35,7 @@ def render_tactical_map(
     title: str = "Tactical map",
     save_path: str | Path | None = None,
     show: bool = False,
-    dpi: int = 300,
+    dpi: int = 600,
     endpoints: tuple[tuple[int, int], tuple[int, int]] | None = None,
     subtitle: str | None = None,
 ) -> plt.Figure:
@@ -95,7 +95,8 @@ def render_tactical_map(
     cell_width_points = cell_width_pixels * 72 / dpi
     route_width = cell_width_points * ROUTE_WIDTH
     user_path_outline_width = cell_width_points * USER_PATH_OUTLINE_WIDTH
-    edge_width = cell_width_points * 0.035
+    modification_edge_width = cell_width_points * 0.05
+    endpoint_edge_width = cell_width_points * 0.035
 
     shared_cells = set(optimal_path or []) & set(user_path or [])
 
@@ -131,7 +132,7 @@ def render_tactical_map(
         )
 
     if modifications is not None:
-        draw_modifications(ax, modifications, edge_width)
+        draw_modifications(ax, modifications, modification_edge_width)
 
     if optimal_path:
         draw_endpoints(
@@ -139,7 +140,7 @@ def render_tactical_map(
             optimal_path[0],
             optimal_path[-1],
             radius=0.4,
-            edge_width=edge_width,
+            edge_width=endpoint_edge_width,
         )
     elif user_path:
         draw_endpoints(
@@ -147,11 +148,15 @@ def render_tactical_map(
             user_path[0],
             user_path[-1],
             radius=0.4,
-            edge_width=edge_width,
+            edge_width=endpoint_edge_width,
         )
     elif endpoints:
         draw_endpoints(
-            ax, endpoints[0], endpoints[1], radius=0.4, edge_width=edge_width
+            ax,
+            endpoints[0],
+            endpoints[1],
+            radius=0.4,
+            edge_width=endpoint_edge_width,
         )
 
     if save_path:
