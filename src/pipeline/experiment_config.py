@@ -46,11 +46,35 @@ CONFIG_REGISTRY = {
     "OUTPUT_DIR": "config_storage.py",
 }
 
+FIXED_TERRAIN_CONFIG_KEYS = frozenset(
+    {
+        "DEFAULT_TERRAIN",
+        "BASE_TERRAIN",
+        "TARGET_TERRAIN",
+        "TERRAINS",
+        "TERRAIN_COLORS",
+        "MAX_SLOPE_DEG",
+    }
+)
+EXPERIMENT_CONFIG_REGISTRY = {
+    key: module
+    for key, module in CONFIG_REGISTRY.items()
+    if key not in FIXED_TERRAIN_CONFIG_KEYS
+}
+
 
 def get_all_configurations() -> dict[str, Any]:
     return {
         key: copy.deepcopy(getattr(config, key))
         for key in CONFIG_REGISTRY
+        if hasattr(config, key)
+    }
+
+
+def get_experiment_configurations() -> dict[str, Any]:
+    return {
+        key: copy.deepcopy(getattr(config, key))
+        for key in EXPERIMENT_CONFIG_REGISTRY
         if hasattr(config, key)
     }
 
@@ -251,7 +275,7 @@ def _build_configuration_candidate(
     updates: dict[str, Any],
     base: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    unknown_keys = set(updates) - set(CONFIG_REGISTRY)
+    unknown_keys = set(updates) - set(EXPERIMENT_CONFIG_REGISTRY)
     if unknown_keys:
         raise ValueError(
             f"Unknown configuration parameters: {', '.join(sorted(unknown_keys))}."
@@ -297,7 +321,9 @@ def _publish_derived_configuration() -> None:
 
 def update_configurations(updates: dict[str, Any]) -> dict[str, Any]:
     candidate = _build_configuration_candidate(updates)
-    applied = {key: candidate[key] for key in updates if key in CONFIG_REGISTRY}
+    applied = {
+        key: candidate[key] for key in updates if key in EXPERIMENT_CONFIG_REGISTRY
+    }
     for key, value in candidate.items():
         _publish_configuration_value(key, value)
     _publish_derived_configuration()
@@ -319,7 +345,7 @@ def build_experiment_config(
 
     export_dict: dict[str, Any] = {
         key: copy.deepcopy(current_system[key])
-        for key in CONFIG_REGISTRY
+        for key in EXPERIMENT_CONFIG_REGISTRY
         if key in current_system
     }
 
@@ -403,7 +429,7 @@ def validate_experiment_config(
     if not isinstance(data, dict):
         raise TypeError("Configuration payload must be a JSON object dictionary.")
 
-    allowed_keys = set(CONFIG_REGISTRY) | {
+    allowed_keys = set(EXPERIMENT_CONFIG_REGISTRY) | {
         "start",
         "goal",
         "p_user",
@@ -456,12 +482,19 @@ def validate_experiment_config(
         )
 
     supplied_config = {
-        key: value for key, value in data.items() if key in CONFIG_REGISTRY
+        key: value
+        for key, value in data.items()
+        if key in EXPERIMENT_CONFIG_REGISTRY
     }
-    params = _build_configuration_candidate(
+    candidate = _build_configuration_candidate(
         supplied_config,
         base=copy.deepcopy(DEFAULT_CONFIGURATIONS),
     )
+    params = {
+        key: candidate[key]
+        for key in EXPERIMENT_CONFIG_REGISTRY
+        if key in candidate
+    }
 
     map_h = params["MAP_H"]
     map_w = params["MAP_W"]

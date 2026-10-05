@@ -155,10 +155,10 @@ export function ResultsView({
         ? {
             ...originalMapData,
             ...modifiedGrid,
-            config: {
-              ...originalMapData.config,
-              TERRAINS: modifiedGrid.speeds ?? originalMapData.config.TERRAINS,
-            },
+            max_slope_deg:
+              modifiedGrid.max_slope_deg ?? originalMapData.max_slope_deg,
+            speeds: modifiedGrid.speeds ?? originalMapData.speeds,
+            terrain_colors: originalMapData.terrain_colors,
           }
         : originalMapData,
     [originalMapData, modifiedGrid],
@@ -347,7 +347,7 @@ export function ResultsView({
     hoveredCell && currentMapData
       ? (currentMapData.terrain[hoveredCell[0]]?.[hoveredCell[1]] ?? "-")
       : "-";
-  const hoveredTerrainSpeed = currentMapData?.config.TERRAINS?.[hoveredTerrain];
+  const hoveredTerrainSpeed = currentMapData?.speeds?.[hoveredTerrain];
   const hoveredTerrainBlocked =
     !isCellWaterModified &&
     (hoveredTerrain === "WATER_RIVER" ||

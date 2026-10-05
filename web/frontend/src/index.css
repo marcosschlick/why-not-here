@@ -921,45 +921,6 @@ kbd,
   display: block;
   margin-bottom: 0.75rem;
 }
-.terrain-registry-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-.terrain-registry-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: end;
-  gap: 0.75rem;
-  min-width: 0;
-  padding: 0.75rem;
-  background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-}
-.terrain-registry-row .form-group {
-  min-width: 0;
-}
-.terrain-registry-fields {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: end;
-  gap: 0.5rem;
-  min-width: 0;
-}
-.terrain-color-picker {
-  min-height: 2.625rem;
-  padding: 0.25rem !important;
-  cursor: pointer;
-}
-.terrain-remove-button {
-  width: 100%;
-  white-space: nowrap;
-}
-.terrain-add-button {
-  margin-top: 0.75rem;
-}
 .form-actions-row {
   display: flex;
   align-items: center;
@@ -2465,12 +2426,6 @@ kbd,
   .conditional-inner-grid.has-scope {
     grid-template-columns: 1fr;
   }
-  .terrain-registry-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .terrain-remove-button {
-    justify-self: stretch;
-  }
   .canvas-legend {
     grid-template-columns: 1fr;
     justify-content: stretch;
@@ -2546,11 +2501,6 @@ kbd,
   }
   .confirm-modal-actions .btn {
     flex-basis: 100%;
-  }
-}
-@media (max-width: 32rem) {
-  .terrain-registry-list {
-    grid-template-columns: 1fr;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -36,7 +36,7 @@ from src.planning import plan_path
 from src.visual.layers import find_steep_cells
 
 from .artifacts import collect_artifacts
-from .config_manager import get_all_configurations, update_configurations
+from .config_manager import get_experiment_configurations, update_configurations
 from .runner import runner
 from .schemas import (
     BrowseRequest,
@@ -73,6 +73,8 @@ def _grid_layers(grid: Grid) -> dict[str, Any]:
     return {
         "cell_size": grid.cell_size,
         "max_slope_deg": grid.max_slope_deg,
+        "speeds": grid.speeds,
+        "terrain_colors": config.TERRAIN_COLORS,
         "steep_cells": sorted(find_steep_cells(grid)),
         "elevation_shade_min": config.MAP_ELEVATION_SHADE_MIN,
         "elevation_shade_max": config.MAP_ELEVATION_SHADE_MAX,
@@ -93,7 +95,7 @@ def sanitize_floats(obj: Any) -> Any:
 
 @router.get("/config")
 def read_config() -> dict[str, Any]:
-    return get_all_configurations()
+    return get_experiment_configurations()
 
 
 @router.post("/config")
@@ -208,7 +210,7 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
             "optimal_cost": safe_optimal_cost,
             "map_image_url": _map_image_url(payload.persist_artifacts),
             **_grid_layers(grid),
-            "config": get_all_configurations(),
+            "config": get_experiment_configurations(),
             "generation": _generation_metadata(grid),
             "user_path": [list(pt) for pt in p_user],
         }
@@ -279,7 +281,7 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
             "optimal_cost": safe_optimal_cost,
             "map_image_url": _map_image_url(persist_artifacts),
             **_grid_layers(grid),
-            "config": get_all_configurations(),
+            "config": get_experiment_configurations(),
             "generation": _generation_metadata(grid),
         }
         return sanitize_floats(response_data)

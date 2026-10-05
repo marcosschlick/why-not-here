@@ -365,7 +365,7 @@ export function RouteCanvas({
   const hoveredTerrain = hoveredCell
     ? terrain[hoveredCell[0]]?.[hoveredCell[1]] || "-"
     : "-";
-  const hoveredTerrainSpeed = mapData.config.TERRAINS?.[hoveredTerrain];
+  const hoveredTerrainSpeed = mapData.speeds?.[hoveredTerrain];
   const hoveredTerrainBlocked =
     hoveredTerrain === "WATER_RIVER" ||
     hoveredTerrainSpeed === undefined ||

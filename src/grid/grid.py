@@ -163,8 +163,6 @@ class Grid:
             "w": self.w,
             "cell_size": self.cell_size,
             "connectivity": self.connectivity,
-            "max_slope_deg": self.max_slope_deg,
-            "speeds": self.speeds,
             "terrain": self.terrain,
             "elevation": self.elevation,
             "obstacle": self.obstacle,
@@ -189,9 +187,7 @@ class Grid:
             w=data["w"],
             cell_size=data["cell_size"],
             connectivity=data["connectivity"],
-            max_slope_deg=data["max_slope_deg"],
         )
-        grid.speeds = data["speeds"]
         grid.load_terrain_matrix(data["terrain"])
         grid.load_elevation_matrix(data["elevation"])
         grid.load_obstacle_matrix(data["obstacle"])

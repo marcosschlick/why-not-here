@@ -454,11 +454,11 @@ export function TacticalMapCanvas({
         const width = Math.round((col + 1) * effectiveCellSize) - x;
         const height = Math.round((row + 1) * effectiveCellSize) - y;
         const terrainName =
-          terrain[row]?.[col] || mapData.config.DEFAULT_TERRAIN || "GRASS";
+          terrain[row]?.[col] || "GRASS";
         const isObstacle = (obstacle[row]?.[col] ?? 0) !== 0;
         const cellElevation = elevation[row]?.[col] ?? 0;
         const baseTerrainColor = terrainColor(
-          mapData.config.TERRAIN_COLORS?.[terrainName],
+          mapData.terrain_colors?.[terrainName],
         );
         const shade =
           elevationRange > 0
@@ -771,24 +771,20 @@ export function TacticalMapLegend({
       </div>
       <div className="legend-group">
         <span className="legend-group-label">Terrain</span>
-        {Object.entries(mapData.speeds ?? mapData.config.TERRAINS ?? {}).map(
-          ([name, speed]) => (
-            <span className="legend-item" key={name}>
-              <span
-                className="legend-color"
-                style={{
-                  backgroundColor:
-                    mapData.config.TERRAIN_COLORS?.[name] ?? "#808080",
-                }}
-              />
-              {name.toLowerCase().replaceAll("_", " ")} (
-              {Number(speed).toLocaleString("en-US", {
-                maximumSignificantDigits: 6,
-              })}{" "}
-              m/s)
-            </span>
-          ),
-        )}
+        {Object.entries(mapData.speeds ?? {}).map(([name, speed]) => (
+          <span className="legend-item" key={name}>
+            <span
+              className="legend-color"
+              style={{
+                backgroundColor: mapData.terrain_colors?.[name] ?? "#808080",
+              }}
+            />
+            {name.toLowerCase().replaceAll("_", " ")} (
+            {Number(speed).toLocaleString("en-US", {
+              maximumSignificantDigits: 6,
+            })} m/s)
+          </span>
+        ))}
         <span className="legend-item">
           <span className="legend-color legend-obstacle" />
           Obstacle

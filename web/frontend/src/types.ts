@@ -3,8 +3,6 @@ export interface SystemConfig {
   MAP_H: number;
   CELL_SIZE?: number;
   CONNECTIVITY: number;
-  DEFAULT_TERRAIN?: string;
-  BASE_TERRAIN?: string;
   DEFAULT_REDUCTION_METHOD: string;
   USE_INCREMENTAL_SOLVER: boolean;
   OUTPUT_DIR: string;
@@ -12,10 +10,6 @@ export interface SystemConfig {
   DEFAULT_PLANNER?: string;
   DEFAULT_SOLVER?: string;
   SOLVER_TIMEOUT_SEC?: number;
-  TARGET_TERRAIN?: string;
-  TERRAINS?: Record<string, number>;
-  TERRAIN_COLORS?: Record<string, string>;
-  MAX_SLOPE_DEG?: number;
   CLOSED_LOOP_TIMEOUT_SEC?: number;
   MAX_ISP_ITERATIONS?: number;
   BBOX_MARGIN?: number;
@@ -31,7 +25,6 @@ export interface SystemConfig {
   MAP_ROUGHNESS_THRESHOLDS?: Record<string, number>;
   MAP_MIN_MAIN_COMPONENT_RATIO?: number;
   MAP_MAX_GENERATION_ATTEMPTS?: number;
-  [key: string]: unknown;
 }
 
 export interface GridLayersData {
@@ -45,6 +38,7 @@ export interface GridLayersData {
   elevation_shade_min?: number;
   elevation_shade_max?: number;
   speeds?: Record<string, number>;
+  terrain_colors?: Record<string, string>;
 }
 
 export interface MapData extends GridLayersData {
