@@ -21,6 +21,7 @@ from .style import (
     USER_PATH_COLOR,
     USER_PATH_OUTLINE_COLOR,
     USER_PATH_OUTLINE_WIDTH,
+    axis_ticks,
     compute_layout,
 )
 
@@ -31,11 +32,12 @@ def render_tactical_map(
     user_path: list[tuple[int, int]] | None = None,
     modifications: SemanticModifications | None = None,
     modified_grid: Grid | None = None,
-    title: str = "Tactical Grid Map",
+    title: str = "Tactical map",
     save_path: str | Path | None = None,
     show: bool = False,
-    dpi: int = 150,
+    dpi: int = 300,
     endpoints: tuple[tuple[int, int], tuple[int, int]] | None = None,
+    subtitle: str | None = None,
 ) -> plt.Figure:
     target_grid = modified_grid if modified_grid is not None else grid
     layout = compute_layout(target_grid.h, target_grid.w)
@@ -57,11 +59,24 @@ def render_tactical_map(
         ax.tick_params(which="minor", size=0)
 
     step = layout["tick_step"]
-    ax.set_xticks(range(0, target_grid.w, step))
-    ax.set_yticks(range(0, target_grid.h, step))
-    ax.set_title(title, fontsize=12, fontweight="bold", pad=12)
+    ax.set_xticks(axis_ticks(target_grid.w, step))
+    ax.set_yticks(axis_ticks(target_grid.h, step))
+    ax.set_title(title, fontsize=12, fontweight="bold", pad=24)
+    metadata = f"Grid: {target_grid.h} rows × {target_grid.w} columns"
+    if subtitle:
+        metadata = f"{metadata} · {subtitle}"
+    ax.text(
+        0.5,
+        1.0,
+        metadata,
+        transform=ax.transAxes,
+        ha="center",
+        va="bottom",
+        fontsize=8.5,
+        color="#505050",
+    )
     ax.set_xlabel("Column (j)", fontsize=10)
-    ax.set_ylabel("Row (i)", fontsize=10)
+    ax.set_ylabel("Row (i; 0 at top)", fontsize=10)
 
     build_tactical_legend(
         ax=ax,

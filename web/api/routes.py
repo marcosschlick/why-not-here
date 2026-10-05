@@ -14,6 +14,11 @@ from src import config
 from src.grid import Grid
 from src.incremental import ISPValidator
 from src.isp.precheck import validate_alternative_path
+from src.pipeline.artifact_names import (
+    MAP_DIRECTORY_NAME,
+    MAP_IMAGE_FILENAME,
+    OUTPUT_ARTIFACT_FILENAMES,
+)
 from src.pipeline.experiment_config import (
     apply_experiment_config,
     build_experiment_config,
@@ -58,7 +63,10 @@ def _generation_metadata(grid: Grid) -> dict[str, int | None]:
 def _map_image_url(persist_artifacts: bool) -> str:
     if not persist_artifacts:
         return ""
-    return f"/output/map/map.png?dir={quote(config.OUTPUT_DIR, safe='')}"
+    return (
+        f"/output/{MAP_DIRECTORY_NAME}/{MAP_IMAGE_FILENAME}"
+        f"?dir={quote(config.OUTPUT_DIR, safe='')}"
+    )
 
 
 def _grid_layers(grid: Grid) -> dict[str, Any]:
@@ -319,9 +327,7 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
         runner.state["status"] = "solving"
 
     try:
-        result = run_isp(
-            verbose=False, user_path=p_user, start=start, goal=goal
-        )
+        result = run_isp(verbose=False, user_path=p_user, start=start, goal=goal)
         if not result:
             raise HTTPException(
                 status_code=500,
@@ -504,24 +510,13 @@ def check_output_dir(path: str = "output") -> dict[str, Any]:
             "files": [],
         }
 
-    artifact_filenames = {
-        "1_optimal_path.png",
-        "2_user_path.png",
-        "3_both_paths.png",
-        "4_isp_modifications.png",
-        "5_isp_with_user_path.png",
-        "map.png",
-        "map.json",
-        "log.txt",
-    }
-
     files = [
         f
         for f in target_path.rglob("*")
         if f.is_file()
         and not any(part.startswith(".") for part in f.relative_to(target_path).parts)
     ]
-    has_artifacts = any(f.name in artifact_filenames for f in files)
+    has_artifacts = any(f.name in OUTPUT_ARTIFACT_FILENAMES for f in files)
 
     return {
         "exists": True,

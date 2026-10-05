@@ -14,6 +14,17 @@ from src.planning import plan_path
 from src.reduction import create_reduced_graph
 from src.visual.plotter import render_tactical_map
 
+from .artifact_names import (
+    ALTERNATIVE_PATH_IMAGE_FILENAME,
+    CHANGES_AND_PATHS_IMAGE_FILENAME,
+    CHANGES_IMAGE_FILENAME,
+    MAP_DATA_FILENAME,
+    MAP_DIRECTORY_NAME,
+    OPTIMAL_PATH_IMAGE_FILENAME,
+    PATH_COMPARISON_IMAGE_FILENAME,
+    RESULTS_DIRECTORY_NAME,
+    RUN_LOG_FILENAME,
+)
 from .utils import create_alternative_path, get_project_path, prepare_endpoints
 
 
@@ -32,27 +43,28 @@ def format_artifact_skip_note(result: ClosedLoopResult) -> str | None:
         return None
 
     if result.success:
-        return " (Note: Maps 4 and 5 were omitted because no semantic modifications were required)"
+        reason = "no semantic modifications were required"
+    elif result.solver_status == "INFEASIBLE":
+        reason = "no viable modifications were found"
+    elif result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
+        reason = "the solver returned no candidate before reaching its limit"
+    else:
+        reason = "the solver returned no candidate modifications"
 
-    if result.solver_status == "INFEASIBLE":
-        return " (Note: Maps 4 and 5 were omitted because no viable modifications were found)"
-
-    if result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
-        return " (Note: Maps 4 and 5 were omitted because the solver returned no candidate modifications before reaching its limit)"
-
-    return " (Note: Maps 4 and 5 were omitted because the solver returned no candidate modifications)"
+    return f"Note: Change images were omitted because {reason}."
 
 
 def format_artifact_status(result: ClosedLoopResult) -> str:
     if not result.success:
         return (
-            f"Candidate modifications — {result.solver_status}; not globally certified"
+            "Candidate intervention: global optimality not certified "
+            f"({result.solver_status})"
         )
     if result.solver_status == "OPTIMAL":
-        return "Certified global optimum"
+        return "Minimum intervention: globally optimal"
     if result.solver_status == "OPTIMAL_INACCURATE":
         return "Path validated; minimum intervention not certified"
-    return f"Global path validated — {result.solver_status}"
+    return f"Global path validated ({result.solver_status})"
 
 
 def run_isp(
@@ -61,8 +73,8 @@ def run_isp(
     start: tuple[int, int] | None = None,
     goal: tuple[int, int] | None = None,
 ) -> ClosedLoopResult | None:
-    map_dir = get_project_path(config.OUTPUT_DIR) / "map"
-    map_json_path = map_dir / "map.json"
+    map_dir = get_project_path(config.OUTPUT_DIR) / MAP_DIRECTORY_NAME
+    map_json_path = map_dir / MAP_DATA_FILENAME
     log_lines = []
 
     msg_load = f"[2] Loading map from '{map_json_path}'..."
@@ -223,14 +235,14 @@ def run_isp(
         )
 
     out_dir = get_project_path(config.OUTPUT_DIR)
-    results_dir = out_dir / "results"
+    results_dir = out_dir / RESULTS_DIRECTORY_NAME
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    img1 = results_dir / "1_optimal_path.png"
-    img2 = results_dir / "2_user_path.png"
-    img3 = results_dir / "3_both_paths.png"
-    img4 = results_dir / "4_isp_modifications.png"
-    img5 = results_dir / "5_isp_with_user_path.png"
+    optimal_image = results_dir / OPTIMAL_PATH_IMAGE_FILENAME
+    alternative_image = results_dir / ALTERNATIVE_PATH_IMAGE_FILENAME
+    comparison_image = results_dir / PATH_COMPARISON_IMAGE_FILENAME
+    changes_image = results_dir / CHANGES_IMAGE_FILENAME
+    changes_and_paths_image = results_dir / CHANGES_AND_PATHS_IMAGE_FILENAME
     modifications = isp_result.modifications
     has_candidate_modifications = modifications is not None and any(
         (
@@ -240,32 +252,33 @@ def run_isp(
             modifications.water_nodes,
         )
     )
-    img4.unlink(missing_ok=True)
-    img5.unlink(missing_ok=True)
+    changes_image.unlink(missing_ok=True)
+    changes_and_paths_image.unlink(missing_ok=True)
 
     render_tactical_map(
         grid=grid,
         optimal_path=p_star,
-        title=f"1. Optimal Path ({config.DEFAULT_PLANNER})",
-        save_path=str(img1),
+        title="Optimal path",
+        save_path=str(optimal_image),
+        subtitle=f"Planner: {config.DEFAULT_PLANNER}",
     )
 
     render_tactical_map(
         grid=grid,
         user_path=p_user,
-        title="2. Alternative Candidate Path",
-        save_path=str(img2),
+        title="Alternative path",
+        save_path=str(alternative_image),
     )
 
     render_tactical_map(
         grid=grid,
         optimal_path=p_star,
         user_path=p_user,
-        title="3. Optimal vs Alternative Path",
-        save_path=str(img3),
+        title="Path comparison",
+        save_path=str(comparison_image),
     )
 
-    saved_images = [img1, img2, img3]
+    saved_images = [optimal_image, alternative_image, comparison_image]
 
     if has_candidate_modifications and modifications is not None:
         mod_grid = ISPValidator.apply_modifications(grid, modifications)
@@ -275,8 +288,9 @@ def run_isp(
             modifications=modifications,
             modified_grid=mod_grid,
             endpoints=(start, goal),
-            title=f"4. ISP Modifications Only\n{artifact_status}",
-            save_path=str(img4),
+            title="Changes",
+            save_path=str(changes_image),
+            subtitle=artifact_status,
         )
         render_tactical_map(
             grid=grid,
@@ -284,10 +298,11 @@ def run_isp(
             user_path=p_user,
             modifications=modifications,
             modified_grid=mod_grid,
-            title=f"5. ISP Modifications with Both Routes\n{artifact_status}",
-            save_path=str(img5),
+            title="Changes and paths",
+            save_path=str(changes_and_paths_image),
+            subtitle=artifact_status,
         )
-        saved_images.extend([img4, img5])
+        saved_images.extend([changes_image, changes_and_paths_image])
 
     mods = isp_result.modifications
     n_terrain = len(mods.terrain_nodes) if mods else 0
@@ -409,7 +424,7 @@ def run_isp(
             print(artifact_skip_note)
         print("-" * 60)
 
-    log_path = results_dir / "log.txt"
+    log_path = results_dir / RUN_LOG_FILENAME
     with open(log_path, "w", encoding="utf-8") as f:
         f.write(log_content)
 

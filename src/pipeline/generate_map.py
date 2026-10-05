@@ -3,6 +3,7 @@ from src.grid.grid import Grid
 from src.map.generator import generate_map as create_map
 from src.visual.plotter import render_tactical_map
 
+from .artifact_names import MAP_DATA_FILENAME, MAP_DIRECTORY_NAME, MAP_IMAGE_FILENAME
 from .utils import get_project_path, prepare_endpoints
 
 
@@ -44,18 +45,19 @@ def generate_map(verbose: bool = True, persist_artifacts: bool = True) -> Grid:
         start, goal = prepare_endpoints(grid)
 
         out_base = get_project_path(config.OUTPUT_DIR)
-        map_dir = out_base / "map"
+        map_dir = out_base / MAP_DIRECTORY_NAME
         map_dir.mkdir(parents=True, exist_ok=True)
 
-        map_json_path = map_dir / "map.json"
+        map_json_path = map_dir / MAP_DATA_FILENAME
         grid.save(map_json_path)
 
-        map_png_path = map_dir / "map.png"
+        map_png_path = map_dir / MAP_IMAGE_FILENAME
         render_tactical_map(
             grid=grid,
-            title=f"Base Map ({config.MAP_H}x{config.MAP_W}) - Seed {config.MAP_DEFAULT_SEED}",
+            title="Base map",
             save_path=str(map_png_path),
             endpoints=(start, goal),
+            subtitle=f"Seed: {grid.base_seed}",
         )
 
         if verbose:

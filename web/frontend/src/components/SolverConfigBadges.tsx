@@ -25,12 +25,12 @@ function SolverMapPreview({
       type="button"
       className="solver-map-preview"
       onClick={() => onSelectMap(mapImageUrl)}
-      aria-label="Open procedural base map"
+      aria-label="Open base map"
     >
-      <span className="solver-map-preview-label">Procedural Base Map</span>
+      <span className="solver-map-preview-label">Base map</span>
       <img
         src={fullUrl}
-        alt="Procedural Base Map"
+        alt="Base map"
         className={`solver-map-preview-image ${isLoaded ? "is-loaded" : ""}`}
         onLoad={() => setIsLoaded(true)}
       />

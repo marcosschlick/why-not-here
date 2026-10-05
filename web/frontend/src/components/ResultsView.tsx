@@ -28,6 +28,18 @@ interface ResultsViewProps {
   mapImageUrl?: string;
 }
 
+function getArtifactFilename(artifactPath: string): string {
+  return artifactPath.split("?")[0].split("/").pop() || artifactPath;
+}
+
+function getArtifactTitle(artifactPath: string): string {
+  const filename = getArtifactFilename(artifactPath);
+  if (filename === "map.png") return "Base map";
+
+  const title = filename.replace(/\.png$/, "").replaceAll("_", " ");
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
 function ArtifactCard({
   artifactPath,
   cacheKey,
@@ -40,17 +52,7 @@ function ArtifactCard({
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const cleanPath = artifactPath.split("?")[0];
-  const filename = cleanPath.split("/").pop() || cleanPath;
-  const titleMap: Record<string, string> = {
-    "1_optimal_path.png": "1. Initial Optimal Path (A*)",
-    "2_user_path.png": "2. Alternative Candidate Path",
-    "3_both_paths.png": "3. Path Comparison",
-    "4_isp_modifications.png": "4. Semantic Modifications",
-    "5_isp_with_user_path.png": "5. Both Routes with ISP Modifications",
-    "map.png": "Procedural Base Map",
-  };
-  const displayTitle = titleMap[filename] || filename;
+  const displayTitle = getArtifactTitle(artifactPath);
   const fullUrl = artifactPath.includes("?")
     ? `${artifactPath}&t=${cacheKey}`
     : `${artifactPath}?t=${cacheKey}`;
@@ -180,7 +182,7 @@ export function ResultsView({
     setZoomLevel(1.0);
   }
   const tacticalArtifacts = currentArtifacts.filter(
-    (artifactPath) => artifactPath.split("?")[0].split("/").pop() !== "map.png",
+    (artifactPath) => getArtifactFilename(artifactPath) !== "map.png",
   );
   const currentStatus = isBatch
     ? activeBatchItem?.status
@@ -770,7 +772,7 @@ export function ResultsView({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
-              <span>{selectedImage.split("?")[0].split("/").pop()}</span>
+              <span>{getArtifactTitle(selectedImage)}</span>
               <button
                 type="button"
                 className="btn-modal-close"
@@ -786,7 +788,7 @@ export function ResultsView({
                   ? `${selectedImage}&t=${cacheKey}`
                   : `${selectedImage}?t=${cacheKey}`
               }
-              alt="Enlarged artifact"
+              alt={getArtifactTitle(selectedImage)}
               className="modal-image"
             />
           </div>

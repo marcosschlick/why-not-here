@@ -73,3 +73,11 @@ def compute_layout(h: int, w: int) -> dict:
         "grid_lw": 0.0,
         "show_grid": False,
     }
+
+
+def axis_ticks(size: int, step: int) -> list[int]:
+    ticks = list(range(0, size, step))
+    last_index = size - 1
+    if ticks[-1] != last_index:
+        ticks.append(last_index)
+    return ticks
