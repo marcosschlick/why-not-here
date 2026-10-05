@@ -1,5 +1,6 @@
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+from matplotlib import patheffects
 from matplotlib.legend_handler import HandlerBase
 from matplotlib.lines import Line2D
 
@@ -9,16 +10,18 @@ from .style import (
     GOAL_COLOR,
     GOAL_EDGE_COLOR,
     MODIFICATION_EDGE_COLOR,
-    MODIFICATION_HALO_COLOR,
     MODIFICATION_OBSTACLE_COLOR,
     MODIFICATION_SLOPE_COLOR,
     MODIFICATION_TERRAIN_COLOR,
     MODIFICATION_WATER_COLOR,
     OBSTACLE_COLOR,
     OPTIMAL_PATH_COLOR,
+    ROUTE_WIDTH,
     START_COLOR,
     START_EDGE_COLOR,
     USER_PATH_COLOR,
+    USER_PATH_OUTLINE_COLOR,
+    USER_PATH_OUTLINE_WIDTH,
     terrain_color_rgb,
 )
 
@@ -53,15 +56,30 @@ class SharedRouteHandler(HandlerBase):
                 solid_capstyle="round",
                 transform=transform,
             ),
-            Line2D(
-                [line_start, line_end],
-                [alternative_y, alternative_y],
-                color=USER_PATH_COLOR,
-                linewidth=2,
-                solid_capstyle="round",
-                transform=transform,
+            _outlined_alternative_line(
+                Line2D(
+                    [line_start, line_end],
+                    [alternative_y, alternative_y],
+                    color=USER_PATH_COLOR,
+                    linewidth=2,
+                    solid_capstyle="round",
+                    transform=transform,
+                )
             ),
         ]
+
+
+def _outlined_alternative_line(line: Line2D) -> Line2D:
+    line.set_path_effects(
+        [
+            patheffects.Stroke(
+                linewidth=2 * USER_PATH_OUTLINE_WIDTH / ROUTE_WIDTH,
+                foreground=USER_PATH_OUTLINE_COLOR,
+            ),
+            patheffects.Normal(),
+        ]
+    )
+    return line
 
 
 class ModificationDotHandle(Line2D):
@@ -82,19 +100,10 @@ class ModificationDotHandler(HandlerBase):
         transform,
     ):
         center = (xdescent + width / 2, ydescent + height / 2)
-        outer_radius = min(width, height) * 0.46
-        inner_radius = outer_radius * (0.39 / 0.46)
         return [
             mpatches.Circle(
                 center,
-                radius=outer_radius,
-                facecolor=MODIFICATION_HALO_COLOR,
-                edgecolor="none",
-                transform=transform,
-            ),
-            mpatches.Circle(
-                center,
-                radius=inner_radius,
+                radius=min(width, height) * 0.39,
                 facecolor=original_handle.get_markerfacecolor(),
                 edgecolor=MODIFICATION_EDGE_COLOR,
                 linewidth=0.65,
@@ -139,13 +148,15 @@ def build_tactical_legend(
             )
         if show_alternative_path:
             handles.append(
-                Line2D(
-                    [],
-                    [],
-                    color=USER_PATH_COLOR,
-                    linewidth=2,
-                    solid_capstyle="round",
-                    label="p′ · Alternative",
+                _outlined_alternative_line(
+                    Line2D(
+                        [],
+                        [],
+                        color=USER_PATH_COLOR,
+                        linewidth=2,
+                        solid_capstyle="round",
+                        label="p′ · Alternative",
+                    )
                 )
             )
         if show_optimal_path and show_alternative_path:

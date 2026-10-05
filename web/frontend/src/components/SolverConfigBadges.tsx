@@ -55,9 +55,7 @@ export function SolverConfigBadges({
     config.DEFAULT_REDUCTION_METHOD &&
     config.DEFAULT_REDUCTION_METHOD !== "NONE";
   const astarScopeLabel =
-    config.INCREMENTAL_ASTAR_SCOPE === "SUBGRAPH"
-      ? "Subgraph A*"
-      : "Global A*";
+    config.INCREMENTAL_ASTAR_SCOPE === "SUBGRAPH" ? "Subgraph A*" : "Global A*";
 
   const solverArchLabel = config.USE_INCREMENTAL_SOLVER
     ? `Incremental MILP (${config.DEFAULT_SOLVER || "HiGHS"}${

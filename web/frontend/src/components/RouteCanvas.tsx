@@ -368,7 +368,8 @@ export function RouteCanvas({
   const hoveredTerrainSpeed = mapData.config.TERRAINS?.[hoveredTerrain];
   const hoveredTerrainBlocked =
     hoveredTerrain === "WATER_RIVER" ||
-    hoveredTerrainSpeed === undefined || hoveredTerrainSpeed <= 0;
+    hoveredTerrainSpeed === undefined ||
+    hoveredTerrainSpeed <= 0;
 
   const hoveredInfo = hoveredCell ? (
     <span>
@@ -381,9 +382,7 @@ export function RouteCanvas({
           ({connectivity === 4 ? "Orthogonal Lock" : "45° / Orthogonal Lock"})
         </strong>
       )}{" "}
-      &bull; Terrain{" "}
-      <strong>{hoveredTerrain}</strong> &bull;
-      Elevation{" "}
+      &bull; Terrain <strong>{hoveredTerrain}</strong> &bull; Elevation{" "}
       <strong>
         {elevation[hoveredCell[0]]?.[hoveredCell[1]]?.toFixed(1) ?? "-"}m
       </strong>{" "}
@@ -417,7 +416,11 @@ export function RouteCanvas({
         </div>
 
         <div className="canvas-actions-bar">
-          <div className="canvas-control-group" role="group" aria-label="Route editing">
+          <div
+            className="canvas-control-group"
+            role="group"
+            aria-label="Route editing"
+          >
             <button
               type="button"
               className="btn btn-secondary"
@@ -452,7 +455,11 @@ export function RouteCanvas({
             </button>
           </div>
 
-          <div className="canvas-control-group canvas-view-group" role="group" aria-label="Map display">
+          <div
+            className="canvas-control-group canvas-view-group"
+            role="group"
+            aria-label="Map display"
+          >
             <button
               type="button"
               className={`btn ${showOptimalRoute ? "btn-secondary active" : "btn-ghost"}`}

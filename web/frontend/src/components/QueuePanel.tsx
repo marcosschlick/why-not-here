@@ -47,8 +47,10 @@ export function QueuePanel({
       <div className="queue-panel-header">
         <div>
           <h3>
-            {workflowMode === "create" ? "Configuration Queue" : "Batch Execution Queue"} ({queue.length}{" "}
-            {queue.length === 1 ? "item" : "items"})
+            {workflowMode === "create"
+              ? "Configuration Queue"
+              : "Batch Execution Queue"}{" "}
+            ({queue.length} {queue.length === 1 ? "item" : "items"})
           </h3>
           <p className="subtitle">
             {workflowMode === "create"
@@ -160,7 +162,9 @@ export function QueuePanel({
 
               <div className="queue-item-params">
                 {workflowMode === "create" && item.configurationName && (
-                  <span className="param-tag">Name: {item.configurationName}</span>
+                  <span className="param-tag">
+                    Name: {item.configurationName}
+                  </span>
                 )}
                 <span className="param-tag">
                   {item.config.MAP_H}x{item.config.MAP_W}

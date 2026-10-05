@@ -11,7 +11,6 @@ from .style import (
     GOAL_COLOR,
     GOAL_EDGE_COLOR,
     MODIFICATION_EDGE_COLOR,
-    MODIFICATION_HALO_COLOR,
     MODIFICATION_OBSTACLE_COLOR,
     MODIFICATION_SLOPE_COLOR,
     MODIFICATION_TERRAIN_COLOR,
@@ -111,20 +110,11 @@ def _draw_modification_circle(
     ax.add_patch(
         Circle(
             center,
-            radius=0.46,
-            facecolor=MODIFICATION_HALO_COLOR,
-            edgecolor="none",
-            zorder=2,
-        )
-    )
-    ax.add_patch(
-        Circle(
-            center,
             radius=0.39,
             facecolor=color,
             edgecolor=MODIFICATION_EDGE_COLOR,
             linewidth=edge_width,
-            zorder=2.05,
+            zorder=6,
         )
     )
 

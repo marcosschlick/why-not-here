@@ -97,7 +97,8 @@ export function App() {
   function setQueue(
     update: QueueItem[] | ((previous: QueueItem[]) => QueueItem[]),
   ) {
-    const updateQueue = workflowMode === "create" ? setConfigurationQueue : setRunQueue;
+    const updateQueue =
+      workflowMode === "create" ? setConfigurationQueue : setRunQueue;
     updateQueue(update);
   }
   const [isBatchMode, setIsBatchMode] = useState<boolean>(false);
@@ -181,14 +182,9 @@ export function App() {
           : null,
       );
       try {
-        const imported = await importConfig(
-          parsedJson,
-          workflowMode === "run",
-        );
+        const imported = await importConfig(parsedJson, workflowMode === "run");
         setMapData(imported);
-        setUserPath(
-          imported.user_path,
-        );
+        setUserPath(imported.user_path);
         setConfig(imported.config);
         setCurrentStep("route_canvas");
       } catch (err) {
@@ -203,9 +199,7 @@ export function App() {
   );
 
   const handleImportBatchConfigs = useCallback(
-    async (
-      items: { name: string; data: Record<string, unknown> }[],
-    ) => {
+    async (items: { name: string; data: Record<string, unknown> }[]) => {
       if (items.length === 0) return;
       setIsGeneratingMap(true);
       setErrorMessage(null);
@@ -262,13 +256,21 @@ export function App() {
     setErrorMessage(null);
 
     try {
-      await importConfig({
-        ...mapData.config,
-        start: mapData.start,
-        goal: mapData.goal,
-        p_user: userPath,
-      }, true);
-      const response = await solveISP(userPath, mapData.config, mapData.start, mapData.goal);
+      await importConfig(
+        {
+          ...mapData.config,
+          start: mapData.start,
+          goal: mapData.goal,
+          p_user: userPath,
+        },
+        true,
+      );
+      const response = await solveISP(
+        userPath,
+        mapData.config,
+        mapData.start,
+        mapData.goal,
+      );
       setLastResult(response.result);
       setArtifacts(response.artifacts);
       setCacheKey(Date.now());
@@ -463,13 +465,15 @@ export function App() {
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
-      const configurations: SaveConfigurationItem[] = finalQueue.map((item) => ({
-        name: item.configurationName as string,
-        config: item.config,
-        start: (item.mapData as MapData).start,
-        goal: (item.mapData as MapData).goal,
-        user_path: item.userPath as [number, number][],
-      }));
+      const configurations: SaveConfigurationItem[] = finalQueue.map(
+        (item) => ({
+          name: item.configurationName as string,
+          config: item.config,
+          start: (item.mapData as MapData).start,
+          goal: (item.mapData as MapData).goal,
+          user_path: item.userPath as [number, number][],
+        }),
+      );
       const result = await saveConfigurations({
         destination_dir: configurationDestination,
         configurations,
@@ -484,7 +488,9 @@ export function App() {
       setCurrentStep("config");
     } catch (err) {
       setErrorMessage(
-        err instanceof Error ? err.message : "Error saving batch configurations",
+        err instanceof Error
+          ? err.message
+          : "Error saving batch configurations",
       );
     } finally {
       setIsGeneratingMap(false);
@@ -497,7 +503,9 @@ export function App() {
         index === batchReviewIndex
           ? {
               ...item,
-              mapData: mapData ? { ...mapData, config: item.config } : item.mapData,
+              mapData: mapData
+                ? { ...mapData, config: item.config }
+                : item.mapData,
               userPath,
               status: "awaiting_route" as const,
             }
@@ -558,9 +566,7 @@ export function App() {
           ? {
               ...it,
               userPath: currentPathCopy,
-              mapData: mapData
-                ? { ...mapData, config: it.config }
-                : it.mapData,
+              mapData: mapData ? { ...mapData, config: it.config } : it.mapData,
               status: "awaiting_route",
             }
           : it,
@@ -597,14 +603,20 @@ export function App() {
         if (!item.mapData) {
           throw new Error("Batch item has no generated map.");
         }
-        await importConfig({
-          ...item.config,
-          start: item.mapData.start,
-          goal: item.mapData.goal,
-          p_user: effectivePath,
-        }, true);
+        await importConfig(
+          {
+            ...item.config,
+            start: item.mapData.start,
+            goal: item.mapData.goal,
+            p_user: effectivePath,
+          },
+          true,
+        );
         const response = await solveISP(
-          effectivePath, item.config, item.mapData.start, item.mapData.goal,
+          effectivePath,
+          item.config,
+          item.mapData.start,
+          item.mapData.goal,
         );
 
         setQueue((prev) =>
@@ -796,182 +808,205 @@ export function App() {
                   : undefined
               }
               batchStepper={
-                isBatchMode && queue.length > 1 ? (() => {
-                  const currentBatchItem = queue[batchReviewIndex];
-                  const matchingBatchIndices = currentBatchItem
-                    ? queue
-                        .map((item, idx) => ({ item, idx }))
-                        .filter(
-                          ({ idx, item }) =>
-                            idx !== batchReviewIndex &&
-                            isSameMap(item.config, currentBatchItem.config),
-                        )
-                    : [];
+                isBatchMode && queue.length > 1
+                  ? (() => {
+                      const currentBatchItem = queue[batchReviewIndex];
+                      const matchingBatchIndices = currentBatchItem
+                        ? queue
+                            .map((item, idx) => ({ item, idx }))
+                            .filter(
+                              ({ idx, item }) =>
+                                idx !== batchReviewIndex &&
+                                isSameMap(item.config, currentBatchItem.config),
+                            )
+                        : [];
 
-                  const isCurrentRouteComplete =
-                    userPath.length > 0 &&
-                    userPath[userPath.length - 1][0] === mapData.goal[0] &&
-                    userPath[userPath.length - 1][1] === mapData.goal[1];
+                      const isCurrentRouteComplete =
+                        userPath.length > 0 &&
+                        userPath[userPath.length - 1][0] === mapData.goal[0] &&
+                        userPath[userPath.length - 1][1] === mapData.goal[1];
 
-                  const matchingRunWithRoute = matchingBatchIndices.find(
-                    ({ item }) => {
-                      const itemGoal = item.mapData?.goal || mapData.goal;
-                      return (
-                        item.userPath &&
-                        item.userPath.length > 0 &&
-                        item.userPath[item.userPath.length - 1][0] ===
-                          itemGoal[0] &&
-                        item.userPath[item.userPath.length - 1][1] ===
-                          itemGoal[1]
-                      );
-                    },
-                  );
-
-                  const areAllMatchingSynced =
-                    matchingBatchIndices.length > 0 &&
-                    isCurrentRouteComplete &&
-                    matchingBatchIndices.every(({ item }) =>
-                      arePathsEqual(userPath, item.userPath),
-                    );
-
-                  const isSyncedWithSource = Boolean(
-                    matchingRunWithRoute &&
-                      arePathsEqual(userPath, matchingRunWithRoute.item.userPath),
-                  );
-
-                  return (
-                    <div className="batch-stepper-bar">
-                      <div className="batch-stepper-label">
-                        <span className="batch-stepper-title">
-                          {workflowMode === "create"
-                            ? `Configuration Route Setup, Item ${batchReviewIndex + 1} of ${queue.length}`
-                            : `Batch Route Setup - Map ${batchReviewIndex + 1} of ${queue.length}`}
-                        </span>
-                        <span className="batch-stepper-sub">
-                          {workflowMode === "create"
-                            ? "Define a route for each configuration before saving the batch."
-                            : "Define custom routes for all maps in the batch before solving."}
-                        </span>
-                      </div>
-
-                      <div className="batch-steps-list">
-                        {queue.map((item, idx) => {
-                          const isActive = idx === batchReviewIndex;
-                          const itemGoal =
-                            item.mapData?.goal ||
-                            (isSameMap(item.config, mapData.config)
-                              ? mapData.goal
-                              : undefined);
-                          const isItemConnected =
-                            idx === batchReviewIndex
-                              ? isCurrentRouteComplete
-                              : Boolean(
-                                  item.userPath &&
-                                    item.userPath.length > 0 &&
-                                    itemGoal &&
-                                    item.userPath[item.userPath.length - 1][0] ===
-                                      itemGoal[0] &&
-                                    item.userPath[item.userPath.length - 1][1] ===
-                                      itemGoal[1],
-                                );
-
+                      const matchingRunWithRoute = matchingBatchIndices.find(
+                        ({ item }) => {
+                          const itemGoal = item.mapData?.goal || mapData.goal;
                           return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              className={`batch-step-btn ${
-                                isActive ? "active" : ""
-                              }`}
-                              onClick={() => handleSwitchBatchMap(idx)}
-                              disabled={isGeneratingMap || isSolvingISP}
-                            >
-                              <span>
-                                {workflowMode === "create"
-                                  ? `${item.configurationName || `Item ${idx + 1}`} (${item.config.MAP_H}x${item.config.MAP_W})`
-                                  : `Map ${idx + 1} (${item.config.MAP_H}x${item.config.MAP_W})`}
-                              </span>
-                              <span
-                                className={`batch-step-status-pill ${
-                                  isItemConnected ? "ready" : "pending"
-                                }`}
-                              >
-                                {isItemConnected ? "Ready" : "Pending"}
-                              </span>
-                            </button>
+                            item.userPath &&
+                            item.userPath.length > 0 &&
+                            item.userPath[item.userPath.length - 1][0] ===
+                              itemGoal[0] &&
+                            item.userPath[item.userPath.length - 1][1] ===
+                              itemGoal[1]
                           );
-                        })}
-                      </div>
+                        },
+                      );
 
-                      {matchingBatchIndices.length > 0 && (
-                        <div
-                          className={`batch-identical-maps-banner ${
-                            areAllMatchingSynced ? "is-synced" : ""
-                          }`}
-                        >
-                          <div className="identical-maps-top-row">
-                            <div className="identical-maps-info">
-                              <span className="identical-maps-title">
-                                {areAllMatchingSynced
-                                  ? "Route Synchronized Across All Identical Maps"
-                                  : "Identical Map Geometry Detected"}
-                              </span>
-                              <span className="identical-maps-desc">
-                                {areAllMatchingSynced
-                                  ? `All ${matchingBatchIndices.length + 1} identical maps in this batch share this exact verified route (${userPath.length} steps).`
-                                  : matchingRunWithRoute && !isSyncedWithSource
-                                    ? `Map #${matchingRunWithRoute.idx + 1} has a verified route (${matchingRunWithRoute.item.userPath?.length} steps). You can copy it with 1 click, or keep a custom route.`
-                                    : `Maps ${[batchReviewIndex + 1, ...matchingBatchIndices.map((m) => m.idx + 1)].sort().map((n) => `#${n}`).join(", ")} share this exact terrain & obstacles. You can draw once and apply to all.`}
-                              </span>
-                            </div>
+                      const areAllMatchingSynced =
+                        matchingBatchIndices.length > 0 &&
+                        isCurrentRouteComplete &&
+                        matchingBatchIndices.every(({ item }) =>
+                          arePathsEqual(userPath, item.userPath),
+                        );
 
-                            {batchRouteFeedback && (
-                              <div className="identical-maps-toast">
-                                {batchRouteFeedback}
-                              </div>
-                            )}
+                      const isSyncedWithSource = Boolean(
+                        matchingRunWithRoute &&
+                        arePathsEqual(
+                          userPath,
+                          matchingRunWithRoute.item.userPath,
+                        ),
+                      );
+
+                      return (
+                        <div className="batch-stepper-bar">
+                          <div className="batch-stepper-label">
+                            <span className="batch-stepper-title">
+                              {workflowMode === "create"
+                                ? `Configuration Route Setup, Item ${batchReviewIndex + 1} of ${queue.length}`
+                                : `Batch Route Setup - Map ${batchReviewIndex + 1} of ${queue.length}`}
+                            </span>
+                            <span className="batch-stepper-sub">
+                              {workflowMode === "create"
+                                ? "Define a route for each configuration before saving the batch."
+                                : "Define custom routes for all maps in the batch before solving."}
+                            </span>
                           </div>
 
-                          <div className="identical-maps-actions">
-                            {matchingRunWithRoute && !isSyncedWithSource && (
-                              <button
-                                type="button"
-                                className="btn btn-vibrant btn-sm"
-                                onClick={() =>
-                                  handleReuseRouteFrom(matchingRunWithRoute.idx)
-                                }
-                                title={`Copy route from Map #${matchingRunWithRoute.idx + 1}`}
-                              >
-                                Copy Route from Map #{matchingRunWithRoute.idx + 1}
-                              </button>
-                            )}
+                          <div className="batch-steps-list">
+                            {queue.map((item, idx) => {
+                              const isActive = idx === batchReviewIndex;
+                              const itemGoal =
+                                item.mapData?.goal ||
+                                (isSameMap(item.config, mapData.config)
+                                  ? mapData.goal
+                                  : undefined);
+                              const isItemConnected =
+                                idx === batchReviewIndex
+                                  ? isCurrentRouteComplete
+                                  : Boolean(
+                                      item.userPath &&
+                                      item.userPath.length > 0 &&
+                                      itemGoal &&
+                                      item.userPath[
+                                        item.userPath.length - 1
+                                      ][0] === itemGoal[0] &&
+                                      item.userPath[
+                                        item.userPath.length - 1
+                                      ][1] === itemGoal[1],
+                                    );
 
-                            <button
-                              type="button"
-                              className={`btn ${
-                                areAllMatchingSynced
-                                  ? "btn-ghost"
-                                  : matchingRunWithRoute && !isSyncedWithSource
-                                    ? "btn-secondary"
-                                    : "btn-vibrant"
-                              } btn-sm`}
-                              onClick={() =>
-                                handleApplyRouteToAllMatching(
-                                  matchingBatchIndices.map((m) => m.idx),
-                                )
-                              }
-                              disabled={!isCurrentRouteComplete}
-                              title="Apply current route to all matching runs"
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  className={`batch-step-btn ${
+                                    isActive ? "active" : ""
+                                  }`}
+                                  onClick={() => handleSwitchBatchMap(idx)}
+                                  disabled={isGeneratingMap || isSolvingISP}
+                                >
+                                  <span>
+                                    {workflowMode === "create"
+                                      ? `${item.configurationName || `Item ${idx + 1}`} (${item.config.MAP_H}x${item.config.MAP_W})`
+                                      : `Map ${idx + 1} (${item.config.MAP_H}x${item.config.MAP_W})`}
+                                  </span>
+                                  <span
+                                    className={`batch-step-status-pill ${
+                                      isItemConnected ? "ready" : "pending"
+                                    }`}
+                                  >
+                                    {isItemConnected ? "Ready" : "Pending"}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {matchingBatchIndices.length > 0 && (
+                            <div
+                              className={`batch-identical-maps-banner ${
+                                areAllMatchingSynced ? "is-synced" : ""
+                              }`}
                             >
-                              {areAllMatchingSynced
-                                ? "Re-apply to All Identical Maps"
-                                : `Apply Route to All ${matchingBatchIndices.length + 1} Identical Maps`}
-                            </button>
-                          </div>
+                              <div className="identical-maps-top-row">
+                                <div className="identical-maps-info">
+                                  <span className="identical-maps-title">
+                                    {areAllMatchingSynced
+                                      ? "Route Synchronized Across All Identical Maps"
+                                      : "Identical Map Geometry Detected"}
+                                  </span>
+                                  <span className="identical-maps-desc">
+                                    {areAllMatchingSynced
+                                      ? `All ${matchingBatchIndices.length + 1} identical maps in this batch share this exact verified route (${userPath.length} steps).`
+                                      : matchingRunWithRoute &&
+                                          !isSyncedWithSource
+                                        ? `Map #${matchingRunWithRoute.idx + 1} has a verified route (${matchingRunWithRoute.item.userPath?.length} steps). You can copy it with 1 click, or keep a custom route.`
+                                        : `Maps ${[
+                                            batchReviewIndex + 1,
+                                            ...matchingBatchIndices.map(
+                                              (m) => m.idx + 1,
+                                            ),
+                                          ]
+                                            .sort()
+                                            .map((n) => `#${n}`)
+                                            .join(
+                                              ", ",
+                                            )} share this exact terrain & obstacles. You can draw once and apply to all.`}
+                                  </span>
+                                </div>
+
+                                {batchRouteFeedback && (
+                                  <div className="identical-maps-toast">
+                                    {batchRouteFeedback}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="identical-maps-actions">
+                                {matchingRunWithRoute &&
+                                  !isSyncedWithSource && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-vibrant btn-sm"
+                                      onClick={() =>
+                                        handleReuseRouteFrom(
+                                          matchingRunWithRoute.idx,
+                                        )
+                                      }
+                                      title={`Copy route from Map #${matchingRunWithRoute.idx + 1}`}
+                                    >
+                                      Copy Route from Map #
+                                      {matchingRunWithRoute.idx + 1}
+                                    </button>
+                                  )}
+
+                                <button
+                                  type="button"
+                                  className={`btn ${
+                                    areAllMatchingSynced
+                                      ? "btn-ghost"
+                                      : matchingRunWithRoute &&
+                                          !isSyncedWithSource
+                                        ? "btn-secondary"
+                                        : "btn-vibrant"
+                                  } btn-sm`}
+                                  onClick={() =>
+                                    handleApplyRouteToAllMatching(
+                                      matchingBatchIndices.map((m) => m.idx),
+                                    )
+                                  }
+                                  disabled={!isCurrentRouteComplete}
+                                  title="Apply current route to all matching runs"
+                                >
+                                  {areAllMatchingSynced
+                                    ? "Re-apply to All Identical Maps"
+                                    : `Apply Route to All ${matchingBatchIndices.length + 1} Identical Maps`}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })() : undefined
+                      );
+                    })()
+                  : undefined
               }
             />
           </div>

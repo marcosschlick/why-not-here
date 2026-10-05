@@ -22,8 +22,10 @@ export function useMapCanvasFit(
       const verticalPadding =
         (Number.parseFloat(styles.paddingTop) || 0) +
         (Number.parseFloat(styles.paddingBottom) || 0);
-      const availableWidth = observedContainer.clientWidth - horizontalPadding - 2;
-      const availableHeight = observedContainer.clientHeight - verticalPadding - 2;
+      const availableWidth =
+        observedContainer.clientWidth - horizontalPadding - 2;
+      const availableHeight =
+        observedContainer.clientHeight - verticalPadding - 2;
       if (availableWidth <= 0 || availableHeight <= 0) return;
 
       const nextCellSize = Math.min(

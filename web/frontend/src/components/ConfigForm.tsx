@@ -14,8 +14,14 @@ interface TerrainDraft {
 }
 
 const GENERATED_TERRAINS = new Set([
-  "WATER_RIVER", "MUD", "SAND", "ROCKY", "FOREST",
-  "DRY_VEGETATION", "GRASSLAND", "GRASS",
+  "WATER_RIVER",
+  "MUD",
+  "SAND",
+  "ROCKY",
+  "FOREST",
+  "DRY_VEGETATION",
+  "GRASSLAND",
+  "GRASS",
 ]);
 
 const DEFAULT_TERRAINS: Record<string, number> = {
@@ -249,7 +255,9 @@ export function ConfigForm({
   }
 
   function addTerrain() {
-    const usedNames = new Set(terrainNames.map((name) => name.toLocaleLowerCase()));
+    const usedNames = new Set(
+      terrainNames.map((name) => name.toLocaleLowerCase()),
+    );
     let suffix = terrainDraft.length + 1;
     let name = `NEW_TERRAIN_${suffix}`;
     while (usedNames.has(name.toLocaleLowerCase())) {
@@ -274,7 +282,9 @@ export function ConfigForm({
     ) {
       return;
     }
-    setTerrainDraft((current) => current.filter((_, rowIndex) => rowIndex !== index));
+    setTerrainDraft((current) =>
+      current.filter((_, rowIndex) => rowIndex !== index),
+    );
   }
 
   function getTerrainDraftError(): string | null {
@@ -285,10 +295,15 @@ export function ConfigForm({
     if (names.some((name) => !name)) {
       return "Every terrain needs a name.";
     }
-    if (new Set(names.map((name) => name.toLocaleLowerCase())).size !== names.length) {
+    if (
+      new Set(names.map((name) => name.toLocaleLowerCase())).size !==
+      names.length
+    ) {
       return "Terrain names must be unique.";
     }
-    if (terrainDraft.some((terrain) => !Number.isFinite(Number(terrain.speed)))) {
+    if (
+      terrainDraft.some((terrain) => !Number.isFinite(Number(terrain.speed)))
+    ) {
       return "Terrain speeds must be finite numbers.";
     }
     if (
@@ -299,12 +314,17 @@ export function ConfigForm({
     ) {
       return "WATER_RIVER must remain impassable with a speed at or below zero.";
     }
-    if (terrainDraft.some((terrain) => !/^#[0-9a-f]{6}$/i.test(terrain.color))) {
+    if (
+      terrainDraft.some((terrain) => !/^#[0-9a-f]{6}$/i.test(terrain.color))
+    ) {
       return "Each terrain needs a valid hexadecimal color.";
     }
 
     const speeds = new Map(
-      terrainDraft.map((terrain) => [terrain.name.trim(), Number(terrain.speed)]),
+      terrainDraft.map((terrain) => [
+        terrain.name.trim(),
+        Number(terrain.speed),
+      ]),
     );
     if (![...speeds.values()].some((speed) => speed > 0)) {
       return "At least one terrain must be traversable.";
@@ -323,10 +343,16 @@ export function ConfigForm({
 
   function getCurrentConfig(): SystemConfig {
     const terrains = Object.fromEntries(
-      terrainDraft.map((terrain) => [terrain.name.trim(), Number(terrain.speed)]),
+      terrainDraft.map((terrain) => [
+        terrain.name.trim(),
+        Number(terrain.speed),
+      ]),
     );
     const terrainColors = Object.fromEntries(
-      terrainDraft.map((terrain) => [terrain.name.trim(), terrain.color.toUpperCase()]),
+      terrainDraft.map((terrain) => [
+        terrain.name.trim(),
+        terrain.color.toUpperCase(),
+      ]),
     );
     return {
       ...(initialConfig || {}),
@@ -360,7 +386,6 @@ export function ConfigForm({
       MAP_ROUGHNESS_FREQ: Number(mapRoughnessFreq),
     };
   }
-
 
   async function ensureCleanDirectoryAndExecute(
     targetDir: string,
@@ -518,7 +543,9 @@ export function ConfigForm({
   async function handleImportBrowse() {
     const selectedOutputDir = outputDir.trim();
     if (!selectedOutputDir) {
-      setOutputDirError("Select an output directory before importing a configuration.");
+      setOutputDirError(
+        "Select an output directory before importing a configuration.",
+      );
       return;
     }
 
@@ -531,10 +558,11 @@ export function ConfigForm({
             const root = selectedOutputDir.replace(/[\\/]+$/, "");
             onImportBatchConfigs(
               result.map((item, index) => {
-                const folderName = item.name
-                  .replace(/\.json$/i, "")
-                  .replace(/[^a-zA-Z0-9._-]+/g, "-")
-                  .replace(/^[-.]+|[-.]+$/g, "") || `run-${index + 1}`;
+                const folderName =
+                  item.name
+                    .replace(/\.json$/i, "")
+                    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+                    .replace(/^[-.]+|[-.]+$/g, "") || `run-${index + 1}`;
                 return {
                   ...item,
                   data: { ...item.data, OUTPUT_DIR: `${root}/${folderName}` },
@@ -682,8 +710,12 @@ export function ConfigForm({
                 >
                   <option value="NONE">None (Full Grid Graph)</option>
                   <option value="BBOX">BBOX (Bounding Box)</option>
-                  <option value="FLOODFILL">Floodfill (Reachable Subgraph)</option>
-                  <option value="SPARSIFIED">Sparsified (Corridor Graph)</option>
+                  <option value="FLOODFILL">
+                    Floodfill (Reachable Subgraph)
+                  </option>
+                  <option value="SPARSIFIED">
+                    Sparsified (Corridor Graph)
+                  </option>
                   <option value="PATH_ONLY">
                     Path Only (Strict Path Corridor)
                   </option>
@@ -752,7 +784,9 @@ export function ConfigForm({
                   <div className="form-group">
                     <label htmlFor="maxIspIterations">
                       <span>Max ISP Iterations</span>
-                      <span className="form-group-hint">1–100 cutting planes</span>
+                      <span className="form-group-hint">
+                        1–100 cutting planes
+                      </span>
                     </label>
                     <input
                       id="maxIspIterations"
@@ -772,7 +806,9 @@ export function ConfigForm({
                   <div className="form-group">
                     <label htmlFor="incrementalAstarScope">
                       <span>Incremental A* Scope</span>
-                      <span className="form-group-hint">Competing paths search</span>
+                      <span className="form-group-hint">
+                        Competing paths search
+                      </span>
                     </label>
                     <select
                       id="incrementalAstarScope"
@@ -816,7 +852,9 @@ export function ConfigForm({
                 placeholder="Example: north-route-study"
                 required
                 disabled={workflowMode !== "create"}
-                aria-invalid={workflowMode === "create" && isConfigurationNameError}
+                aria-invalid={
+                  workflowMode === "create" && isConfigurationNameError
+                }
                 aria-describedby={
                   workflowMode === "create" && isConfigurationNameError
                     ? "configuration-name-error"
@@ -839,7 +877,9 @@ export function ConfigForm({
             >
               <label id="destinationDirLabel">
                 <span>Output Directory</span>
-                <span className="form-group-hint">Required filesystem path</span>
+                <span className="form-group-hint">
+                  Required filesystem path
+                </span>
               </label>
               <div className="input-with-button">
                 <input
@@ -866,7 +906,11 @@ export function ConfigForm({
                   type="button"
                   className="btn btn-ghost"
                   onClick={handleBrowse}
-                  disabled={isGenerating || isBrowsing || isConfigurationDestinationLocked}
+                  disabled={
+                    isGenerating ||
+                    isBrowsing ||
+                    isConfigurationDestinationLocked
+                  }
                 >
                   {isBrowsing ? "Opening..." : "Browse..."}
                 </button>
@@ -910,7 +954,9 @@ export function ConfigForm({
             <div className="advanced-settings-collapse-inner">
               <div className="advanced-settings-body">
                 <div className="advanced-group">
-                  <h4 className="advanced-group-title">Planning &amp; Execution</h4>
+                  <h4 className="advanced-group-title">
+                    Planning &amp; Execution
+                  </h4>
                   <div className="form-grid">
                     <div className="form-group">
                       <label htmlFor="defaultPlanner">
@@ -954,7 +1000,9 @@ export function ConfigForm({
                         min={1}
                         step={1}
                         value={solverTimeout}
-                        onChange={(e) => setSolverTimeout(Number(e.target.value))}
+                        onChange={(e) =>
+                          setSolverTimeout(Number(e.target.value))
+                        }
                         required
                       />
                     </div>
@@ -962,7 +1010,9 @@ export function ConfigForm({
                     <div className="form-group">
                       <label htmlFor="closedLoopTimeout">
                         <span>Closed-Loop Timeout</span>
-                        <span className="form-group-hint">Seconds for the full process</span>
+                        <span className="form-group-hint">
+                          Seconds for the full process
+                        </span>
                       </label>
                       <input
                         id="closedLoopTimeout"
@@ -970,7 +1020,9 @@ export function ConfigForm({
                         min={0.001}
                         step={1}
                         value={closedLoopTimeout}
-                        onChange={(e) => setClosedLoopTimeout(Number(e.target.value))}
+                        onChange={(e) =>
+                          setClosedLoopTimeout(Number(e.target.value))
+                        }
                         required
                       />
                     </div>
@@ -1013,7 +1065,9 @@ export function ConfigForm({
                     <div className="form-group">
                       <label htmlFor="mapElevationScale">
                         <span>Elevation Scale</span>
-                        <span className="form-group-hint">Height multiplier</span>
+                        <span className="form-group-hint">
+                          Height multiplier
+                        </span>
                       </label>
                       <input
                         id="mapElevationScale"
@@ -1094,7 +1148,9 @@ export function ConfigForm({
                     <div className="form-group">
                       <label htmlFor="defaultTerrain">
                         <span>Default Terrain</span>
-                        <span className="form-group-hint">Uninitialized cells</span>
+                        <span className="form-group-hint">
+                          Uninitialized cells
+                        </span>
                       </label>
                       <select
                         id="defaultTerrain"
@@ -1116,7 +1172,9 @@ export function ConfigForm({
                     <div className="form-group">
                       <label htmlFor="baseTerrain">
                         <span>Base Terrain</span>
-                        <span className="form-group-hint">Traversable ISP baseline</span>
+                        <span className="form-group-hint">
+                          Traversable ISP baseline
+                        </span>
                       </label>
                       <select
                         id="baseTerrain"
@@ -1131,7 +1189,10 @@ export function ConfigForm({
                       >
                         <option value="">Select a traversable terrain</option>
                         {traversableTerrains.map((terrain, index) => (
-                          <option key={`${terrain.name}-${index}`} value={terrain.name.trim()}>
+                          <option
+                            key={`${terrain.name}-${index}`}
+                            value={terrain.name.trim()}
+                          >
                             {terrain.name.trim()}
                           </option>
                         ))}
@@ -1141,7 +1202,9 @@ export function ConfigForm({
                     <div className="form-group">
                       <label htmlFor="targetTerrain">
                         <span>Target Terrain</span>
-                        <span className="form-group-hint">Traversable, speed &gt; 0 m/s</span>
+                        <span className="form-group-hint">
+                          Traversable, speed &gt; 0 m/s
+                        </span>
                       </label>
                       <select
                         id="targetTerrain"
@@ -1156,7 +1219,10 @@ export function ConfigForm({
                       >
                         <option value="">Select a traversable terrain</option>
                         {traversableTerrains.map((terrain, index) => (
-                          <option key={`${terrain.name}-${index}`} value={terrain.name.trim()}>
+                          <option
+                            key={`${terrain.name}-${index}`}
+                            value={terrain.name.trim()}
+                          >
                             {terrain.name.trim()}
                           </option>
                         ))}
@@ -1181,28 +1247,44 @@ export function ConfigForm({
                     </div>
                   </div>
 
-                  <div className="terrain-registry-list" aria-label="Terrain registry">
+                  <div
+                    className="terrain-registry-list"
+                    aria-label="Terrain registry"
+                  >
                     {terrainDraft.map((terrain, index) => {
-                      const generated = GENERATED_TERRAINS.has(terrain.name.trim());
-                      const locked = generated || [defaultTerrain, targetTerrain, baseTerrain].includes(
+                      const generated = GENERATED_TERRAINS.has(
                         terrain.name.trim(),
                       );
+                      const locked =
+                        generated ||
+                        [defaultTerrain, targetTerrain, baseTerrain].includes(
+                          terrain.name.trim(),
+                        );
                       return (
-                        <div className="terrain-registry-row" key={`terrain-${index}`}>
+                        <div
+                          className="terrain-registry-row"
+                          key={`terrain-${index}`}
+                        >
                           <div className="form-group terrain-name-group">
-                            <label htmlFor={`terrain-name-${index}`}>Name</label>
+                            <label htmlFor={`terrain-name-${index}`}>
+                              Name
+                            </label>
                             <input
                               id={`terrain-name-${index}`}
                               type="text"
                               maxLength={64}
                               value={terrain.name}
                               disabled={generated}
-                              onChange={(e) => updateTerrainName(index, e.target.value)}
+                              onChange={(e) =>
+                                updateTerrainName(index, e.target.value)
+                              }
                             />
                           </div>
                           <div className="terrain-registry-fields">
                             <div className="form-group">
-                              <label htmlFor={`terrain-speed-${index}`}>Nominal speed (m/s)</label>
+                              <label htmlFor={`terrain-speed-${index}`}>
+                                Nominal speed (m/s)
+                              </label>
                               <input
                                 id={`terrain-speed-${index}`}
                                 type="number"
@@ -1213,7 +1295,10 @@ export function ConfigForm({
                                   setTerrainDraft((current) =>
                                     current.map((entry, rowIndex) =>
                                       rowIndex === index
-                                        ? { ...entry, speed: Number(e.target.value) }
+                                        ? {
+                                            ...entry,
+                                            speed: Number(e.target.value),
+                                          }
                                         : entry,
                                     ),
                                   )
@@ -1221,12 +1306,18 @@ export function ConfigForm({
                               />
                             </div>
                             <div className="form-group terrain-color-group">
-                              <label htmlFor={`terrain-color-${index}`}>Color</label>
+                              <label htmlFor={`terrain-color-${index}`}>
+                                Color
+                              </label>
                               <input
                                 id={`terrain-color-${index}`}
                                 className="terrain-color-picker"
                                 type="color"
-                                value={/^#[0-9a-f]{6}$/i.test(terrain.color) ? terrain.color : "#808080"}
+                                value={
+                                  /^#[0-9a-f]{6}$/i.test(terrain.color)
+                                    ? terrain.color
+                                    : "#808080"
+                                }
                                 onChange={(e) =>
                                   setTerrainDraft((current) =>
                                     current.map((entry, rowIndex) =>
@@ -1243,7 +1334,13 @@ export function ConfigForm({
                               className="btn btn-ghost btn-sm terrain-remove-button"
                               onClick={() => removeTerrain(index)}
                               disabled={locked}
-                              title={generated ? "Required by procedural generation." : locked ? "Change the selected terrain before removing it." : "Remove terrain"}
+                              title={
+                                generated
+                                  ? "Required by procedural generation."
+                                  : locked
+                                    ? "Change the selected terrain before removing it."
+                                    : "Remove terrain"
+                              }
                               aria-label={`Remove ${terrain.name || "unnamed terrain"}`}
                             >
                               Remove
@@ -1280,9 +1377,7 @@ export function ConfigForm({
                 onClick={handleDirectRun}
                 disabled={isGenerating}
               >
-                {isGenerating
-                  ? "Generating Map..."
-                  : "Generate Map"}
+                {isGenerating ? "Generating Map..." : "Generate Map"}
               </button>
             )}
 
@@ -1293,7 +1388,9 @@ export function ConfigForm({
                 onClick={handleAddQueue}
                 disabled={isGenerating}
               >
-                {workflowMode === "create" ? "+ Add Configuration" : "+ Add to Queue"}
+                {workflowMode === "create"
+                  ? "+ Add Configuration"
+                  : "+ Add to Queue"}
               </button>
             )}
 
@@ -1405,7 +1502,6 @@ export function ConfigForm({
           </div>
         </div>
       )}
-
     </div>
   );
 }

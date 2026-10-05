@@ -313,37 +313,37 @@ export function ResultsView({
 
   const isCellTerrainModified = Boolean(
     hoveredCell &&
-      visibleModifications?.terrain_nodes?.some(
-        ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
-      ),
+    visibleModifications?.terrain_nodes?.some(
+      ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
+    ),
   );
   const isCellObstacleModified = Boolean(
     hoveredCell &&
-      visibleModifications?.obstacle_nodes?.some(
-        ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
-      ),
+    visibleModifications?.obstacle_nodes?.some(
+      ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
+    ),
   );
   const isCellWaterModified = Boolean(
     hoveredCell &&
-      visibleModifications?.water_nodes?.some(
-        ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
-      ),
+    visibleModifications?.water_nodes?.some(
+      ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
+    ),
   );
   const isStart = Boolean(
     hoveredCell &&
-      currentMapData &&
-      currentMapData.start[0] === hoveredCell[0] &&
-      currentMapData.start[1] === hoveredCell[1],
+    currentMapData &&
+    currentMapData.start[0] === hoveredCell[0] &&
+    currentMapData.start[1] === hoveredCell[1],
   );
   const isGoal = Boolean(
     hoveredCell &&
-      currentMapData &&
-      currentMapData.goal[0] === hoveredCell[0] &&
-      currentMapData.goal[1] === hoveredCell[1],
+    currentMapData &&
+    currentMapData.goal[0] === hoveredCell[0] &&
+    currentMapData.goal[1] === hoveredCell[1],
   );
   const hoveredTerrain =
     hoveredCell && currentMapData
-      ? currentMapData.terrain[hoveredCell[0]]?.[hoveredCell[1]] ?? "-"
+      ? (currentMapData.terrain[hoveredCell[0]]?.[hoveredCell[1]] ?? "-")
       : "-";
   const hoveredTerrainSpeed = currentMapData?.config.TERRAINS?.[hoveredTerrain];
   const hoveredTerrainBlocked =
@@ -356,70 +356,73 @@ export function ResultsView({
       hoveredCell?.[1] ?? -1
     ] ?? 0) !== 0 && !isCellObstacleModified;
 
-  const hoveredInfo = hoveredCell && currentMapData ? (
-    <span>
-      Cell [{hoveredCell[0]}, {hoveredCell[1]}] &bull; Terrain{" "}
-      <strong>
-        {hoveredTerrain}
-      </strong>
-      {isCellTerrainModified && (
-        <strong className="mod-badge terrain" style={{ marginLeft: "0.35rem" }}>
-          ISP Modified
-        </strong>
-      )}{" "}
-      &bull; Elevation{" "}
-      <strong>
-        {currentMapData.elevation[hoveredCell[0]]?.[hoveredCell[1]]?.toFixed(1) ??
-          "-"}
-        m
-      </strong>{" "}
-      &bull; Status{" "}
-      {hoveredObstacleBlocked ? (
-        <strong className="cell-status cell-status-obstacle">Obstacle</strong>
-      ) : hoveredTerrainBlocked ? (
-        <strong className="cell-status cell-status-impassable">
-          Impassable terrain
-        </strong>
-      ) : isCellWaterModified ? (
-        <strong className="cell-status cell-status-free">
-          Traversable water at base-terrain speed
-        </strong>
-      ) : (
-        <strong className="cell-status cell-status-free">Free</strong>
-      )}
-      {isCellObstacleModified && (
-        <strong
-          className="mod-badge obstacle"
-          style={{ marginLeft: "0.35rem" }}
-        >
-          Cleared
-        </strong>
-      )}
-      {isCellWaterModified && (
-        <strong className="mod-badge water" style={{ marginLeft: "0.35rem" }}>
-          Water override
-        </strong>
-      )}
-      {isStart && (
-        <strong
-          className="node-marker start-badge"
-          style={{ marginLeft: "0.35rem" }}
-        >
-          Start
-        </strong>
-      )}
-      {isGoal && (
-        <strong
-          className="node-marker goal-badge"
-          style={{ marginLeft: "0.35rem" }}
-        >
-          Goal
-        </strong>
-      )}
-    </span>
-  ) : (
-    <span>Hover over grid to inspect cell attributes and modifications</span>
-  );
+  const hoveredInfo =
+    hoveredCell && currentMapData ? (
+      <span>
+        Cell [{hoveredCell[0]}, {hoveredCell[1]}] &bull; Terrain{" "}
+        <strong>{hoveredTerrain}</strong>
+        {isCellTerrainModified && (
+          <strong
+            className="mod-badge terrain"
+            style={{ marginLeft: "0.35rem" }}
+          >
+            ISP Modified
+          </strong>
+        )}{" "}
+        &bull; Elevation{" "}
+        <strong>
+          {currentMapData.elevation[hoveredCell[0]]?.[hoveredCell[1]]?.toFixed(
+            1,
+          ) ?? "-"}
+          m
+        </strong>{" "}
+        &bull; Status{" "}
+        {hoveredObstacleBlocked ? (
+          <strong className="cell-status cell-status-obstacle">Obstacle</strong>
+        ) : hoveredTerrainBlocked ? (
+          <strong className="cell-status cell-status-impassable">
+            Impassable terrain
+          </strong>
+        ) : isCellWaterModified ? (
+          <strong className="cell-status cell-status-free">
+            Traversable water at base-terrain speed
+          </strong>
+        ) : (
+          <strong className="cell-status cell-status-free">Free</strong>
+        )}
+        {isCellObstacleModified && (
+          <strong
+            className="mod-badge obstacle"
+            style={{ marginLeft: "0.35rem" }}
+          >
+            Cleared
+          </strong>
+        )}
+        {isCellWaterModified && (
+          <strong className="mod-badge water" style={{ marginLeft: "0.35rem" }}>
+            Water override
+          </strong>
+        )}
+        {isStart && (
+          <strong
+            className="node-marker start-badge"
+            style={{ marginLeft: "0.35rem" }}
+          >
+            Start
+          </strong>
+        )}
+        {isGoal && (
+          <strong
+            className="node-marker goal-badge"
+            style={{ marginLeft: "0.35rem" }}
+          >
+            Goal
+          </strong>
+        )}
+      </span>
+    ) : (
+      <span>Hover over grid to inspect cell attributes and modifications</span>
+    );
 
   return (
     <section className="results-container">
@@ -530,7 +533,9 @@ export function ResultsView({
                 >
                   &minus;
                 </button>
-                <span className="zoom-value">{Math.round(zoomLevel * 100)}%</span>
+                <span className="zoom-value">
+                  {Math.round(zoomLevel * 100)}%
+                </span>
                 <button
                   type="button"
                   className="btn-zoom"
@@ -577,7 +582,7 @@ export function ResultsView({
             ref={mapCanvasContainerRef}
           >
             <TacticalMapCanvas
-              mapData={currentMapData}
+              mapData={originalMapData ?? currentMapData}
               userPath={currentUserPath}
               optimalPath={currentMapData.optimal_path}
               modifications={visibleModifications}
@@ -596,7 +601,7 @@ export function ResultsView({
               showAlternativePath={currentUserPath.length > 0}
               showOptimalPath={Boolean(
                 currentMapData.optimal_path &&
-                  currentMapData.optimal_path.length > 0,
+                currentMapData.optimal_path.length > 0,
               )}
             />
           </div>

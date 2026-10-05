@@ -17,7 +17,10 @@ from .layers import (
 from .legend import build_tactical_legend
 from .style import (
     OPTIMAL_PATH_COLOR,
+    ROUTE_WIDTH,
     USER_PATH_COLOR,
+    USER_PATH_OUTLINE_COLOR,
+    USER_PATH_OUTLINE_WIDTH,
     compute_layout,
 )
 
@@ -38,7 +41,7 @@ def render_tactical_map(
     layout = compute_layout(target_grid.h, target_grid.w)
 
     fig, ax = plt.subplots(figsize=(9.0, 7.8), dpi=dpi)
-    rgb_img = create_grid_rgb_matrix(target_grid)
+    rgb_img = create_grid_rgb_matrix(grid)
     ax.imshow(rgb_img, origin="upper", interpolation="nearest")
 
     if layout["show_grid"]:
@@ -75,11 +78,9 @@ def render_tactical_map(
         ax.transData.transform((1, 0))[0] - ax.transData.transform((0, 0))[0]
     )
     cell_width_points = cell_width_pixels * 72 / dpi
-    route_width = cell_width_points * 0.14
+    route_width = cell_width_points * ROUTE_WIDTH
+    user_path_outline_width = cell_width_points * USER_PATH_OUTLINE_WIDTH
     edge_width = cell_width_points * 0.035
-
-    if modifications is not None:
-        draw_modifications(ax, modifications, edge_width)
 
     shared_cells = set(optimal_path or []) & set(user_path or [])
 
@@ -98,12 +99,24 @@ def render_tactical_map(
         draw_path(
             ax=ax,
             path=user_path,
-            color=USER_PATH_COLOR,
-            linewidth=route_width,
+            color=USER_PATH_OUTLINE_COLOR,
+            linewidth=user_path_outline_width,
             zorder=5,
             shared_cells=shared_cells,
             offset_side=-1,
         )
+        draw_path(
+            ax=ax,
+            path=user_path,
+            color=USER_PATH_COLOR,
+            linewidth=route_width,
+            zorder=5.1,
+            shared_cells=shared_cells,
+            offset_side=-1,
+        )
+
+    if modifications is not None:
+        draw_modifications(ax, modifications, edge_width)
 
     if optimal_path:
         draw_endpoints(

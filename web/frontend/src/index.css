@@ -8,7 +8,8 @@
   --map-start-edge: #003366;
   --map-goal: #ffd700;
   --map-goal-edge: #664400;
-  --map-route: #d55e00;
+  --map-route: #f8f8f8;
+  --map-route-outline: #282828;
   --map-optimal-route: #327de1;
   --map-river: #0585e6;
   --map-obstacle: #141417;
@@ -1272,6 +1273,7 @@ kbd,
   color: var(--map-route);
 }
 .legend-optimal-route::after,
+.legend-route::before,
 .legend-route::after {
   position: absolute;
   top: 50%;
@@ -1280,6 +1282,10 @@ kbd,
   content: "";
   transform: translateY(-50%);
   border-top: 2px solid currentColor;
+}
+.legend-route::before {
+  border-top-width: 3px;
+  border-top-color: var(--map-route-outline);
 }
 .legend-shared-route::before,
 .legend-shared-route::after {
@@ -1295,7 +1301,13 @@ kbd,
 }
 .legend-shared-route::after {
   top: 68%;
-  border-color: var(--map-route);
+  height: 3px;
+  border: 0;
+  transform: translateY(-50%);
+  background:
+    linear-gradient(var(--map-route), var(--map-route)) center / 100% 2px
+      no-repeat,
+    var(--map-route-outline);
 }
 .legend-obstacle {
   background: var(--map-obstacle);
@@ -1303,7 +1315,6 @@ kbd,
 .legend-change-cell {
   border: 1px solid var(--shadow-grey);
   border-radius: 50%;
-  box-shadow: 0 0 0 1px var(--bright-snow);
 }
 .legend-change-terrain {
   background: var(--map-change-terrain);

@@ -53,19 +53,19 @@ const START_RGB: Rgb = [0, 176, 255];
 const START_EDGE_RGB: Rgb = [0, 51, 102];
 const GOAL_RGB: Rgb = [255, 215, 0];
 const GOAL_EDGE_RGB: Rgb = [102, 68, 0];
-const USER_PATH_RGB: Rgb = [213, 94, 0];
+const USER_PATH_RGB: Rgb = [248, 248, 248];
+const USER_PATH_OUTLINE_RGB: Rgb = [40, 40, 40];
 const OPTIMAL_PATH_RGB: Rgb = [50, 125, 225];
 const MODIFICATION_TERRAIN_RGB: Rgb = [204, 121, 167];
 const MODIFICATION_OBSTACLE_RGB: Rgb = [230, 159, 0];
 const MODIFICATION_SLOPE_RGB: Rgb = [0, 158, 115];
 const MODIFICATION_WATER_RGB: Rgb = [86, 180, 233];
-const MODIFICATION_HALO_RGB: Rgb = [248, 248, 248];
 const MODIFICATION_EDGE_RGB: Rgb = [40, 40, 40];
 const GRID_RGB: Rgb = [255, 255, 255];
 const MODIFICATION_RADIUS = 0.39;
-const MODIFICATION_HALO_RADIUS = 0.46;
 const CELL_EDGE_WIDTH = 0.035;
 const ROUTE_WIDTH = 0.14;
+const USER_PATH_OUTLINE_WIDTH = 0.2;
 const ENDPOINT_RADIUS = 0.4;
 
 function pathWithSharedOffset(
@@ -179,16 +179,6 @@ function drawModificationCircle(
   color: Rgb,
   cellSize: number,
 ) {
-  ctx.beginPath();
-  ctx.arc(
-    centerX,
-    centerY,
-    cellSize * MODIFICATION_HALO_RADIUS,
-    0,
-    Math.PI * 2,
-  );
-  ctx.fillStyle = rgba(MODIFICATION_HALO_RGB);
-  ctx.fill();
   ctx.beginPath();
   ctx.arc(centerX, centerY, cellSize * MODIFICATION_RADIUS, 0, Math.PI * 2);
   ctx.fillStyle = rgba(color);
@@ -348,6 +338,43 @@ export function TacticalMapCanvas({
     const slopeEdges = modifications?.slope_edges ?? [];
     const waterNodes = modifications?.water_nodes ?? [];
 
+    const userPathCells = new Set(
+      userPath.map(([row, col]) => `${row},${col}`),
+    );
+    const sharedCells = new Set(
+      optimalPath
+        .filter(([row, col]) => userPathCells.has(`${row},${col}`))
+        .map(([row, col]) => `${row},${col}`),
+    );
+    const routeLineWidth = effectiveCellSize * ROUTE_WIDTH;
+    drawPath(
+      ctx,
+      optimalPath,
+      OPTIMAL_PATH_RGB,
+      effectiveCellSize,
+      routeLineWidth,
+      sharedCells,
+      1,
+    );
+    drawPath(
+      ctx,
+      userPath,
+      USER_PATH_OUTLINE_RGB,
+      effectiveCellSize,
+      effectiveCellSize * USER_PATH_OUTLINE_WIDTH,
+      sharedCells,
+      -1,
+    );
+    drawPath(
+      ctx,
+      userPath,
+      USER_PATH_RGB,
+      effectiveCellSize,
+      routeLineWidth,
+      sharedCells,
+      -1,
+    );
+
     for (const [from, to] of slopeEdges) {
       const centerX = ((from[1] + to[1] + 1) * effectiveCellSize) / 2;
       const centerY = ((from[0] + to[0] + 1) * effectiveCellSize) / 2;
@@ -376,33 +403,6 @@ export function TacticalMapCanvas({
       waterNodes,
       MODIFICATION_WATER_RGB,
       effectiveCellSize,
-    );
-    const userPathCells = new Set(
-      userPath.map(([row, col]) => `${row},${col}`),
-    );
-    const sharedCells = new Set(
-      optimalPath
-        .filter(([row, col]) => userPathCells.has(`${row},${col}`))
-        .map(([row, col]) => `${row},${col}`),
-    );
-    const routeLineWidth = effectiveCellSize * ROUTE_WIDTH;
-    drawPath(
-      ctx,
-      optimalPath,
-      OPTIMAL_PATH_RGB,
-      effectiveCellSize,
-      routeLineWidth,
-      sharedCells,
-      1,
-    );
-    drawPath(
-      ctx,
-      userPath,
-      USER_PATH_RGB,
-      effectiveCellSize,
-      routeLineWidth,
-      sharedCells,
-      -1,
     );
 
     const startX = start[1] * effectiveCellSize + effectiveCellSize / 2;
