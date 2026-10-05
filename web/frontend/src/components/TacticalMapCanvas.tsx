@@ -58,14 +58,17 @@ const GOAL_EDGE_RGB: Rgb = [102, 68, 0];
 const USER_PATH_RGB: Rgb = [248, 248, 248];
 const USER_PATH_OUTLINE_RGB: Rgb = [40, 40, 40];
 const OPTIMAL_PATH_RGB: Rgb = [50, 125, 225];
-const MODIFICATION_TERRAIN_RGB: Rgb = [204, 121, 167];
-const MODIFICATION_OBSTACLE_RGB: Rgb = [230, 159, 0];
-const MODIFICATION_SLOPE_RGB: Rgb = [0, 158, 115];
-const MODIFICATION_WATER_RGB: Rgb = [86, 180, 233];
+const MODIFICATION_TERRAIN_RGB: Rgb = [255, 59, 141];
+const MODIFICATION_OBSTACLE_RGB: Rgb = [198, 255, 0];
+const MODIFICATION_SLOPE_RGB: Rgb = [168, 85, 247];
+const MODIFICATION_WATER_RGB: Rgb = [0, 201, 199];
 const MODIFICATION_EDGE_RGB: Rgb = [40, 40, 40];
 const GRID_RGB: Rgb = [255, 255, 255];
 const MODIFICATION_RADIUS = 0.39;
 const MODIFICATION_EDGE_WIDTH = 0.05;
+const SLOPE_MARKER_PATH_LENGTH = 0.5;
+const SLOPE_MARKER_CROSS_LENGTH = 0.3;
+const SLOPE_MARKER_WIDTH = 0.07;
 const CELL_EDGE_WIDTH = 0.035;
 const ROUTE_WIDTH = 0.14;
 const USER_PATH_OUTLINE_WIDTH = 0.2;
@@ -189,6 +192,88 @@ function drawModificationCircle(
   ctx.strokeStyle = rgba(MODIFICATION_EDGE_RGB);
   ctx.lineWidth = cellSize * MODIFICATION_EDGE_WIDTH;
   ctx.stroke();
+}
+
+function drawSlopeEdge(
+  ctx: CanvasRenderingContext2D,
+  from: GridPoint,
+  to: GridPoint,
+  color: Rgb,
+  cellSize: number,
+) {
+  const rowDelta = to[0] - from[0];
+  const colDelta = to[1] - from[1];
+  const edgeLength = Math.hypot(rowDelta, colDelta);
+  if (edgeLength === 0) return;
+
+  const centerX = ((from[1] + to[1] + 1) / 2) * cellSize;
+  const centerY = ((from[0] + to[0] + 1) / 2) * cellSize;
+  const halfPathLength = (cellSize * SLOPE_MARKER_PATH_LENGTH) / 2;
+  const halfCrossLength = (cellSize * SLOPE_MARKER_CROSS_LENGTH) / 2;
+  const directionX = colDelta / edgeLength;
+  const directionY = rowDelta / edgeLength;
+  const perpendicularX = -directionY;
+  const perpendicularY = directionX;
+
+  ctx.save();
+  ctx.lineCap = "round";
+  const segments: [number, number, number, number][] = [
+    [
+      centerX - directionX * halfPathLength,
+      centerY - directionY * halfPathLength,
+      centerX + directionX * halfPathLength,
+      centerY + directionY * halfPathLength,
+    ],
+    [
+      centerX - perpendicularX * halfCrossLength,
+      centerY - perpendicularY * halfCrossLength,
+      centerX + perpendicularX * halfCrossLength,
+      centerY + perpendicularY * halfCrossLength,
+    ],
+  ];
+  const drawSegments = (strokeColor: Rgb, lineWidth: number) => {
+    for (const [startX, startY, endX, endY] of segments) {
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.strokeStyle = rgba(strokeColor);
+      ctx.lineWidth = lineWidth;
+      ctx.stroke();
+    }
+  };
+  drawSegments(
+    MODIFICATION_EDGE_RGB,
+    cellSize * (SLOPE_MARKER_WIDTH + 2 * MODIFICATION_EDGE_WIDTH),
+  );
+  drawSegments(color, cellSize * SLOPE_MARKER_WIDTH);
+  ctx.restore();
+}
+
+function overlappingCellChanges(
+  terrainNodes: GridPoint[],
+  obstacleNodes: GridPoint[],
+  waterNodes: GridPoint[],
+): string[] {
+  const owners = new Map<string, string>();
+  const conflicts = new Set<string>();
+
+  for (const [category, points] of [
+    ["terrain", terrainNodes],
+    ["obstacle", obstacleNodes],
+    ["water", waterNodes],
+  ] as const) {
+    for (const [row, col] of points) {
+      const key = `${row},${col}`;
+      const existingCategory = owners.get(key);
+      if (existingCategory && existingCategory !== category) {
+        conflicts.add(key);
+      } else {
+        owners.set(key, category);
+      }
+    }
+  }
+
+  return [...conflicts];
 }
 
 function groupModificationPoints(points: MarkerPoint[]): MarkerGroup[] {
@@ -326,7 +411,7 @@ function drawModificationGroup(
 
   ctx.strokeStyle = rgba(MODIFICATION_EDGE_RGB);
   ctx.lineWidth =
-    cellSize * (MODIFICATION_RADIUS * 2 + MODIFICATION_EDGE_WIDTH);
+    cellSize * (MODIFICATION_RADIUS * 2 + 2 * MODIFICATION_EDGE_WIDTH);
   drawPath();
 
   ctx.strokeStyle = rgba(color);
@@ -496,6 +581,17 @@ export function TacticalMapCanvas({
     const obstacleNodes = modifications?.obstacle_nodes ?? [];
     const slopeEdges = modifications?.slope_edges ?? [];
     const waterNodes = modifications?.water_nodes ?? [];
+    const conflictingCellChanges = overlappingCellChanges(
+      terrainNodes,
+      obstacleNodes,
+      waterNodes,
+    );
+    if (conflictingCellChanges.length > 0) {
+      console.error(
+        new Error("Cell modification categories overlap at the same grid cells."),
+        conflictingCellChanges,
+      );
+    }
 
     const userPathCells = new Set(
       userPath.map(([row, col]) => `${row},${col}`),
@@ -534,15 +630,6 @@ export function TacticalMapCanvas({
       -1,
     );
 
-    drawModificationPoints(
-      ctx,
-      slopeEdges.map(([from, to]) => ({
-        row: (from[0] + to[0]) / 2,
-        col: (from[1] + to[1]) / 2,
-      })),
-      MODIFICATION_SLOPE_RGB,
-      effectiveCellSize,
-    );
     drawModificationCells(
       ctx,
       terrainNodes,
@@ -561,6 +648,15 @@ export function TacticalMapCanvas({
       MODIFICATION_WATER_RGB,
       effectiveCellSize,
     );
+    for (const [from, to] of slopeEdges) {
+      drawSlopeEdge(
+        ctx,
+        from,
+        to,
+        MODIFICATION_SLOPE_RGB,
+        effectiveCellSize,
+      );
+    }
 
     const startX = start[1] * effectiveCellSize + effectiveCellSize / 2;
     const startY = start[0] * effectiveCellSize + effectiveCellSize / 2;
@@ -807,7 +903,7 @@ export function TacticalMapLegend({
           )}
           {slopeCount > 0 && (
             <span className="legend-item">
-              <span className="legend-color legend-change-cell legend-change-slope" />
+              <span className="legend-color legend-change-edge legend-change-slope" />
               Slope leveled ({slopeCount})
             </span>
           )}

@@ -11,7 +11,12 @@ from .style import (
     GOAL_COLOR,
     GOAL_EDGE_COLOR,
     MODIFICATION_EDGE_COLOR,
+    MODIFICATION_GROUP_WIDTH,
     MODIFICATION_OBSTACLE_COLOR,
+    MODIFICATION_RADIUS,
+    MODIFICATION_SLOPE_MARKER_PATH_LENGTH,
+    MODIFICATION_SLOPE_MARKER_CROSS_LENGTH,
+    MODIFICATION_SLOPE_MARKER_WIDTH,
     MODIFICATION_SLOPE_COLOR,
     MODIFICATION_TERRAIN_COLOR,
     MODIFICATION_WATER_COLOR,
@@ -76,20 +81,10 @@ def draw_modifications(
     modifications: SemanticModifications,
     edge_width: float,
 ) -> None:
+    _validate_cell_modification_categories(modifications)
     origin_x = ax.transData.transform((0, 0))[0]
     next_x = ax.transData.transform((1, 0))[0]
     cell_width_points = abs(next_x - origin_x) * 72 / ax.figure.dpi
-    slope_points = [
-        ((u[0] + v[0]) / 2, (u[1] + v[1]) / 2)
-        for u, v in modifications.slope_edges
-    ]
-    _draw_modification_points(
-        ax,
-        slope_points,
-        MODIFICATION_SLOPE_COLOR,
-        edge_width,
-        cell_width_points,
-    )
     _draw_modification_cells(
         ax,
         modifications.terrain_nodes,
@@ -111,6 +106,83 @@ def draw_modifications(
         edge_width,
         cell_width_points,
     )
+    _draw_slope_edges(
+        ax,
+        modifications.slope_edges,
+        edge_width,
+        cell_width_points,
+    )
+
+
+def _validate_cell_modification_categories(
+    modifications: SemanticModifications,
+) -> None:
+    owners: dict[tuple[int, int], str] = {}
+    for category, points in (
+        ("terrain", modifications.terrain_nodes),
+        ("obstacle", modifications.obstacle_nodes),
+        ("water", modifications.water_nodes),
+    ):
+        for point in points:
+            previous_category = owners.get(point)
+            if previous_category is not None and previous_category != category:
+                raise ValueError(
+                    f"Cell {point} has conflicting {previous_category} and {category} modifications."
+                )
+            owners[point] = category
+
+
+def _draw_slope_edges(
+    ax: plt.Axes,
+    edges: list[tuple[tuple[int, int], tuple[int, int]]],
+    edge_width: float,
+    cell_width_points: float,
+) -> None:
+    half_path_length = MODIFICATION_SLOPE_MARKER_PATH_LENGTH / 2
+    half_cross_length = MODIFICATION_SLOPE_MARKER_CROSS_LENGTH / 2
+    inner_width = cell_width_points * MODIFICATION_SLOPE_MARKER_WIDTH
+    outer_width = inner_width + 2 * edge_width
+
+    for (from_row, from_col), (to_row, to_col) in edges:
+        row_delta = to_row - from_row
+        col_delta = to_col - from_col
+        edge_length = math.hypot(row_delta, col_delta)
+        if edge_length == 0:
+            continue
+
+        center_x = (from_col + to_col) / 2
+        center_y = (from_row + to_row) / 2
+        direction_x = col_delta / edge_length
+        direction_y = row_delta / edge_length
+        perpendicular_x = -direction_y
+        perpendicular_y = direction_x
+        segments = (
+            (
+                center_x - direction_x * half_path_length,
+                center_y - direction_y * half_path_length,
+                center_x + direction_x * half_path_length,
+                center_y + direction_y * half_path_length,
+            ),
+            (
+                center_x - perpendicular_x * half_cross_length,
+                center_y - perpendicular_y * half_cross_length,
+                center_x + perpendicular_x * half_cross_length,
+                center_y + perpendicular_y * half_cross_length,
+            ),
+        )
+        for color, linewidth in (
+            (MODIFICATION_EDGE_COLOR, outer_width),
+            (MODIFICATION_SLOPE_COLOR, inner_width),
+        ):
+            for start_x, start_y, end_x, end_y in segments:
+                ax.plot(
+                    [start_x, end_x],
+                    [start_y, end_y],
+                    color=color,
+                    linewidth=linewidth,
+                    solid_capstyle="round",
+                    zorder=6,
+                )
 
 
 def _draw_modification_cells(
@@ -226,7 +298,7 @@ def _draw_modification_group(
     edge_width: float,
     cell_width_points: float,
 ) -> None:
-    marker_width_points = cell_width_points * 0.78
+    marker_width_points = cell_width_points * MODIFICATION_GROUP_WIDTH
     columns = [col for row, col in path]
     rows = [row for row, col in path]
 
@@ -241,7 +313,10 @@ def _draw_modification_group(
             zorder=6,
         )
 
-    draw_group_path(MODIFICATION_EDGE_COLOR, marker_width_points + edge_width)
+    draw_group_path(
+        MODIFICATION_EDGE_COLOR,
+        marker_width_points + 2 * edge_width,
+    )
     draw_group_path(color, marker_width_points)
 
 
@@ -254,7 +329,7 @@ def _draw_modification_circle(
     ax.add_patch(
         Circle(
             center,
-            radius=0.39,
+            radius=MODIFICATION_RADIUS,
             facecolor=color,
             edgecolor=MODIFICATION_EDGE_COLOR,
             linewidth=edge_width,

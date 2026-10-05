@@ -16,6 +16,7 @@ from .layers import (
 )
 from .legend import build_tactical_legend
 from .style import (
+    MODIFICATION_EDGE_WIDTH,
     OPTIMAL_PATH_COLOR,
     ROUTE_WIDTH,
     USER_PATH_COLOR,
@@ -95,7 +96,7 @@ def render_tactical_map(
     cell_width_points = cell_width_pixels * 72 / dpi
     route_width = cell_width_points * ROUTE_WIDTH
     user_path_outline_width = cell_width_points * USER_PATH_OUTLINE_WIDTH
-    modification_edge_width = cell_width_points * 0.05
+    modification_edge_width = cell_width_points * MODIFICATION_EDGE_WIDTH
     endpoint_edge_width = cell_width_points * 0.035
 
     shared_cells = set(optimal_path or []) & set(user_path or [])

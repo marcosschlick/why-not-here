@@ -87,6 +87,11 @@ class ModificationDotHandle(Line2D):
         super().__init__([], [], marker="o", markerfacecolor=color, label=label)
 
 
+class ModificationEdgeHandle(Line2D):
+    def __init__(self, color: str, label: str) -> None:
+        super().__init__([], [], color=color, linewidth=2.4, label=label)
+
+
 class ModificationDotHandler(HandlerBase):
     def create_artists(
         self,
@@ -107,6 +112,59 @@ class ModificationDotHandler(HandlerBase):
                 facecolor=original_handle.get_markerfacecolor(),
                 edgecolor=MODIFICATION_EDGE_COLOR,
                 linewidth=0.65,
+                transform=transform,
+            ),
+        ]
+
+
+class ModificationEdgeHandler(HandlerBase):
+    def create_artists(
+        self,
+        legend,
+        original_handle,
+        xdescent,
+        ydescent,
+        width,
+        height,
+        fontsize,
+        transform,
+    ):
+        center_y = ydescent + height / 2
+        start_x = xdescent + width * 0.24
+        end_x = xdescent + width * 0.76
+        cross_start_y = ydescent + height * 0.20
+        cross_end_y = ydescent + height * 0.80
+        return [
+            Line2D(
+                [start_x, end_x],
+                [center_y, center_y],
+                color=MODIFICATION_EDGE_COLOR,
+                linewidth=4.4,
+                solid_capstyle="round",
+                transform=transform,
+            ),
+            Line2D(
+                [xdescent + width / 2, xdescent + width / 2],
+                [cross_start_y, cross_end_y],
+                color=MODIFICATION_EDGE_COLOR,
+                linewidth=4.4,
+                solid_capstyle="round",
+                transform=transform,
+            ),
+            Line2D(
+                [start_x, end_x],
+                [center_y, center_y],
+                color=original_handle.get_color(),
+                linewidth=2.4,
+                solid_capstyle="round",
+                transform=transform,
+            ),
+            Line2D(
+                [xdescent + width / 2, xdescent + width / 2],
+                [cross_start_y, cross_end_y],
+                color=original_handle.get_color(),
+                linewidth=2.4,
+                solid_capstyle="round",
                 transform=transform,
             ),
         ]
@@ -227,9 +285,12 @@ def build_tactical_legend(
             for count, color, label in changes:
                 if count == 0:
                     continue
-                handles.append(
-                    ModificationDotHandle(color, f"{label} ({count})")
+                handle = (
+                    ModificationEdgeHandle(color, f"{label} ({count})")
+                    if label == "Slope leveled"
+                    else ModificationDotHandle(color, f"{label} ({count})")
                 )
+                handles.append(handle)
 
     legend = ax.legend(
         handles=handles,
@@ -243,6 +304,7 @@ def build_tactical_legend(
         handler_map={
             SharedRouteHandle: SharedRouteHandler(),
             ModificationDotHandle: ModificationDotHandler(),
+            ModificationEdgeHandle: ModificationEdgeHandler(),
         },
     )
     for label in legend.get_texts():

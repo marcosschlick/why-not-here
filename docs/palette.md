@@ -26,18 +26,27 @@ outline 0.20 cell widths. In cells shared by both paths, offset the lines by
 are specific to the tactical map and do not add tokens to the official
 five-color palette.
 
-For semantic map changes, use map-specific colors: Pink (`#CC79A7`) for changed
-terrain, Orange (`#E69F00`) for removed obstacles, Teal (`#009E73`) for leveled
-slopes, and Sky Blue (`#56B4E9`) for traversable water. Draw an isolated change
-as a filled circle with a 0.39-cell radius and a Shadow Grey (`#282828`) edge
-0.05 cells wide, with no halo. Use the same edge width for grouped changes.
-Group changes of the same type transitively
-when both their row and column offsets are at most one. Connect grouped marker
-centers with rounded capsules 0.78 cells wide and show only the shared outer
-edge, preserving empty regions in the group's shape. Keep terrain, obstacle,
-slope, and water groups separate. Center terrain, obstacle, and water changes
-on their cells; center slope markers at the midpoints of their leveled edges.
-Use individual circles in map legends; slope counts represent leveled edges.
+For semantic map changes, use map-specific colors: Pink (`#FF3B8D`) for changed
+terrain, Lime (`#C6FF00`) for removed obstacles, Violet (`#A855F7`) for
+leveled slopes, and Turquoise (`#00C9C7`) for traversable water. Draw cell
+changes as filled circles with a 0.39-cell radius and a Shadow Grey (`#282828`)
+edge 0.05 cells wide, with no halo. Group changes of the same cell-based type
+transitively when both their row and column offsets are at most one. Connect
+grouped marker centers with rounded capsules 0.78 cells wide and an outer edge
+0.05 cells wide, preserving empty regions in the group's shape. Terrain,
+obstacle, and water cell changes must not share coordinates; treat a shared
+coordinate as invalid semantic data.
+
+Draw each leveled slope edge as an individual rounded cross, centered at the
+edge midpoint. Align its 0.50-cell main stroke with the edge and its
+0.30-cell perpendicular stroke across the midpoint. Use a colored width of
+0.07 cells and a Shadow Grey outer width 0.10 cells wider than each colored
+stroke. Draw both dark outlines before both violet strokes so the contour
+stays around the cross without crossing its violet center. Do not group slope
+edges by proximity or join consecutive edges into capsules. Draw slope crosses
+after cell changes so they remain visible over cell markers. Use circles for
+cell changes and a cross for slope changes in map legends; slope counts
+represent leveled edges.
 These colors are specific to the tactical map and do not add tokens to the
 official palette.
 
@@ -60,10 +69,10 @@ Preserve the start and goal as diamonds with their existing colors and a
   --map-route: #f8f8f8;
   --map-route-outline: #282828;
   --map-optimal-route: #327de1;
-  --map-change-terrain: #cc79a7;
-  --map-change-obstacle: #e69f00;
-  --map-change-slope: #009e73;
-  --map-change-water: #56b4e9;
+  --map-change-terrain: #ff3b8d;
+  --map-change-obstacle: #c6ff00;
+  --map-change-slope: #a855f7;
+  --map-change-water: #00c9c7;
 }
 ```
 
