@@ -25,12 +25,12 @@ function SolverMapPreview({
       type="button"
       className="solver-map-preview"
       onClick={() => onSelectMap(mapImageUrl)}
-      aria-label="Open procedural base map"
+      aria-label="Open base map"
     >
-      <span className="solver-map-preview-label">Procedural Base Map</span>
+      <span className="solver-map-preview-label">Base map</span>
       <img
         src={fullUrl}
-        alt="Procedural Base Map"
+        alt="Base map"
         className={`solver-map-preview-image ${isLoaded ? "is-loaded" : ""}`}
         onLoad={() => setIsLoaded(true)}
       />
@@ -55,9 +55,7 @@ export function SolverConfigBadges({
     config.DEFAULT_REDUCTION_METHOD &&
     config.DEFAULT_REDUCTION_METHOD !== "NONE";
   const astarScopeLabel =
-    config.INCREMENTAL_ASTAR_SCOPE === "SUBGRAPH"
-      ? "Subgraph A*"
-      : "Global A*";
+    config.INCREMENTAL_ASTAR_SCOPE === "SUBGRAPH" ? "Subgraph A*" : "Global A*";
 
   const solverArchLabel = config.USE_INCREMENTAL_SOLVER
     ? `Incremental MILP (${config.DEFAULT_SOLVER || "HiGHS"}${

@@ -1,9 +1,9 @@
 from src import config
 from src.grid.grid import Grid
 from src.map.generator import generate_map as create_map
-from src.planning import plan_path
 from src.visual.plotter import render_tactical_map
 
+from .artifact_names import MAP_DATA_FILENAME, MAP_DIRECTORY_NAME, MAP_IMAGE_FILENAME
 from .utils import get_project_path, prepare_endpoints
 
 
@@ -22,38 +22,43 @@ def generate_map(verbose: bool = True, persist_artifacts: bool = True) -> Grid:
         max_slope_deg=config.MAX_SLOPE_DEG,
         elevation_scale=config.MAP_ELEVATION_SCALE,
         elevation_freq=config.MAP_ELEVATION_FREQ,
-        biome_freq=config.MAP_BIOME_FREQ,
-        obstacle_freq=config.MAP_OBSTACLE_FREQ,
-        obstacle_threshold=config.MAP_OBSTACLE_THRESHOLD,
+        elevation_octaves=config.MAP_ELEVATION_OCTAVES,
+        moisture_freq=config.MAP_MOISTURE_FREQ,
+        moisture_octaves=config.MAP_MOISTURE_OCTAVES,
+        roughness_freq=config.MAP_ROUGHNESS_FREQ,
+        roughness_octaves=config.MAP_ROUGHNESS_OCTAVES,
+        terrain_thresholds=config.MAP_TERRAIN_THRESHOLDS,
+        roughness_thresholds=config.MAP_ROUGHNESS_THRESHOLDS,
+        min_main_component_ratio=config.MAP_MIN_MAIN_COMPONENT_RATIO,
+        max_generation_attempts=config.MAP_MAX_GENERATION_ATTEMPTS,
     )
 
-    if persist_artifacts:
-        _start, _goal = prepare_endpoints(grid)
-        _p_star, _cost_star, _ = plan_path(
-            grid, _start, _goal, algorithm=config.DEFAULT_PLANNER
+    if verbose:
+        print(
+            "Generation accepted: "
+            f"base_seed={grid.base_seed}, "
+            f"effective_seed={grid.effective_seed}, "
+            f"generation_attempt={grid.generation_attempt}"
         )
+
+    if persist_artifacts:
+        start, goal = prepare_endpoints(grid)
 
         out_base = get_project_path(config.OUTPUT_DIR)
-        map_dir = out_base / "map"
+        map_dir = out_base / MAP_DIRECTORY_NAME
         map_dir.mkdir(parents=True, exist_ok=True)
 
-        map_json_path = map_dir / "map.json"
+        map_json_path = map_dir / MAP_DATA_FILENAME
         grid.save(map_json_path)
 
-        map_png_path = map_dir / "map.png"
+        map_png_path = map_dir / MAP_IMAGE_FILENAME
         render_tactical_map(
             grid=grid,
-            title=f"Base Map ({config.MAP_H}x{config.MAP_W}) - Seed {config.MAP_DEFAULT_SEED}",
+            title="Base map",
             save_path=str(map_png_path),
-            endpoints=(_start, _goal),
+            endpoints=(start, goal),
+            subtitle=f"Seed: {grid.base_seed}",
         )
-
-        try:
-            legacy_maps_dir = get_project_path(config.MAPS_DIR)
-            legacy_maps_dir.mkdir(parents=True, exist_ok=True)
-            grid.save(get_project_path(config.DEFAULT_MAP_FILE))
-        except OSError:
-            pass
 
         if verbose:
             print(f"Map saved: {map_json_path}")

@@ -14,6 +14,17 @@ from src.planning import plan_path
 from src.reduction import create_reduced_graph
 from src.visual.plotter import render_tactical_map
 
+from .artifact_names import (
+    ALTERNATIVE_PATH_IMAGE_FILENAME,
+    CHANGES_AND_PATHS_IMAGE_FILENAME,
+    CHANGES_IMAGE_FILENAME,
+    MAP_DATA_FILENAME,
+    MAP_DIRECTORY_NAME,
+    OPTIMAL_PATH_IMAGE_FILENAME,
+    PATH_COMPARISON_IMAGE_FILENAME,
+    RESULTS_DIRECTORY_NAME,
+    RUN_LOG_FILENAME,
+)
 from .utils import create_alternative_path, get_project_path, prepare_endpoints
 
 
@@ -24,6 +35,7 @@ def format_artifact_skip_note(result: ClosedLoopResult) -> str | None:
             modifications.terrain_nodes,
             modifications.obstacle_nodes,
             modifications.slope_edges,
+            modifications.water_nodes,
         )
     )
 
@@ -31,25 +43,28 @@ def format_artifact_skip_note(result: ClosedLoopResult) -> str | None:
         return None
 
     if result.success:
-        return " (Note: Maps 4 and 5 were omitted because no semantic modifications were required)"
+        reason = "no semantic modifications were required"
+    elif result.solver_status == "INFEASIBLE":
+        reason = "no viable modifications were found"
+    elif result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
+        reason = "the solver returned no candidate before reaching its limit"
+    else:
+        reason = "the solver returned no candidate modifications"
 
-    if result.solver_status == "INFEASIBLE":
-        return " (Note: Maps 4 and 5 were omitted because no viable modifications were found)"
-
-    if result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
-        return " (Note: Maps 4 and 5 were omitted because the solver returned no candidate modifications before reaching its limit)"
-
-    return " (Note: Maps 4 and 5 were omitted because the solver returned no candidate modifications)"
+    return f"Note: Change images were omitted because {reason}."
 
 
 def format_artifact_status(result: ClosedLoopResult) -> str:
     if not result.success:
-        return f"Candidate modifications — {result.solver_status}; not globally certified"
+        return (
+            "Candidate intervention: global optimality not certified "
+            f"({result.solver_status})"
+        )
     if result.solver_status == "OPTIMAL":
-        return "Certified global optimum"
+        return "Minimum intervention: globally optimal"
     if result.solver_status == "OPTIMAL_INACCURATE":
         return "Path validated; minimum intervention not certified"
-    return f"Global path validated — {result.solver_status}"
+    return f"Global path validated ({result.solver_status})"
 
 
 def run_isp(
@@ -58,14 +73,8 @@ def run_isp(
     start: tuple[int, int] | None = None,
     goal: tuple[int, int] | None = None,
 ) -> ClosedLoopResult | None:
-    map_dir = get_project_path(config.OUTPUT_DIR) / "map"
-    map_json_path = map_dir / "map.json"
-    if not map_json_path.exists():
-        map_json_path = get_project_path(config.DEFAULT_MAP_FILE)
-    if not map_json_path.exists():
-        print(f"Error: Map file not found at '{map_json_path}'. Run option 1 first.")
-        return None
-
+    map_dir = get_project_path(config.OUTPUT_DIR) / MAP_DIRECTORY_NAME
+    map_json_path = map_dir / MAP_DATA_FILENAME
     log_lines = []
 
     msg_load = f"[2] Loading map from '{map_json_path}'..."
@@ -74,13 +83,7 @@ def run_isp(
     log_lines.append(msg_load)
 
     grid = Grid.load(map_json_path)
-    if start is not None and goal is not None:
-        start = (int(start[0]), int(start[1]))
-        goal = (int(goal[0]), int(goal[1]))
-        grid.get_cell(start).obstacle = 0
-        grid.get_cell(goal).obstacle = 0
-    else:
-        start, goal = prepare_endpoints(grid)
+    start, goal = prepare_endpoints(grid, start=start, goal=goal)
 
     p_star, cost_star, expanded = plan_path(
         grid, start, goal, algorithm=config.DEFAULT_PLANNER
@@ -185,17 +188,23 @@ def run_isp(
             )
             final_alt_cost = p_cost
             if not is_globally_optimal:
-                solver_status = "SUBGRAPH_OPTIMAL_ONLY" if reduced_graph is not None else "SUBOPTIMAL"
+                solver_status = (
+                    "SUBGRAPH_OPTIMAL_ONLY"
+                    if reduced_graph is not None
+                    else "SUBOPTIMAL"
+                )
                 success = False
             else:
                 solver_status = solver.last_solver_status or "OPTIMAL"
         else:
             solver_status = solver.last_solver_status or "SOLVER_FAILED"
 
-        if success and modifications is not None:
-            explanation = ISPValidator.generate_explanation_text(modifications, grid)
-        elif solver_status == "SUBGRAPH_OPTIMAL_ONLY" and modifications is not None:
-            explanation = ISPValidator.generate_explanation_text(modifications, grid)
+        if modifications is not None and (
+            success or solver_status == "SUBGRAPH_OPTIMAL_ONLY"
+        ):
+            explanation = ISPValidator.generate_explanation_text(
+                modifications, grid, solver_status=solver_status
+            )
         elif solver_status == "OPTIMAL_INACCURATE":
             explanation = (
                 "The MILP solver returned OPTIMAL_INACCURATE; the run is inconclusive "
@@ -226,48 +235,50 @@ def run_isp(
         )
 
     out_dir = get_project_path(config.OUTPUT_DIR)
-    results_dir = out_dir / "results"
+    results_dir = out_dir / RESULTS_DIRECTORY_NAME
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    img1 = results_dir / "1_optimal_path.png"
-    img2 = results_dir / "2_user_path.png"
-    img3 = results_dir / "3_both_paths.png"
-    img4 = results_dir / "4_isp_modifications.png"
-    img5 = results_dir / "5_isp_with_user_path.png"
+    optimal_image = results_dir / OPTIMAL_PATH_IMAGE_FILENAME
+    alternative_image = results_dir / ALTERNATIVE_PATH_IMAGE_FILENAME
+    comparison_image = results_dir / PATH_COMPARISON_IMAGE_FILENAME
+    changes_image = results_dir / CHANGES_IMAGE_FILENAME
+    changes_and_paths_image = results_dir / CHANGES_AND_PATHS_IMAGE_FILENAME
     modifications = isp_result.modifications
     has_candidate_modifications = modifications is not None and any(
         (
             modifications.terrain_nodes,
             modifications.obstacle_nodes,
             modifications.slope_edges,
+            modifications.water_nodes,
         )
     )
-    img4.unlink(missing_ok=True)
-    img5.unlink(missing_ok=True)
+    changes_image.unlink(missing_ok=True)
+    changes_and_paths_image.unlink(missing_ok=True)
 
     render_tactical_map(
         grid=grid,
         optimal_path=p_star,
-        title="1. Optimal Path (A*)",
-        save_path=str(img1),
+        title="Optimal path",
+        save_path=str(optimal_image),
+        subtitle=f"Planner: {config.DEFAULT_PLANNER}",
     )
 
     render_tactical_map(
         grid=grid,
         user_path=p_user,
-        title="2. Alternative Candidate Path",
-        save_path=str(img2),
+        title="Alternative path",
+        save_path=str(alternative_image),
     )
 
     render_tactical_map(
         grid=grid,
         optimal_path=p_star,
         user_path=p_user,
-        title="3. Optimal vs Alternative Path",
-        save_path=str(img3),
+        title="Path comparison",
+        save_path=str(comparison_image),
     )
 
-    saved_images = [img1, img2, img3]
+    saved_images = [optimal_image, alternative_image, comparison_image]
 
     if has_candidate_modifications and modifications is not None:
         mod_grid = ISPValidator.apply_modifications(grid, modifications)
@@ -276,23 +287,28 @@ def run_isp(
             grid=grid,
             modifications=modifications,
             modified_grid=mod_grid,
-            title=f"4. ISP Modifications Only\n{artifact_status}",
-            save_path=str(img4),
+            endpoints=(start, goal),
+            title="Changes",
+            save_path=str(changes_image),
+            subtitle=artifact_status,
         )
         render_tactical_map(
             grid=grid,
+            optimal_path=p_star,
             user_path=p_user,
             modifications=modifications,
             modified_grid=mod_grid,
-            title=f"5. ISP Modifications with Alternative Path\n{artifact_status}",
-            save_path=str(img5),
+            title="Changes and paths",
+            save_path=str(changes_and_paths_image),
+            subtitle=artifact_status,
         )
-        saved_images.extend([img4, img5])
+        saved_images.extend([changes_image, changes_and_paths_image])
 
     mods = isp_result.modifications
     n_terrain = len(mods.terrain_nodes) if mods else 0
     n_obs = len(mods.obstacle_nodes) if mods else 0
     n_slope = len(mods.slope_edges) if mods else 0
+    n_water = len(mods.water_nodes) if mods else 0
     artifact_skip_note = format_artifact_skip_note(isp_result)
 
     if isp_result.success and isp_result.solver_status == "OPTIMAL":
@@ -302,11 +318,17 @@ def run_isp(
     elif isp_result.solver_status == "SUBGRAPH_OPTIMAL_ONLY":
         solution_quality = "SUBGRAPH_OPTIMAL_ONLY (Candidate solution optimal only within reduced subgraph, failed global validation)"
     elif isp_result.solver_status == "SUBOPTIMAL":
-        solution_quality = "SUBOPTIMAL (Candidate modifications failed global validation)"
+        solution_quality = (
+            "SUBOPTIMAL (Candidate modifications failed global validation)"
+        )
     elif isp_result.solver_status == "INFEASIBLE":
-        solution_quality = "INFEASIBLE (No viable semantic modifications found in intervention domain)"
+        solution_quality = (
+            "INFEASIBLE (No viable semantic modifications found in intervention domain)"
+        )
     elif isp_result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
-        solution_quality = f"{isp_result.solver_status} (Search stopped at resource limit)"
+        solution_quality = (
+            f"{isp_result.solver_status} (Search stopped at resource limit)"
+        )
     else:
         solution_quality = f"{isp_result.solver_status}"
 
@@ -327,9 +349,7 @@ def run_isp(
     )
     cost_star_str = f"{cost_star:.2f}s" if cost_star is not None else "-"
     cost_user_orig_str = (
-        f"{cost_user_orig:.2f}s"
-        if cost_user_orig < float("inf")
-        else "Impassable (∞)"
+        f"{cost_user_orig:.2f}s" if cost_user_orig < float("inf") else "Impassable (∞)"
     )
     final_alt_cost = isp_result.final_alternative_cost
     final_cost_str = (
@@ -354,7 +374,7 @@ def run_isp(
         f"Endpoints: Start = [{start[0]}, {start[1]}] | Goal = [{goal[0]}, {goal[1]}]"
     )
     log_lines.append(
-        f"Modifications: {n_terrain} terrain, {n_obs} obstacles, {n_slope} slopes"
+        f"Modifications: {n_terrain} terrain, {n_obs} obstacles, {n_slope} slopes, {n_water} water cells"
     )
     log_lines.append(
         f"\nContrastive Explanation (Experimental Group):\n{isp_result.explanation_text}"
@@ -388,7 +408,7 @@ def run_isp(
             f"Endpoints: Start = [{start[0]}, {start[1]}] | Goal = [{goal[0]}, {goal[1]}]"
         )
         print(
-            f"Modifications: {n_terrain} terrain, {n_obs} obstacles, {n_slope} slopes"
+            f"Modifications: {n_terrain} terrain, {n_obs} obstacles, {n_slope} slopes, {n_water} water cells"
         )
         print(
             f"\nContrastive Explanation (Experimental Group):\n{isp_result.explanation_text}"
@@ -404,7 +424,7 @@ def run_isp(
             print(artifact_skip_note)
         print("-" * 60)
 
-    log_path = results_dir / "log.txt"
+    log_path = results_dir / RUN_LOG_FILENAME
     with open(log_path, "w", encoding="utf-8") as f:
         f.write(log_content)
 

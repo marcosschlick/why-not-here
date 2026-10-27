@@ -22,7 +22,7 @@ def create_reduced_graph(
         return extract_floodfill(grid, p_star, p_prime)
     if norm_method == "SPARSIFIED":
         return extract_sparsified(grid, p_star, p_prime, margin=margin)
-    if norm_method in ("PATH_ONLY", "PATHONLY"):
+    if norm_method == "PATH_ONLY":
         return extract_path_only(grid, p_star, p_prime)
     raise ValueError(f"Unknown graph reduction method: {method}")
 

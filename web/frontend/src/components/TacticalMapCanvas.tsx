@@ -23,6 +23,8 @@ interface TacticalMapCanvasProps {
 }
 
 type Rgb = [number, number, number];
+type MarkerPoint = { row: number; col: number };
+type MarkerGroup = { points: MarkerPoint[]; path: MarkerPoint[] };
 
 const EMPTY_PATH: GridPoint[] = [];
 
@@ -53,55 +55,394 @@ const START_RGB: Rgb = [0, 176, 255];
 const START_EDGE_RGB: Rgb = [0, 51, 102];
 const GOAL_RGB: Rgb = [255, 215, 0];
 const GOAL_EDGE_RGB: Rgb = [102, 68, 0];
-const USER_PATH_RGB: Rgb = [255, 23, 68];
-const OPTIMAL_PATH_RGB: Rgb = [0, 230, 118];
-const ISP_TERRAIN_RGB: Rgb = [0, 229, 255];
-const ISP_OBSTACLE_RGB: Rgb = [255, 23, 68];
-const ISP_SLOPE_RGB: Rgb = [170, 0, 255];
+const USER_PATH_RGB: Rgb = [248, 248, 248];
+const USER_PATH_OUTLINE_RGB: Rgb = [40, 40, 40];
+const OPTIMAL_PATH_RGB: Rgb = [50, 125, 225];
+const MODIFICATION_TERRAIN_RGB: Rgb = [255, 59, 141];
+const MODIFICATION_OBSTACLE_RGB: Rgb = [198, 255, 0];
+const MODIFICATION_SLOPE_RGB: Rgb = [168, 85, 247];
+const MODIFICATION_WATER_RGB: Rgb = [0, 201, 199];
+const MODIFICATION_EDGE_RGB: Rgb = [40, 40, 40];
 const GRID_RGB: Rgb = [255, 255, 255];
+const MODIFICATION_RADIUS = 0.39;
+const MODIFICATION_EDGE_WIDTH = 0.05;
+const SLOPE_MARKER_PATH_LENGTH = 0.5;
+const SLOPE_MARKER_CROSS_LENGTH = 0.3;
+const SLOPE_MARKER_WIDTH = 0.07;
+const CELL_EDGE_WIDTH = 0.035;
+const ROUTE_WIDTH = 0.14;
+const USER_PATH_OUTLINE_WIDTH = 0.2;
+const ENDPOINT_RADIUS = 0.4;
+
+function pathWithSharedOffset(
+  path: GridPoint[],
+  sharedCells: Set<string>,
+  offsetSide: number,
+): { x: number; y: number }[] {
+  return path.map(([row, col], index) => {
+    const point = { x: col, y: row };
+    if (!sharedCells.has(`${row},${col}`)) return point;
+
+    const previous = path[index - 1] ?? path[index];
+    const next = path[index + 1] ?? path[index];
+    let tangentX = next[1] - previous[1];
+    let tangentY = next[0] - previous[0];
+    if (Math.hypot(tangentX, tangentY) === 0) {
+      tangentX = next[1] - col || col - previous[1];
+      tangentY = next[0] - row || row - previous[0];
+    }
+
+    const tangentLength = Math.hypot(tangentX, tangentY);
+    if (tangentLength === 0) return point;
+    if (tangentX < 0 || (tangentX === 0 && tangentY < 0)) {
+      tangentX *= -1;
+      tangentY *= -1;
+    }
+
+    const beforeIsShared =
+      index > 0 &&
+      sharedCells.has(`${path[index - 1][0]},${path[index - 1][1]}`);
+    const afterIsShared =
+      index + 1 < path.length &&
+      sharedCells.has(`${path[index + 1][0]},${path[index + 1][1]}`);
+    const transition = beforeIsShared && afterIsShared ? 1 : 0.5;
+    const offset = (0.12 * offsetSide * transition) / tangentLength;
+    return {
+      x: col - tangentY * offset,
+      y: row + tangentX * offset,
+    };
+  });
+}
 
 function drawPath(
   ctx: CanvasRenderingContext2D,
   path: GridPoint[],
   color: Rgb,
   cellSize: number,
-  alpha = 1,
-  lineWidth = Math.max(2, cellSize * 0.4),
-  dashed = false,
+  lineWidth: number,
+  sharedCells: Set<string>,
+  offsetSide: number,
 ) {
   if (path.length === 0) return;
 
+  const points = pathWithSharedOffset(path, sharedCells, offsetSide).map(
+    ({ x, y }) => ({
+      x: x * cellSize + cellSize / 2,
+      y: y * cellSize + cellSize / 2,
+    }),
+  );
+
   ctx.beginPath();
-  path.forEach(([row, col], index) => {
-    const x = col * cellSize + cellSize / 2;
-    const y = row * cellSize + cellSize / 2;
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = rgba(color, alpha);
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const next = points[index + 1];
+    const incomingX = current.x - previous.x;
+    const incomingY = current.y - previous.y;
+    const outgoingX = next.x - current.x;
+    const outgoingY = next.y - current.y;
+    const incomingLength = Math.hypot(incomingX, incomingY);
+    const outgoingLength = Math.hypot(outgoingX, outgoingY);
+    const cross = incomingX * outgoingY - incomingY * outgoingX;
+
+    if (incomingLength === 0 || outgoingLength === 0) {
+      ctx.lineTo(current.x, current.y);
+      continue;
+    }
+
+    if (Math.abs(cross) < 1e-6) {
+      ctx.lineTo(current.x, current.y);
+      continue;
+    }
+
+    const radius = Math.min(
+      cellSize * 0.28,
+      incomingLength * 0.4,
+      outgoingLength * 0.4,
+    );
+    const entryX = current.x - (incomingX / incomingLength) * radius;
+    const entryY = current.y - (incomingY / incomingLength) * radius;
+    const exitX = current.x + (outgoingX / outgoingLength) * radius;
+    const exitY = current.y + (outgoingY / outgoingLength) * radius;
+
+    ctx.lineTo(entryX, entryY);
+    ctx.quadraticCurveTo(current.x, current.y, exitX, exitY);
+  }
+  const lastPoint = points[points.length - 1];
+  ctx.lineTo(lastPoint.x, lastPoint.y);
+  ctx.strokeStyle = rgba(color);
   ctx.lineWidth = lineWidth;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.setLineDash(
-    dashed ? [Math.max(3, cellSize * 0.6), Math.max(2, cellSize * 0.35)] : [],
-  );
   ctx.stroke();
-  ctx.setLineDash([]);
+}
 
-  if (cellSize >= 8) {
-    ctx.fillStyle = rgba(color, alpha);
-    for (const [row, col] of path) {
+function drawModificationCircle(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  color: Rgb,
+  cellSize: number,
+) {
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, cellSize * MODIFICATION_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = rgba(color);
+  ctx.fill();
+  ctx.strokeStyle = rgba(MODIFICATION_EDGE_RGB);
+  ctx.lineWidth = cellSize * MODIFICATION_EDGE_WIDTH;
+  ctx.stroke();
+}
+
+function drawSlopeEdge(
+  ctx: CanvasRenderingContext2D,
+  from: GridPoint,
+  to: GridPoint,
+  color: Rgb,
+  cellSize: number,
+) {
+  const rowDelta = to[0] - from[0];
+  const colDelta = to[1] - from[1];
+  const edgeLength = Math.hypot(rowDelta, colDelta);
+  if (edgeLength === 0) return;
+
+  const centerX = ((from[1] + to[1] + 1) / 2) * cellSize;
+  const centerY = ((from[0] + to[0] + 1) / 2) * cellSize;
+  const halfPathLength = (cellSize * SLOPE_MARKER_PATH_LENGTH) / 2;
+  const halfCrossLength = (cellSize * SLOPE_MARKER_CROSS_LENGTH) / 2;
+  const directionX = colDelta / edgeLength;
+  const directionY = rowDelta / edgeLength;
+  const perpendicularX = -directionY;
+  const perpendicularY = directionX;
+
+  ctx.save();
+  ctx.lineCap = "round";
+  const segments: [number, number, number, number][] = [
+    [
+      centerX - directionX * halfPathLength,
+      centerY - directionY * halfPathLength,
+      centerX + directionX * halfPathLength,
+      centerY + directionY * halfPathLength,
+    ],
+    [
+      centerX - perpendicularX * halfCrossLength,
+      centerY - perpendicularY * halfCrossLength,
+      centerX + perpendicularX * halfCrossLength,
+      centerY + perpendicularY * halfCrossLength,
+    ],
+  ];
+  const drawSegments = (strokeColor: Rgb, lineWidth: number) => {
+    for (const [startX, startY, endX, endY] of segments) {
       ctx.beginPath();
-      ctx.arc(
-        col * cellSize + cellSize / 2,
-        row * cellSize + cellSize / 2,
-        Math.max(1.5, cellSize * 0.16),
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.strokeStyle = rgba(strokeColor);
+      ctx.lineWidth = lineWidth;
+      ctx.stroke();
+    }
+  };
+  drawSegments(
+    MODIFICATION_EDGE_RGB,
+    cellSize * (SLOPE_MARKER_WIDTH + 2 * MODIFICATION_EDGE_WIDTH),
+  );
+  drawSegments(color, cellSize * SLOPE_MARKER_WIDTH);
+  ctx.restore();
+}
+
+function overlappingCellChanges(
+  terrainNodes: GridPoint[],
+  obstacleNodes: GridPoint[],
+  waterNodes: GridPoint[],
+): string[] {
+  const owners = new Map<string, string>();
+  const conflicts = new Set<string>();
+
+  for (const [category, points] of [
+    ["terrain", terrainNodes],
+    ["obstacle", obstacleNodes],
+    ["water", waterNodes],
+  ] as const) {
+    for (const [row, col] of points) {
+      const key = `${row},${col}`;
+      const existingCategory = owners.get(key);
+      if (existingCategory && existingCategory !== category) {
+        conflicts.add(key);
+      } else {
+        owners.set(key, category);
+      }
     }
   }
+
+  return [...conflicts];
+}
+
+function groupModificationPoints(points: MarkerPoint[]): MarkerGroup[] {
+  const neighbors = points.map(() => [] as number[]);
+  const buckets = new Map<string, number[]>();
+
+  points.forEach((point, index) => {
+    const bucketRow = Math.floor(point.row);
+    const bucketCol = Math.floor(point.col);
+
+    for (let row = bucketRow - 1; row <= bucketRow + 1; row += 1) {
+      for (let col = bucketCol - 1; col <= bucketCol + 1; col += 1) {
+        const candidates = buckets.get(`${row},${col}`) ?? [];
+        for (const candidateIndex of candidates) {
+          const candidate = points[candidateIndex];
+          if (
+            Math.abs(point.row - candidate.row) <= 1 &&
+            Math.abs(point.col - candidate.col) <= 1
+          ) {
+            neighbors[index].push(candidateIndex);
+            neighbors[candidateIndex].push(index);
+          }
+        }
+      }
+    }
+
+    const key = `${bucketRow},${bucketCol}`;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(index);
+    buckets.set(key, bucket);
+  });
+
+  const visited = new Set<number>();
+  const groups: MarkerGroup[] = [];
+  const orderedNeighbors = (currentIndex: number) => {
+    const current = points[currentIndex];
+    return [...neighbors[currentIndex]].sort((left, right) => {
+      const leftPoint = points[left];
+      const rightPoint = points[right];
+      const leftRowDistance = Math.abs(current.row - leftPoint.row);
+      const leftColDistance = Math.abs(current.col - leftPoint.col);
+      const rightRowDistance = Math.abs(current.row - rightPoint.row);
+      const rightColDistance = Math.abs(current.col - rightPoint.col);
+      const leftAxes =
+        Number(leftRowDistance > 0) + Number(leftColDistance > 0);
+      const rightAxes =
+        Number(rightRowDistance > 0) + Number(rightColDistance > 0);
+      const leftDistance = leftRowDistance ** 2 + leftColDistance ** 2;
+      const rightDistance = rightRowDistance ** 2 + rightColDistance ** 2;
+
+      return (
+        leftAxes - rightAxes ||
+        leftDistance - rightDistance ||
+        leftPoint.row - rightPoint.row ||
+        leftPoint.col - rightPoint.col ||
+        left - right
+      );
+    });
+  };
+
+  for (let start = 0; start < points.length; start += 1) {
+    if (visited.has(start)) continue;
+
+    const groupPoints = [points[start]];
+    const path = [points[start]];
+    visited.add(start);
+    const traversal = [
+      { index: start, neighbors: orderedNeighbors(start), nextNeighbor: 0 },
+    ];
+
+    while (traversal.length > 0) {
+      const current = traversal[traversal.length - 1];
+      if (current.nextNeighbor >= current.neighbors.length) {
+        traversal.pop();
+        if (traversal.length > 0) {
+          path.push(points[traversal[traversal.length - 1].index]);
+        }
+        continue;
+      }
+
+      const neighborIndex = current.neighbors[current.nextNeighbor];
+      current.nextNeighbor += 1;
+      if (visited.has(neighborIndex)) continue;
+
+      visited.add(neighborIndex);
+      groupPoints.push(points[neighborIndex]);
+      path.push(points[neighborIndex]);
+      traversal.push({
+        index: neighborIndex,
+        neighbors: orderedNeighbors(neighborIndex),
+        nextNeighbor: 0,
+      });
+    }
+
+    groups.push({ points: groupPoints, path });
+  }
+
+  return groups;
+}
+
+function drawModificationGroup(
+  ctx: CanvasRenderingContext2D,
+  group: MarkerGroup,
+  color: Rgb,
+  cellSize: number,
+) {
+  if (group.points.length === 1) {
+    const point = group.points[0];
+    drawModificationCircle(
+      ctx,
+      (point.col + 0.5) * cellSize,
+      (point.row + 0.5) * cellSize,
+      color,
+      cellSize,
+    );
+    return;
+  }
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const drawPath = () => {
+    const firstPoint = group.path[0];
+    ctx.beginPath();
+    ctx.moveTo(
+      (firstPoint.col + 0.5) * cellSize,
+      (firstPoint.row + 0.5) * cellSize,
+    );
+    for (const point of group.path.slice(1)) {
+      ctx.lineTo((point.col + 0.5) * cellSize, (point.row + 0.5) * cellSize);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  };
+
+  ctx.strokeStyle = rgba(MODIFICATION_EDGE_RGB);
+  ctx.lineWidth =
+    cellSize * (MODIFICATION_RADIUS * 2 + 2 * MODIFICATION_EDGE_WIDTH);
+  drawPath();
+
+  ctx.strokeStyle = rgba(color);
+  ctx.lineWidth = cellSize * MODIFICATION_RADIUS * 2;
+  drawPath();
+  ctx.restore();
+}
+
+function drawModificationPoints(
+  ctx: CanvasRenderingContext2D,
+  points: MarkerPoint[],
+  color: Rgb,
+  cellSize: number,
+) {
+  for (const group of groupModificationPoints(points)) {
+    drawModificationGroup(ctx, group, color, cellSize);
+  }
+}
+
+function drawModificationCells(
+  ctx: CanvasRenderingContext2D,
+  points: GridPoint[],
+  color: Rgb,
+  cellSize: number,
+) {
+  drawModificationPoints(
+    ctx,
+    points.map(([row, col]) => ({ row, col })),
+    color,
+    cellSize,
+  );
 }
 
 function drawHatch(
@@ -188,6 +529,8 @@ export function TacticalMapCanvas({
       }
     }
     const elevationRange = maxElev - minElev;
+    const elevationShadeMin = mapData.elevation_shade_min ?? 1.0;
+    const elevationShadeMax = mapData.elevation_shade_max ?? 1.5;
 
     for (let row = 0; row < h; row++) {
       for (let col = 0; col < w; col++) {
@@ -196,27 +539,33 @@ export function TacticalMapCanvas({
         const width = Math.round((col + 1) * effectiveCellSize) - x;
         const height = Math.round((row + 1) * effectiveCellSize) - y;
         const terrainName =
-          terrain[row]?.[col] || mapData.config.DEFAULT_TERRAIN || "GRASS";
-        const isObstacle = obstacle[row]?.[col] === 1;
+          terrain[row]?.[col] || "GRASS";
+        const isObstacle = (obstacle[row]?.[col] ?? 0) !== 0;
         const cellElevation = elevation[row]?.[col] ?? 0;
         const baseTerrainColor = terrainColor(
-          mapData.config.TERRAIN_COLORS?.[terrainName],
+          mapData.terrain_colors?.[terrainName],
         );
         const shade =
           elevationRange > 0
-            ? 0.82 + 0.36 * ((cellElevation - minElev) / elevationRange)
+            ? elevationShadeMin +
+              (elevationShadeMax - elevationShadeMin) *
+                ((cellElevation - minElev) / elevationRange)
             : 1;
 
         if (terrainName === "WATER_RIVER") {
           ctx.fillStyle = shadedColor(baseTerrainColor, shade);
         } else if (isObstacle) {
-          ctx.fillStyle = rgba(OBSTACLE_RGB);
+          ctx.fillStyle = shadedColor(OBSTACLE_RGB, shade);
         } else {
           ctx.fillStyle = shadedColor(baseTerrainColor, shade);
         }
         ctx.fillRect(x, y, width, height);
 
-        if (isObstacle && effectiveCellSize >= 8) {
+        if (
+          isObstacle &&
+          terrainName !== "WATER_RIVER" &&
+          effectiveCellSize >= 8
+        ) {
           drawHatch(ctx, x, y, width, height, "rgba(248,248,248,0.28)");
         }
 
@@ -228,92 +577,90 @@ export function TacticalMapCanvas({
       }
     }
 
+    const terrainNodes = modifications?.terrain_nodes ?? [];
+    const obstacleNodes = modifications?.obstacle_nodes ?? [];
+    const slopeEdges = modifications?.slope_edges ?? [];
+    const waterNodes = modifications?.water_nodes ?? [];
+    const conflictingCellChanges = overlappingCellChanges(
+      terrainNodes,
+      obstacleNodes,
+      waterNodes,
+    );
+    if (conflictingCellChanges.length > 0) {
+      console.error(
+        new Error("Cell modification categories overlap at the same grid cells."),
+        conflictingCellChanges,
+      );
+    }
+
+    const userPathCells = new Set(
+      userPath.map(([row, col]) => `${row},${col}`),
+    );
+    const sharedCells = new Set(
+      optimalPath
+        .filter(([row, col]) => userPathCells.has(`${row},${col}`))
+        .map(([row, col]) => `${row},${col}`),
+    );
+    const routeLineWidth = effectiveCellSize * ROUTE_WIDTH;
     drawPath(
       ctx,
       optimalPath,
       OPTIMAL_PATH_RGB,
       effectiveCellSize,
-      0.9,
-      Math.max(2, effectiveCellSize * 0.28),
-    );
-    drawPath(
-      ctx,
-      userPath,
-      USER_PATH_RGB,
-      effectiveCellSize,
-      0.35,
-      Math.max(3, effectiveCellSize * 0.7),
-    );
-    drawPath(
-      ctx,
-      userPath,
-      USER_PATH_RGB,
-      effectiveCellSize,
+      routeLineWidth,
+      sharedCells,
       1,
-      Math.max(2, effectiveCellSize * 0.4),
-      true,
+    );
+    drawPath(
+      ctx,
+      userPath,
+      USER_PATH_OUTLINE_RGB,
+      effectiveCellSize,
+      effectiveCellSize * USER_PATH_OUTLINE_WIDTH,
+      sharedCells,
+      -1,
+    );
+    drawPath(
+      ctx,
+      userPath,
+      USER_PATH_RGB,
+      effectiveCellSize,
+      routeLineWidth,
+      sharedCells,
+      -1,
     );
 
-    const terrainNodes = modifications?.terrain_nodes ?? [];
-    const obstacleNodes = modifications?.obstacle_nodes ?? [];
-    const slopeEdges = modifications?.slope_edges ?? [];
-    for (const [row, col] of terrainNodes) {
-      const x = col * effectiveCellSize;
-      const y = row * effectiveCellSize;
-      ctx.fillStyle = rgba(ISP_TERRAIN_RGB, 0.38);
-      ctx.fillRect(x, y, effectiveCellSize, effectiveCellSize);
-      ctx.strokeStyle = rgba(ISP_TERRAIN_RGB);
-      ctx.lineWidth = Math.max(2, effectiveCellSize * 0.12);
-      ctx.strokeRect(
-        x + ctx.lineWidth / 2,
-        y + ctx.lineWidth / 2,
-        effectiveCellSize - ctx.lineWidth,
-        effectiveCellSize - ctx.lineWidth,
-      );
-    }
-
-    for (const [row, col] of obstacleNodes) {
-      const x = col * effectiveCellSize;
-      const y = row * effectiveCellSize;
-      ctx.fillStyle = rgba(ISP_OBSTACLE_RGB, 0.34);
-      ctx.fillRect(x, y, effectiveCellSize, effectiveCellSize);
-      drawHatch(
-        ctx,
-        x,
-        y,
-        effectiveCellSize,
-        effectiveCellSize,
-        rgba(ISP_OBSTACLE_RGB, 0.9),
-      );
-      ctx.strokeStyle = rgba(ISP_OBSTACLE_RGB);
-      ctx.lineWidth = Math.max(2, effectiveCellSize * 0.12);
-      ctx.strokeRect(
-        x + ctx.lineWidth / 2,
-        y + ctx.lineWidth / 2,
-        effectiveCellSize - ctx.lineWidth,
-        effectiveCellSize - ctx.lineWidth,
-      );
-    }
-
+    drawModificationCells(
+      ctx,
+      terrainNodes,
+      MODIFICATION_TERRAIN_RGB,
+      effectiveCellSize,
+    );
+    drawModificationCells(
+      ctx,
+      obstacleNodes,
+      MODIFICATION_OBSTACLE_RGB,
+      effectiveCellSize,
+    );
+    drawModificationCells(
+      ctx,
+      waterNodes,
+      MODIFICATION_WATER_RGB,
+      effectiveCellSize,
+    );
     for (const [from, to] of slopeEdges) {
-      ctx.beginPath();
-      ctx.moveTo(
-        from[1] * effectiveCellSize + effectiveCellSize / 2,
-        from[0] * effectiveCellSize + effectiveCellSize / 2,
+      drawSlopeEdge(
+        ctx,
+        from,
+        to,
+        MODIFICATION_SLOPE_RGB,
+        effectiveCellSize,
       );
-      ctx.lineTo(
-        to[1] * effectiveCellSize + effectiveCellSize / 2,
-        to[0] * effectiveCellSize + effectiveCellSize / 2,
-      );
-      ctx.strokeStyle = rgba(ISP_SLOPE_RGB);
-      ctx.lineWidth = Math.max(2.5, effectiveCellSize * 0.22);
-      ctx.lineCap = "round";
-      ctx.stroke();
     }
 
     const startX = start[1] * effectiveCellSize + effectiveCellSize / 2;
     const startY = start[0] * effectiveCellSize + effectiveCellSize / 2;
-    const markerRadius = Math.max(6, effectiveCellSize * 0.85);
+    const markerRadius = effectiveCellSize * ENDPOINT_RADIUS;
     ctx.save();
     ctx.translate(startX, startY);
     ctx.beginPath();
@@ -325,34 +672,23 @@ export function TacticalMapCanvas({
     ctx.fillStyle = rgba(START_RGB);
     ctx.fill();
     ctx.strokeStyle = rgba(START_EDGE_RGB);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = effectiveCellSize * CELL_EDGE_WIDTH;
     ctx.stroke();
-    if (effectiveCellSize >= 12) {
-      ctx.fillStyle = rgba(GRID_RGB);
-      ctx.font = `bold ${Math.max(8, effectiveCellSize * 0.6)}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("S", 0, 0);
-    }
     ctx.restore();
 
     const goalX = goal[1] * effectiveCellSize + effectiveCellSize / 2;
     const goalY = goal[0] * effectiveCellSize + effectiveCellSize / 2;
     ctx.beginPath();
-    ctx.arc(goalX, goalY, markerRadius, 0, Math.PI * 2);
+    ctx.moveTo(goalX, goalY - markerRadius);
+    ctx.lineTo(goalX + markerRadius, goalY);
+    ctx.lineTo(goalX, goalY + markerRadius);
+    ctx.lineTo(goalX - markerRadius, goalY);
+    ctx.closePath();
     ctx.fillStyle = rgba(GOAL_RGB);
     ctx.fill();
     ctx.strokeStyle = rgba(GOAL_EDGE_RGB);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = effectiveCellSize * CELL_EDGE_WIDTH;
     ctx.stroke();
-    if (effectiveCellSize >= 12) {
-      ctx.fillStyle = rgba(GOAL_EDGE_RGB);
-      ctx.font = `bold ${Math.max(8, effectiveCellSize * 0.6)}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("G", goalX, goalY);
-    }
-
   }, [
     cellSize,
     deviceScale,
@@ -443,7 +779,10 @@ export function TacticalMapCanvas({
   return (
     <div
       className={`tactical-map-canvas ${className}`}
-      style={{ width: `${logicalWidth + 2}px`, height: `${logicalHeight + 2}px` }}
+      style={{
+        width: `${logicalWidth + 2}px`,
+        height: `${logicalHeight + 2}px`,
+      }}
     >
       <canvas
         ref={canvasRef}
@@ -470,89 +809,108 @@ export function TacticalMapCanvas({
 }
 
 export function TacticalMapLegend({
+  mapData,
   modifications,
   showOptimalPath,
+  showAlternativePath = true,
 }: {
+  mapData: MapData;
   modifications?: SemanticModificationsData | null;
   showOptimalPath?: boolean;
+  showAlternativePath?: boolean;
 }) {
-  const hasTerrainChanges = (modifications?.terrain_nodes?.length ?? 0) > 0;
-  const hasObstacleChanges = (modifications?.obstacle_nodes?.length ?? 0) > 0;
-  const hasSlopeChanges = (modifications?.slope_edges?.length ?? 0) > 0;
+  const terrainCount =
+    modifications?.terrain ?? modifications?.terrain_nodes?.length ?? 0;
+  const obstacleCount =
+    modifications?.obstacle ?? modifications?.obstacle_nodes?.length ?? 0;
+  const slopeCount =
+    modifications?.slope ?? modifications?.slope_edges?.length ?? 0;
+  const waterCount =
+    modifications?.water ?? modifications?.water_nodes?.length ?? 0;
+  const hasChanges = terrainCount + obstacleCount + slopeCount + waterCount > 0;
 
   return (
     <div className="canvas-legend" aria-label="Map legend">
+      {(showOptimalPath || showAlternativePath) && (
+        <div className="legend-group">
+          <span className="legend-group-label">Routes</span>
+          {showOptimalPath && (
+            <span className="legend-item">
+              <span className="legend-color legend-optimal-route" />
+              p* · Optimal
+            </span>
+          )}
+          {showAlternativePath && (
+            <span className="legend-item">
+              <span className="legend-color legend-route" />
+              p′ · Alternative
+            </span>
+          )}
+          {showOptimalPath && showAlternativePath && (
+            <span className="legend-item">
+              <span className="legend-color legend-shared-route" />
+              Shared section
+            </span>
+          )}
+        </div>
+      )}
       <div className="legend-group">
-        <span className="legend-group-label">Terrain</span>
+        <span className="legend-group-label">Endpoints</span>
         <span className="legend-item">
-          <span className="legend-color legend-compacted-soil" />
-          Compacted Soil
+          <span className="legend-color legend-start" />
+          Start
         </span>
         <span className="legend-item">
-          <span className="legend-color legend-grass" />
-          Grass
-        </span>
-        <span className="legend-item">
-          <span className="legend-color legend-dry-vegetation" />
-          Dry Vegetation
-        </span>
-        <span className="legend-item">
-          <span className="legend-color legend-sand" />
-          Sand
-        </span>
-        <span className="legend-item">
-          <span className="legend-color legend-mud" />
-          Mud
-        </span>
-        <span className="legend-item">
-          <span className="legend-color legend-river" />
-          River
+          <span className="legend-color legend-goal" />
+          Goal
         </span>
       </div>
       <div className="legend-group">
-        <span className="legend-group-label">Markers</span>
+        <span className="legend-group-label">Terrain</span>
+        {Object.entries(mapData.speeds ?? {}).map(([name, speed]) => (
+          <span className="legend-item" key={name}>
+            <span
+              className="legend-color"
+              style={{
+                backgroundColor: mapData.terrain_colors?.[name] ?? "#808080",
+              }}
+            />
+            {name.toLowerCase().replaceAll("_", " ")} (
+            {Number(speed).toLocaleString("en-US", {
+              maximumSignificantDigits: 6,
+            })} m/s)
+          </span>
+        ))}
         <span className="legend-item">
           <span className="legend-color legend-obstacle" />
           Obstacle
         </span>
-        <span className="legend-item">
-          <span className="legend-color legend-start" />
-          Start (S)
-        </span>
-        <span className="legend-item">
-          <span className="legend-color legend-goal" />
-          Goal (G)
-        </span>
-        {showOptimalPath && (
-          <span className="legend-item">
-            <span className="legend-color legend-optimal-route" />
-            Initial Optimal Route (p*)
-          </span>
-        )}
-        <span className="legend-item">
-          <span className="legend-color legend-route" />
-          Alternative Route (p&apos;)
-        </span>
       </div>
-      {(hasTerrainChanges || hasObstacleChanges || hasSlopeChanges) && (
+      {hasChanges && (
         <div className="legend-group">
-          <span className="legend-group-label">ISP Modifications</span>
-          {hasTerrainChanges && (
+          <span className="legend-group-label">Changes</span>
+          {terrainCount > 0 && (
             <span className="legend-item">
-              <span className="legend-color legend-isp-terrain" />
-              Terrain modified
+              <span className="legend-color legend-change-cell legend-change-terrain" />
+              Terrain changed ({terrainCount})
             </span>
           )}
-          {hasObstacleChanges && (
+          {obstacleCount > 0 && (
             <span className="legend-item">
-              <span className="legend-color legend-isp-obstacle" />
-              Obstacle removed
+              <span className="legend-color legend-change-cell legend-change-obstacle" />
+              Obstacle cleared ({obstacleCount})
             </span>
           )}
-          {hasSlopeChanges && (
+          {slopeCount > 0 && (
             <span className="legend-item">
-              <span className="legend-color legend-isp-slope" />
-              Slope leveled
+              <span className="legend-color legend-change-edge legend-change-slope" />
+              Slope leveled ({slopeCount})
+            </span>
+          )}
+          {waterCount > 0 && (
+            <span className="legend-item">
+              <span className="legend-color legend-change-cell legend-change-water" />
+              Water opened ({waterCount})
             </span>
           )}
         </div>

@@ -5,16 +5,18 @@
   --bright-snow: #f8f8f8;
   --shadow-grey: #282828;
   --map-start: #00b0ff;
+  --map-start-edge: #003366;
   --map-goal: #ffd700;
-  --map-route: #ff1744;
-  --map-optimal-route: #00e676;
+  --map-goal-edge: #664400;
+  --map-route: #f8f8f8;
+  --map-route-outline: #282828;
+  --map-optimal-route: #327de1;
   --map-river: #0585e6;
   --map-obstacle: #141417;
-  --map-compacted-soil: #9e6b47;
-  --map-grass: #2e9438;
-  --map-dry-vegetation: #bfc233;
-  --map-sand: #fad142;
-  --map-mud: #5c3829;
+  --map-change-terrain: #ff3b8d;
+  --map-change-obstacle: #c6ff00;
+  --map-change-slope: #a855f7;
+  --map-change-water: #00c9c7;
   --surface-page: var(--bright-snow);
   --surface-raised: color-mix(
     in srgb,
@@ -554,8 +556,9 @@ kbd,
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-out),
-              background var(--duration-fast) var(--ease-out);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
 }
 .strategy-column .toggle-btn:hover {
   border-color: var(--border-strong);
@@ -683,7 +686,8 @@ kbd,
 .form-group.has-error input:focus,
 .form-group.has-error select:focus {
   border-color: var(--border-danger);
-  box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--lobster-pink) 25%, transparent);
+  box-shadow: 0 0 0 0.22rem
+    color-mix(in srgb, var(--lobster-pink) 25%, transparent);
 }
 .field-error-message {
   display: block;
@@ -917,45 +921,6 @@ kbd,
   display: block;
   margin-bottom: 0.75rem;
 }
-.terrain-registry-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-.terrain-registry-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: end;
-  gap: 0.75rem;
-  min-width: 0;
-  padding: 0.75rem;
-  background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-}
-.terrain-registry-row .form-group {
-  min-width: 0;
-}
-.terrain-registry-fields {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: end;
-  gap: 0.5rem;
-  min-width: 0;
-}
-.terrain-color-picker {
-  min-height: 2.625rem;
-  padding: 0.25rem !important;
-  cursor: pointer;
-}
-.terrain-remove-button {
-  width: 100%;
-  white-space: nowrap;
-}
-.terrain-add-button {
-  margin-top: 0.75rem;
-}
 .form-actions-row {
   display: flex;
   align-items: center;
@@ -1135,8 +1100,7 @@ kbd,
   flex: 0 0 auto;
   overflow: hidden;
   background: var(--surface-canvas);
-  border: 1px solid
-    color-mix(in srgb, var(--bright-snow) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bright-snow) 16%, transparent);
   box-shadow: 0 0.75rem 2rem
     color-mix(in srgb, var(--yale-blue) 28%, transparent);
 }
@@ -1198,6 +1162,9 @@ kbd,
 .cell-status-obstacle {
   color: var(--text-danger) !important;
 }
+.cell-status-impassable {
+  color: var(--map-river) !important;
+}
 .cell-status-free {
   color: var(--azure-blue) !important;
 }
@@ -1235,62 +1202,126 @@ kbd,
   border: 1px solid color-mix(in srgb, var(--shadow-grey) 25%, transparent);
   border-radius: 0.2rem;
 }
+.legend-start,
+.legend-goal {
+  width: 0.58rem;
+  height: 0.58rem;
+  border-radius: 0.08rem;
+  margin: 0 0.06rem;
+  transform: rotate(45deg);
+}
 .legend-start {
   background: var(--map-start);
+  border-color: var(--map-start-edge);
 }
 .legend-goal {
   background: var(--map-goal);
+  border-color: var(--map-goal-edge);
+}
+.legend-optimal-route,
+.legend-route,
+.legend-shared-route {
+  position: relative;
+  width: 1.1rem;
+  height: 0.7rem;
+  flex: none;
+  background: none;
+  border: 0;
+  border-radius: 0;
 }
 .legend-optimal-route {
-  background: var(--map-optimal-route);
-  border-color: var(--map-optimal-route);
+  color: var(--map-optimal-route);
 }
 .legend-route {
-  background: var(--map-route);
+  color: var(--map-route);
+}
+.legend-optimal-route::after,
+.legend-route::before,
+.legend-route::after {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  content: "";
+  transform: translateY(-50%);
+  border-top: 2px solid currentColor;
+}
+.legend-route::before {
+  border-top-width: 3px;
+  border-top-color: var(--map-route-outline);
+}
+.legend-shared-route::before,
+.legend-shared-route::after {
+  position: absolute;
+  right: 0;
+  left: 0;
+  content: "";
+  border-top: 2px solid;
+}
+.legend-shared-route::before {
+  top: 34%;
+  border-color: var(--map-optimal-route);
+}
+.legend-shared-route::after {
+  top: 68%;
+  height: 3px;
+  border: 0;
+  transform: translateY(-50%);
+  background:
+    linear-gradient(var(--map-route), var(--map-route)) center / 100% 2px
+      no-repeat,
+    var(--map-route-outline);
 }
 .legend-obstacle {
   background: var(--map-obstacle);
 }
-.legend-river {
-  background: var(--map-river);
+.legend-change-cell {
+  border: 1px solid var(--shadow-grey);
+  border-radius: 50%;
 }
-.legend-compacted-soil {
-  background: var(--map-compacted-soil);
+.legend-change-edge {
+  position: relative;
+  border: 0;
+  border-radius: 0;
+  background: none;
 }
-.legend-grass {
-  background: var(--map-grass);
+.legend-change-edge::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.5rem;
+  height: 0.18rem;
+  border-radius: 999px;
+  background: var(--map-change-slope);
+  content: "";
+  transform: translate(-50%, -50%);
 }
-.legend-dry-vegetation {
-  background: var(--map-dry-vegetation);
+.legend-change-edge.legend-change-slope::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.3rem;
+  height: 0.18rem;
+  border-radius: 999px;
+  background: var(--map-change-slope);
+  content: "";
+  transform: translate(-50%, -50%);
 }
-.legend-sand {
-  background: var(--map-sand);
+.legend-change-edge.legend-change-slope {
+  background: none;
+  filter: drop-shadow(0 0 1px var(--shadow-grey));
 }
-.legend-mud {
-  background: var(--map-mud);
+.legend-change-terrain {
+  background: var(--map-change-terrain);
 }
-.legend-isp-terrain {
-  background: #00e5ff;
-  border-color: #00e5ff;
+.legend-change-obstacle {
+  background: var(--map-change-obstacle);
 }
-.legend-isp-obstacle {
-  background: repeating-linear-gradient(
-    135deg,
-    #ff1744 0,
-    #ff1744 0.18rem,
-    transparent 0.18rem,
-    transparent 0.34rem
-  );
-  border-color: #ff1744;
+.legend-change-slope {
+  background: var(--map-change-slope);
 }
-.legend-isp-slope {
-  background: linear-gradient(
-    transparent 42%,
-    #aa00ff 42%,
-    #aa00ff 58%,
-    transparent 58%
-  );
-  border-color: #aa00ff;
+.legend-change-water {
+  background: var(--map-change-water);
 }
 
 .queue-panel-header,
@@ -2427,12 +2458,6 @@ kbd,
   .conditional-inner-grid.has-scope {
     grid-template-columns: 1fr;
   }
-  .terrain-registry-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .terrain-remove-button {
-    justify-self: stretch;
-  }
   .canvas-legend {
     grid-template-columns: 1fr;
     justify-content: stretch;
@@ -2508,11 +2533,6 @@ kbd,
   }
   .confirm-modal-actions .btn {
     flex-basis: 100%;
-  }
-}
-@media (max-width: 32rem) {
-  .terrain-registry-list {
-    grid-template-columns: 1fr;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2673,7 +2693,8 @@ kbd,
   background: var(--config-surface-soft);
   border-color: color-mix(in srgb, var(--azure-blue) 22%, transparent);
   border-left: 0.2rem solid var(--azure-blue);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bright-snow) 70%, transparent);
+  box-shadow: inset 0 1px 0
+    color-mix(in srgb, var(--bright-snow) 70%, transparent);
   transition:
     background-color var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out),

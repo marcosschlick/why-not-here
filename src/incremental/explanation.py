@@ -1,4 +1,4 @@
-from src.config import IMPASSABLE_TERRAINS
+from src import config
 from src.grid.grid import Grid
 from src.isp.semantics import SemanticModifications
 
@@ -8,7 +8,6 @@ TERRAIN_NAMES = {
     "DRY_VEGETATION": "dry vegetation",
     "SAND": "sand",
     "MUD": "mud",
-    "WATER_RIVER": "river/stream",
 }
 
 
@@ -16,21 +15,40 @@ def generate_explanation_text(
     modifications: SemanticModifications | None,
     grid: Grid | None = None,
     fallback_reason: str | None = None,
+    solver_status: str = "OPTIMAL",
 ) -> str:
+    subgraph_only = solver_status == "SUBGRAPH_OPTIMAL_ONLY"
+    subgraph_message = (
+        "The candidate makes the alternative route p' optimal only within the reduced subgraph. "
+        "Global optimality validation failed; there is no global optimality certification."
+    )
     if modifications is None:
+        if subgraph_only:
+            return subgraph_message
         if fallback_reason:
             return fallback_reason
         return "No feasible intervention was found to make the alternative route p' optimal."
 
     has_terrain = bool(modifications.terrain_nodes)
-    has_obstacle = bool(modifications.obstacle_nodes)
+    obstacle_nodes = modifications.obstacle_nodes
+    if grid is not None:
+        obstacle_nodes = [u for u in obstacle_nodes if grid.get_cell(u).obstacle != 0]
+    has_obstacle = bool(obstacle_nodes)
     has_slope = bool(modifications.slope_edges)
+    has_water = bool(modifications.water_nodes)
 
-    if not has_terrain and not has_obstacle and not has_slope:
+    if not has_terrain and not has_obstacle and not has_slope and not has_water:
+        if subgraph_only:
+            return (
+                subgraph_message
+                + " No environmental changes were required within the subgraph."
+            )
         return "The alternative route p' already has the same estimated traversal time as the optimal route p*, so no environmental changes are needed."
 
     lines = [
-        (
+        subgraph_message + " Candidate interventions:"
+        if subgraph_only
+        else (
             "This contrastive explanation describes why the planner selected the optimal route p* "
             "over the alternative route p': conditions along p' increase the robot's traversal time. "
             "The minimum environmental changes needed to make the alternative route p' optimal are:"
@@ -38,6 +56,7 @@ def generate_explanation_text(
     ]
 
     if has_terrain:
+        target_name = config.TARGET_TERRAIN.lower().replace("_", " ")
         terrain_count = len(modifications.terrain_nodes)
         terrain_cell_label = "cell" if terrain_count == 1 else "cells"
         if grid is not None:
@@ -51,44 +70,22 @@ def generate_explanation_text(
                 for name, cnt in counts.items()
             )
             lines.append(
-                f"- Convert {terrain_count} slow-terrain {terrain_cell_label} "
-                f"({details}) to the baseline terrain (compacted soil)."
+                f"- Convert {terrain_count} terrain {terrain_cell_label} "
+                f"({details}) to the target terrain ({target_name})."
             )
         else:
             lines.append(
-                f"- Convert {terrain_count} degraded-terrain {terrain_cell_label} "
-                "to the baseline terrain (compacted soil)."
+                f"- Convert {terrain_count} terrain {terrain_cell_label} "
+                f"to the target terrain ({target_name})."
             )
 
     if has_obstacle:
-        water_count = 0
-        obs_count = 0
-        if grid is not None:
-            for u in modifications.obstacle_nodes:
-                if grid.get_cell(u).terrain in IMPASSABLE_TERRAINS:
-                    water_count += 1
-                else:
-                    obs_count += 1
-        else:
-            obs_count = len(modifications.obstacle_nodes)
-
-        if water_count > 0:
-            if water_count == 1:
-                lines.append("- Build a traversable crossing at 1 river/stream cell.")
-            else:
-                lines.append(
-                    f"- Build traversable crossings at {water_count} river/stream cells."
-                )
-        if obs_count > 0:
-            if obs_count == 1:
-                lines.append(
-                    "- Remove the impassable obstacle blocking 1 cell on the alternative route."
-                )
-            else:
-                lines.append(
-                    f"- Remove impassable obstacles blocking {obs_count} cells "
-                    "on the alternative route."
-                )
+        obstacle_count = len(obstacle_nodes)
+        obstacle_cell_label = "cell" if obstacle_count == 1 else "cells"
+        lines.append(
+            f"- Remove physical obstacles blocking {obstacle_count} "
+            f"{obstacle_cell_label} on the alternative route."
+        )
 
     if has_slope:
         slope_count = len(modifications.slope_edges)
@@ -102,9 +99,17 @@ def generate_explanation_text(
                 "that slow or prevent continuous robot traversal."
             )
 
-    lines.append(
-        "Without these changes, the alternative route has a higher traversal cost and increases mission time."
-    )
+    if has_water:
+        water_count = len(modifications.water_nodes)
+        water_cell_label = "cell" if water_count == 1 else "cells"
+        lines.append(
+            f"- Make {water_count} water {water_cell_label} traversable at the base-terrain speed while preserving water terrain."
+        )
+
+    if not subgraph_only:
+        lines.append(
+            "Without these changes, the alternative route has a higher traversal cost and increases mission time."
+        )
     return "\n".join(lines)
 
 
@@ -117,7 +122,7 @@ def generate_cost_baseline_justification(
         return (
             f"The optimal route p* is feasible (estimated traversal time: {cost_p_star:.2f} s), "
             "while the alternative route p' is impassable under current terrain conditions "
-            "(infinite traversal time due to obstacles or steep slopes)."
+            "(infinite traversal time due to impassable terrain, obstacles, or steep slopes)."
         )
     diff = cost_p_prime - cost_p_star
     if abs(diff) < 1e-4:

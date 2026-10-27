@@ -52,7 +52,7 @@ def main():
         try:
             data = load_experiment_file(filepath)
             execute_experiment(data, verbose=True)
-        except Exception as exc:
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:
             print(f"Error executing experiment: {exc}")
     elif choice in ("0", "q", "exit"):
         return

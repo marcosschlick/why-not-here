@@ -18,20 +18,29 @@ def terrain_color_rgb(terrain_name: str) -> np.ndarray:
     except ValueError:
         return DEFAULT_TERRAIN_COLOR.copy()
 
+
 START_COLOR = "#00B0FF"
 START_EDGE_COLOR = "#003366"
 GOAL_COLOR = "#FFD700"
 GOAL_EDGE_COLOR = "#664400"
 
-OPTIMAL_PATH_COLOR = "#00E676"
-USER_PATH_COLOR = "#FF1744"
+OPTIMAL_PATH_COLOR = "#327DE1"
+USER_PATH_COLOR = "#F8F8F8"
+USER_PATH_OUTLINE_COLOR = "#282828"
+ROUTE_WIDTH = 0.14
+USER_PATH_OUTLINE_WIDTH = 0.20
 
-STEEP_SLOPE_FACE_COLOR = "#FF5252"
-STEEP_SLOPE_EDGE_COLOR = "#D32F2F"
-
-ISP_TERRAIN_COLOR = "#00E5FF"
-ISP_OBSTACLE_COLOR = "#FF1744"
-ISP_SLOPE_COLOR = "#AA00FF"
+MODIFICATION_TERRAIN_COLOR = "#FF3B8D"
+MODIFICATION_OBSTACLE_COLOR = "#C6FF00"
+MODIFICATION_SLOPE_COLOR = "#A855F7"
+MODIFICATION_WATER_COLOR = "#00C9C7"
+MODIFICATION_EDGE_COLOR = "#282828"
+MODIFICATION_RADIUS = 0.39
+MODIFICATION_GROUP_WIDTH = 0.78
+MODIFICATION_EDGE_WIDTH = 0.05
+MODIFICATION_SLOPE_MARKER_PATH_LENGTH = 0.50
+MODIFICATION_SLOPE_MARKER_CROSS_LENGTH = 0.30
+MODIFICATION_SLOPE_MARKER_WIDTH = 0.07
 
 
 def compute_layout(h: int, w: int) -> dict:
@@ -42,9 +51,6 @@ def compute_layout(h: int, w: int) -> dict:
             "grid_alpha": 0.9,
             "grid_lw": 0.9,
             "show_grid": True,
-            "path_lw": 3.0,
-            "marker_size": 5.0,
-            "endpoint_s": 140.0,
         }
     if max_dim <= 32:
         return {
@@ -52,9 +58,6 @@ def compute_layout(h: int, w: int) -> dict:
             "grid_alpha": 0.8,
             "grid_lw": 0.7,
             "show_grid": True,
-            "path_lw": 2.4,
-            "marker_size": 3.5,
-            "endpoint_s": 110.0,
         }
     if max_dim <= 64:
         return {
@@ -62,9 +65,6 @@ def compute_layout(h: int, w: int) -> dict:
             "grid_alpha": 0.35,
             "grid_lw": 0.5,
             "show_grid": True,
-            "path_lw": 2.0,
-            "marker_size": 2.0,
-            "endpoint_s": 80.0,
         }
     if max_dim <= 128:
         return {
@@ -72,16 +72,18 @@ def compute_layout(h: int, w: int) -> dict:
             "grid_alpha": 0.0,
             "grid_lw": 0.0,
             "show_grid": False,
-            "path_lw": 1.6,
-            "marker_size": 0.0,
-            "endpoint_s": 55.0,
         }
     return {
         "tick_step": 32,
         "grid_alpha": 0.0,
         "grid_lw": 0.0,
         "show_grid": False,
-        "path_lw": 1.2,
-        "marker_size": 0.0,
-        "endpoint_s": 40.0,
     }
+
+
+def axis_ticks(size: int, step: int) -> list[int]:
+    ticks = list(range(0, size, step))
+    last_index = size - 1
+    if ticks[-1] != last_index:
+        ticks.append(last_index)
+    return ticks

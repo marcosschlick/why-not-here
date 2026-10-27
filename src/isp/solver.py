@@ -1,11 +1,13 @@
 import cvxpy as cp
 import numpy as np
+from scipy.sparse import lil_matrix
 
 from ..grid import Grid
 from ..planning import astar
 from ..reduction import ReducedGraph, prepare_subgraph
 from .base import BaseISPSolver
 from .precheck import check_geometric_feasibility, validate_alternative_path
+from .semantics import ISPSemantics
 from .types import SemanticModifications
 
 
@@ -37,6 +39,8 @@ class ISPSolver(BaseISPSolver):
             grid, alternative_path, cost_p_star, self.tolerance
         )
         if not is_geometrically_feasible:
+            if ISPSemantics(grid, alternative_path).total_z_vars == 0:
+                status = "INFEASIBLE"
             self.last_solver_status = status
             return False, None, float("inf")
 
@@ -59,10 +63,10 @@ class ISPSolver(BaseISPSolver):
         num_edges = len(formulation.isp.edges)
 
         pi = cp.Variable(num_nodes)
-        B_T = np.zeros((num_edges, num_nodes), dtype=np.float64)
+        A_T = lil_matrix((num_edges, num_nodes), dtype=np.float64)
         for k, (u, v) in enumerate(formulation.isp.edges):
-            B_T[k, formulation.isp.node_to_idx[u]] = 1.0
-            B_T[k, formulation.isp.node_to_idx[v]] = -1.0
+            A_T[k, formulation.isp.node_to_idx[u]] = 1.0
+            A_T[k, formulation.isp.node_to_idx[v]] = -1.0
 
         start_idx = formulation.isp.node_to_idx[start]
         goal_idx = formulation.isp.node_to_idx[goal]
@@ -72,7 +76,7 @@ class ISPSolver(BaseISPSolver):
         b_vec[goal_idx] = -1.0
 
         constraints = [
-            B_T @ pi <= formulation.w_prime,
+            A_T.tocsr() @ pi <= formulation.w_prime,
             formulation.w_prime @ formulation.x_alt == b_vec @ pi,
             formulation.w_prime >= formulation.w_min,
             pi[goal_idx] == 0.0,

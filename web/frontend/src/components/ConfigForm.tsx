@@ -7,48 +7,6 @@ import {
 } from "../services/api";
 import type { QueueItem, SystemConfig } from "../types";
 
-interface TerrainDraft {
-  name: string;
-  speed: number;
-  color: string;
-}
-
-const DEFAULT_TERRAINS: Record<string, number> = {
-  COMPACTED_SOIL: 1.2,
-  GRASSLAND: 1.0,
-  GRASS: 1.0,
-  UNPAVED_TRACK: 0.9,
-  DRY_VEGETATION: 0.8,
-  SAND: 0.6,
-  FOREST: 0.5,
-  MUD: 0.4,
-  ROCKY: 0.3,
-  WATER_RIVER: 0.0,
-};
-
-const DEFAULT_TERRAIN_COLORS: Record<string, string> = {
-  COMPACTED_SOIL: "#9E6B47",
-  GRASSLAND: "#52A45B",
-  GRASS: "#2E9438",
-  UNPAVED_TRACK: "#B98457",
-  DRY_VEGETATION: "#BFC233",
-  SAND: "#FAD142",
-  FOREST: "#2F653A",
-  MUD: "#5C3829",
-  ROCKY: "#777B80",
-  WATER_RIVER: "#0585E6",
-};
-
-function initialTerrainDraft(config: SystemConfig | null): TerrainDraft[] {
-  const terrains = config?.TERRAINS ?? DEFAULT_TERRAINS;
-  const colors = config?.TERRAIN_COLORS ?? DEFAULT_TERRAIN_COLORS;
-  return Object.entries(terrains).map(([name, speed]) => ({
-    name,
-    speed,
-    color: colors[name] ?? "#808080",
-  }));
-}
-
 interface ConfigFormProps {
   initialConfig: SystemConfig | null;
   onGenerateMap: (
@@ -157,21 +115,6 @@ export function ConfigForm({
   const [solverTimeout, setSolverTimeout] = useState<number>(
     initialConfig?.SOLVER_TIMEOUT_SEC ?? 6000,
   );
-  const [targetTerrain, setTargetTerrain] = useState<string>(
-    initialConfig?.TARGET_TERRAIN ?? "COMPACTED_SOIL",
-  );
-  const [defaultTerrain, setDefaultTerrain] = useState<string>(
-    initialConfig?.DEFAULT_TERRAIN ?? "GRASS",
-  );
-  const [baseTerrain, setBaseTerrain] = useState<string>(
-    initialConfig?.BASE_TERRAIN ?? "GRASS",
-  );
-  const [terrainDraft, setTerrainDraft] = useState<TerrainDraft[]>(() =>
-    initialTerrainDraft(initialConfig),
-  );
-  const [maxSlopeDeg, setMaxSlopeDeg] = useState<number>(
-    initialConfig?.MAX_SLOPE_DEG ?? 20.0,
-  );
   const [closedLoopTimeout, setClosedLoopTimeout] = useState<number>(
     initialConfig?.CLOSED_LOOP_TIMEOUT_SEC ?? 300.0,
   );
@@ -188,19 +131,16 @@ export function ConfigForm({
     initialConfig?.MAP_DEFAULT_SEED ?? 42,
   );
   const [mapElevationScale, setMapElevationScale] = useState<number>(
-    initialConfig?.MAP_ELEVATION_SCALE ?? 2.0,
+    initialConfig?.MAP_ELEVATION_SCALE ?? 4.0,
   );
   const [mapElevationFreq, setMapElevationFreq] = useState<number>(
     initialConfig?.MAP_ELEVATION_FREQ ?? 0.06,
   );
-  const [mapBiomeFreq, setMapBiomeFreq] = useState<number>(
-    initialConfig?.MAP_BIOME_FREQ ?? 0.03,
+  const [mapMoistureFreq, setMapMoistureFreq] = useState<number>(
+    initialConfig?.MAP_MOISTURE_FREQ ?? 0.03,
   );
-  const [mapObstacleFreq, setMapObstacleFreq] = useState<number>(
-    initialConfig?.MAP_OBSTACLE_FREQ ?? 0.05,
-  );
-  const [mapObstacleThreshold, setMapObstacleThreshold] = useState<number>(
-    initialConfig?.MAP_OBSTACLE_THRESHOLD ?? 0.85,
+  const [mapRoughnessFreq, setMapRoughnessFreq] = useState<number>(
+    initialConfig?.MAP_ROUGHNESS_FREQ ?? 0.05,
   );
 
   const [cleaningDirInfo, setCleaningDirInfo] = useState<{
@@ -221,107 +161,13 @@ export function ConfigForm({
     setMapW(selectedSize.width);
   }
 
-  const terrainNames = terrainDraft
-    .map((terrain) => terrain.name.trim())
-    .filter(Boolean);
-  const traversableTerrains = terrainDraft.filter(
-    (terrain) => terrain.name.trim() && Number(terrain.speed) > 0,
-  );
-
-  function updateTerrainName(index: number, name: string) {
-    const previousName = terrainDraft[index]?.name.trim();
-    setTerrainDraft((current) =>
-      current.map((terrain, currentIndex) =>
-        currentIndex === index ? { ...terrain, name } : terrain,
-      ),
-    );
-    if (previousName && defaultTerrain === previousName) {
-      setDefaultTerrain(name.trim());
-    }
-    if (previousName && targetTerrain === previousName) {
-      setTargetTerrain(name.trim());
-    }
-    if (previousName && baseTerrain === previousName) {
-      setBaseTerrain(name.trim());
-    }
-  }
-
-  function addTerrain() {
-    const usedNames = new Set(terrainNames.map((name) => name.toLocaleLowerCase()));
-    let suffix = terrainDraft.length + 1;
-    let name = `NEW_TERRAIN_${suffix}`;
-    while (usedNames.has(name.toLocaleLowerCase())) {
-      suffix += 1;
-      name = `NEW_TERRAIN_${suffix}`;
-    }
-    setTerrainDraft((current) => [
-      ...current,
-      { name, speed: 0.5, color: "#808080" },
-    ]);
-  }
-
-  function removeTerrain(index: number) {
-    const terrain = terrainDraft[index];
-    if (!terrain) return;
-    const name = terrain.name.trim();
-    if (
-      name === defaultTerrain ||
-      name === targetTerrain ||
-      name === baseTerrain
-    ) {
-      return;
-    }
-    setTerrainDraft((current) => current.filter((_, rowIndex) => rowIndex !== index));
-  }
-
-  function getTerrainDraftError(): string | null {
-    const names = terrainDraft.map((terrain) => terrain.name.trim());
-    if (names.some((name) => !name)) {
-      return "Every terrain needs a name.";
-    }
-    if (new Set(names.map((name) => name.toLocaleLowerCase())).size !== names.length) {
-      return "Terrain names must be unique.";
-    }
-    if (terrainDraft.some((terrain) => !Number.isFinite(Number(terrain.speed)))) {
-      return "Terrain speeds must be finite numbers.";
-    }
-    if (terrainDraft.some((terrain) => !/^#[0-9a-f]{6}$/i.test(terrain.color))) {
-      return "Each terrain needs a valid hexadecimal color.";
-    }
-
-    const speeds = new Map(
-      terrainDraft.map((terrain) => [terrain.name.trim(), Number(terrain.speed)]),
-    );
-    if (![...speeds.values()].some((speed) => speed > 0)) {
-      return "At least one terrain must be traversable.";
-    }
-    if (!speeds.has(defaultTerrain)) {
-      return "Choose a registered default terrain.";
-    }
-    if (!(speeds.get(targetTerrain) && (speeds.get(targetTerrain) ?? 0) > 0)) {
-      return "Choose a traversable target terrain.";
-    }
-    if (!(speeds.get(baseTerrain) && (speeds.get(baseTerrain) ?? 0) > 0)) {
-      return "Choose a traversable base terrain.";
-    }
-    return null;
-  }
-
   function getCurrentConfig(): SystemConfig {
-    const terrains = Object.fromEntries(
-      terrainDraft.map((terrain) => [terrain.name.trim(), Number(terrain.speed)]),
-    );
-    const terrainColors = Object.fromEntries(
-      terrainDraft.map((terrain) => [terrain.name.trim(), terrain.color.toUpperCase()]),
-    );
     return {
       ...(initialConfig || {}),
       MAP_H: Number(mapH),
       MAP_W: Number(mapW),
       CELL_SIZE: Number(cellSize),
       CONNECTIVITY: Number(connectivity),
-      DEFAULT_TERRAIN: defaultTerrain,
-      BASE_TERRAIN: baseTerrain,
       DEFAULT_REDUCTION_METHOD: reductionMethod,
       USE_INCREMENTAL_SOLVER: useIncremental,
       OUTPUT_DIR:
@@ -332,22 +178,16 @@ export function ConfigForm({
       DEFAULT_PLANNER: planner,
       DEFAULT_SOLVER: solver,
       SOLVER_TIMEOUT_SEC: Number(solverTimeout),
-      TARGET_TERRAIN: targetTerrain,
-      TERRAINS: terrains,
-      TERRAIN_COLORS: terrainColors,
-      MAX_SLOPE_DEG: Number(maxSlopeDeg),
       CLOSED_LOOP_TIMEOUT_SEC: Number(closedLoopTimeout),
       MAX_ISP_ITERATIONS: Number(maxIspIterations),
       BBOX_MARGIN: Number(bboxMargin),
       INCREMENTAL_ASTAR_SCOPE: incrementalAstarScope,
       MAP_ELEVATION_SCALE: Number(mapElevationScale),
       MAP_ELEVATION_FREQ: Number(mapElevationFreq),
-      MAP_BIOME_FREQ: Number(mapBiomeFreq),
-      MAP_OBSTACLE_FREQ: Number(mapObstacleFreq),
-      MAP_OBSTACLE_THRESHOLD: Number(mapObstacleThreshold),
+      MAP_MOISTURE_FREQ: Number(mapMoistureFreq),
+      MAP_ROUGHNESS_FREQ: Number(mapRoughnessFreq),
     };
   }
-
 
   async function ensureCleanDirectoryAndExecute(
     targetDir: string,
@@ -394,12 +234,6 @@ export function ConfigForm({
       return;
     }
 
-    const terrainError = getTerrainDraftError();
-    if (terrainError) {
-      setFeedback(terrainError);
-      return;
-    }
-
     setOutputDirError(null);
     const current = getCurrentConfig();
     if (workflowMode === "create") {
@@ -423,12 +257,6 @@ export function ConfigForm({
 
     if (workflowMode === "create" && !configurationName.trim()) {
       setOutputDirError("Configuration name is required.");
-      return;
-    }
-
-    const terrainError = getTerrainDraftError();
-    if (terrainError) {
-      setFeedback(terrainError);
       return;
     }
 
@@ -505,7 +333,9 @@ export function ConfigForm({
   async function handleImportBrowse() {
     const selectedOutputDir = outputDir.trim();
     if (!selectedOutputDir) {
-      setOutputDirError("Select an output directory before importing a configuration.");
+      setOutputDirError(
+        "Select an output directory before importing a configuration.",
+      );
       return;
     }
 
@@ -518,10 +348,11 @@ export function ConfigForm({
             const root = selectedOutputDir.replace(/[\\/]+$/, "");
             onImportBatchConfigs(
               result.map((item, index) => {
-                const folderName = item.name
-                  .replace(/\.json$/i, "")
-                  .replace(/[^a-zA-Z0-9._-]+/g, "-")
-                  .replace(/^[-.]+|[-.]+$/g, "") || `run-${index + 1}`;
+                const folderName =
+                  item.name
+                    .replace(/\.json$/i, "")
+                    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+                    .replace(/^[-.]+|[-.]+$/g, "") || `run-${index + 1}`;
                 return {
                   ...item,
                   data: { ...item.data, OUTPUT_DIR: `${root}/${folderName}` },
@@ -669,8 +500,12 @@ export function ConfigForm({
                 >
                   <option value="NONE">None (Full Grid Graph)</option>
                   <option value="BBOX">BBOX (Bounding Box)</option>
-                  <option value="FLOODFILL">Floodfill (Reachable Subgraph)</option>
-                  <option value="SPARSIFIED">Sparsified (Corridor Graph)</option>
+                  <option value="FLOODFILL">
+                    Floodfill (Reachable Subgraph)
+                  </option>
+                  <option value="SPARSIFIED">
+                    Sparsified (Corridor Graph)
+                  </option>
                   <option value="PATH_ONLY">
                     Path Only (Strict Path Corridor)
                   </option>
@@ -739,7 +574,9 @@ export function ConfigForm({
                   <div className="form-group">
                     <label htmlFor="maxIspIterations">
                       <span>Max ISP Iterations</span>
-                      <span className="form-group-hint">1–100 cutting planes</span>
+                      <span className="form-group-hint">
+                        1–100 cutting planes
+                      </span>
                     </label>
                     <input
                       id="maxIspIterations"
@@ -759,7 +596,9 @@ export function ConfigForm({
                   <div className="form-group">
                     <label htmlFor="incrementalAstarScope">
                       <span>Incremental A* Scope</span>
-                      <span className="form-group-hint">Competing paths search</span>
+                      <span className="form-group-hint">
+                        Competing paths search
+                      </span>
                     </label>
                     <select
                       id="incrementalAstarScope"
@@ -803,7 +642,9 @@ export function ConfigForm({
                 placeholder="Example: north-route-study"
                 required
                 disabled={workflowMode !== "create"}
-                aria-invalid={workflowMode === "create" && isConfigurationNameError}
+                aria-invalid={
+                  workflowMode === "create" && isConfigurationNameError
+                }
                 aria-describedby={
                   workflowMode === "create" && isConfigurationNameError
                     ? "configuration-name-error"
@@ -826,7 +667,9 @@ export function ConfigForm({
             >
               <label id="destinationDirLabel">
                 <span>Output Directory</span>
-                <span className="form-group-hint">Required filesystem path</span>
+                <span className="form-group-hint">
+                  Required filesystem path
+                </span>
               </label>
               <div className="input-with-button">
                 <input
@@ -853,7 +696,11 @@ export function ConfigForm({
                   type="button"
                   className="btn btn-ghost"
                   onClick={handleBrowse}
-                  disabled={isGenerating || isBrowsing || isConfigurationDestinationLocked}
+                  disabled={
+                    isGenerating ||
+                    isBrowsing ||
+                    isConfigurationDestinationLocked
+                  }
                 >
                   {isBrowsing ? "Opening..." : "Browse..."}
                 </button>
@@ -897,7 +744,9 @@ export function ConfigForm({
             <div className="advanced-settings-collapse-inner">
               <div className="advanced-settings-body">
                 <div className="advanced-group">
-                  <h4 className="advanced-group-title">Planning &amp; Execution</h4>
+                  <h4 className="advanced-group-title">
+                    Planning &amp; Execution
+                  </h4>
                   <div className="form-grid">
                     <div className="form-group">
                       <label htmlFor="defaultPlanner">
@@ -941,7 +790,9 @@ export function ConfigForm({
                         min={1}
                         step={1}
                         value={solverTimeout}
-                        onChange={(e) => setSolverTimeout(Number(e.target.value))}
+                        onChange={(e) =>
+                          setSolverTimeout(Number(e.target.value))
+                        }
                         required
                       />
                     </div>
@@ -949,7 +800,9 @@ export function ConfigForm({
                     <div className="form-group">
                       <label htmlFor="closedLoopTimeout">
                         <span>Closed-Loop Timeout</span>
-                        <span className="form-group-hint">Seconds for the full process</span>
+                        <span className="form-group-hint">
+                          Seconds for the full process
+                        </span>
                       </label>
                       <input
                         id="closedLoopTimeout"
@@ -957,7 +810,9 @@ export function ConfigForm({
                         min={0.001}
                         step={1}
                         value={closedLoopTimeout}
-                        onChange={(e) => setClosedLoopTimeout(Number(e.target.value))}
+                        onChange={(e) =>
+                          setClosedLoopTimeout(Number(e.target.value))
+                        }
                         required
                       />
                     </div>
@@ -1000,7 +855,9 @@ export function ConfigForm({
                     <div className="form-group">
                       <label htmlFor="mapElevationScale">
                         <span>Elevation Scale</span>
-                        <span className="form-group-hint">Height multiplier</span>
+                        <span className="form-group-hint">
+                          Height multiplier
+                        </span>
                       </label>
                       <input
                         id="mapElevationScale"
@@ -1034,236 +891,47 @@ export function ConfigForm({
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="mapBiomeFreq">
-                        <span>Biome Frequency</span>
-                        <span className="form-group-hint">Spatial biome distribution</span>
+                      <label htmlFor="mapMoistureFreq">
+                        <span>Moisture Frequency</span>
+                        <span className="form-group-hint">
+                          Spatial moisture distribution
+                        </span>
                       </label>
                       <input
-                        id="mapBiomeFreq"
+                        id="mapMoistureFreq"
                         type="number"
                         min={0.001}
                         step={0.01}
-                        value={mapBiomeFreq}
-                        onChange={(e) => setMapBiomeFreq(Number(e.target.value))}
-                        required
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="mapObstacleFreq">
-                        <span>Obstacle Frequency</span>
-                        <span className="form-group-hint">
-                          Cluster distribution scale
-                        </span>
-                      </label>
-                      <input
-                        id="mapObstacleFreq"
-                        type="number"
-                        step={0.01}
-                        value={mapObstacleFreq}
-                        onChange={(e) => setMapObstacleFreq(Number(e.target.value))}
-                        required
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="mapObstacleThreshold">
-                        <span>Obstacle Threshold</span>
-                        <span className="form-group-hint">
-                          Threshold cutoff (0–1)
-                        </span>
-                      </label>
-                      <input
-                        id="mapObstacleThreshold"
-                        type="number"
-                        step={0.05}
-                        min={0}
-                        max={1}
-                        value={mapObstacleThreshold}
+                        value={mapMoistureFreq}
                         onChange={(e) =>
-                          setMapObstacleThreshold(Number(e.target.value))
+                          setMapMoistureFreq(Number(e.target.value))
                         }
                         required
                       />
                     </div>
-                  </div>
-                </div>
-
-                <div className="advanced-group">
-                  <h4 className="advanced-group-title">Terrain &amp; ISP</h4>
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label htmlFor="defaultTerrain">
-                        <span>Default Terrain</span>
-                        <span className="form-group-hint">New and fallback cells</span>
-                      </label>
-                      <select
-                        id="defaultTerrain"
-                        value={defaultTerrain}
-                        onChange={(e) => setDefaultTerrain(e.target.value)}
-                      >
-                        {terrainDraft.map((terrain, index) => (
-                          <option
-                            key={`${terrain.name}-${index}`}
-                            value={terrain.name.trim()}
-                            disabled={!terrain.name.trim()}
-                          >
-                            {terrain.name.trim() || "(name required)"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
 
                     <div className="form-group">
-                      <label htmlFor="baseTerrain">
-                        <span>Base Terrain</span>
-                        <span className="form-group-hint">Traversable ISP baseline</span>
-                      </label>
-                      <select
-                        id="baseTerrain"
-                        value={
-                          traversableTerrains.some(
-                            (terrain) => terrain.name.trim() === baseTerrain,
-                          )
-                            ? baseTerrain
-                            : ""
-                        }
-                        onChange={(e) => setBaseTerrain(e.target.value)}
-                      >
-                        <option value="">Select a traversable terrain</option>
-                        {traversableTerrains.map((terrain, index) => (
-                          <option key={`${terrain.name}-${index}`} value={terrain.name.trim()}>
-                            {terrain.name.trim()}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="targetTerrain">
-                        <span>Target Terrain</span>
-                        <span className="form-group-hint">Traversable, speed &gt; 0 m/s</span>
-                      </label>
-                      <select
-                        id="targetTerrain"
-                        value={
-                          traversableTerrains.some(
-                            (terrain) => terrain.name.trim() === targetTerrain,
-                          )
-                            ? targetTerrain
-                            : ""
-                        }
-                        onChange={(e) => setTargetTerrain(e.target.value)}
-                      >
-                        <option value="">Select a traversable terrain</option>
-                        {traversableTerrains.map((terrain, index) => (
-                          <option key={`${terrain.name}-${index}`} value={terrain.name.trim()}>
-                            {terrain.name.trim()}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="maxSlopeDeg">
-                        <span>Maximum Slope</span>
-                        <span className="form-group-hint">Degrees</span>
+                      <label htmlFor="mapRoughnessFreq">
+                        <span>Roughness Frequency</span>
+                        <span className="form-group-hint">
+                          Contextual obstacle distribution
+                        </span>
                       </label>
                       <input
-                        id="maxSlopeDeg"
+                        id="mapRoughnessFreq"
                         type="number"
-                        min={0}
-                        max={90}
-                        step={0.5}
-                        value={maxSlopeDeg}
-                        onChange={(e) => setMaxSlopeDeg(Number(e.target.value))}
+                        min={0.001}
+                        step={0.01}
+                        value={mapRoughnessFreq}
+                        onChange={(e) =>
+                          setMapRoughnessFreq(Number(e.target.value))
+                        }
                         required
                       />
                     </div>
                   </div>
-
-                  <div className="terrain-registry-list" aria-label="Terrain registry">
-                    {terrainDraft.map((terrain, index) => {
-                      const locked = [defaultTerrain, targetTerrain, baseTerrain].includes(
-                        terrain.name.trim(),
-                      );
-                      return (
-                        <div className="terrain-registry-row" key={`terrain-${index}`}>
-                          <div className="form-group terrain-name-group">
-                            <label htmlFor={`terrain-name-${index}`}>Name</label>
-                            <input
-                              id={`terrain-name-${index}`}
-                              type="text"
-                              maxLength={64}
-                              value={terrain.name}
-                              onChange={(e) => updateTerrainName(index, e.target.value)}
-                            />
-                          </div>
-                          <div className="terrain-registry-fields">
-                            <div className="form-group">
-                              <label htmlFor={`terrain-speed-${index}`}>Nominal speed (m/s)</label>
-                              <input
-                                id={`terrain-speed-${index}`}
-                                type="number"
-                                step="any"
-                                value={terrain.speed}
-                                onChange={(e) =>
-                                  setTerrainDraft((current) =>
-                                    current.map((entry, rowIndex) =>
-                                      rowIndex === index
-                                        ? { ...entry, speed: Number(e.target.value) }
-                                        : entry,
-                                    ),
-                                  )
-                                }
-                              />
-                            </div>
-                            <div className="form-group terrain-color-group">
-                              <label htmlFor={`terrain-color-${index}`}>Color</label>
-                              <input
-                                id={`terrain-color-${index}`}
-                                className="terrain-color-picker"
-                                type="color"
-                                value={/^#[0-9a-f]{6}$/i.test(terrain.color) ? terrain.color : "#808080"}
-                                onChange={(e) =>
-                                  setTerrainDraft((current) =>
-                                    current.map((entry, rowIndex) =>
-                                      rowIndex === index
-                                        ? { ...entry, color: e.target.value }
-                                        : entry,
-                                    ),
-                                  )
-                                }
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm terrain-remove-button"
-                              onClick={() => removeTerrain(index)}
-                              disabled={locked}
-                              title={locked ? "Change the selected terrain before removing it." : "Remove terrain"}
-                              aria-label={`Remove ${terrain.name || "unnamed terrain"}`}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm terrain-add-button"
-                    onClick={addTerrain}
-                  >
-                    + Add Terrain
-                  </button>
-                  {getTerrainDraftError() && (
-                    <span className="field-error-message" role="alert">
-                      {getTerrainDraftError()}
-                    </span>
-                  )}
                 </div>
+
               </div>
             </div>
           </div>
@@ -1278,9 +946,7 @@ export function ConfigForm({
                 onClick={handleDirectRun}
                 disabled={isGenerating}
               >
-                {isGenerating
-                  ? "Generating Map..."
-                  : "Generate Map"}
+                {isGenerating ? "Generating Map..." : "Generate Map"}
               </button>
             )}
 
@@ -1291,7 +957,9 @@ export function ConfigForm({
                 onClick={handleAddQueue}
                 disabled={isGenerating}
               >
-                {workflowMode === "create" ? "+ Add Configuration" : "+ Add to Queue"}
+                {workflowMode === "create"
+                  ? "+ Add Configuration"
+                  : "+ Add to Queue"}
               </button>
             )}
 
@@ -1403,7 +1071,6 @@ export function ConfigForm({
           </div>
         </div>
       )}
-
     </div>
   );
 }

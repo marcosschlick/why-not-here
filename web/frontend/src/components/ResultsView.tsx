@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type {
   LastResult,
@@ -28,6 +28,18 @@ interface ResultsViewProps {
   mapImageUrl?: string;
 }
 
+function getArtifactFilename(artifactPath: string): string {
+  return artifactPath.split("?")[0].split("/").pop() || artifactPath;
+}
+
+function getArtifactTitle(artifactPath: string): string {
+  const filename = getArtifactFilename(artifactPath);
+  if (filename === "map.png") return "Base map";
+
+  const title = filename.replace(/\.png$/, "").replaceAll("_", " ");
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
 function ArtifactCard({
   artifactPath,
   cacheKey,
@@ -40,17 +52,7 @@ function ArtifactCard({
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const cleanPath = artifactPath.split("?")[0];
-  const filename = cleanPath.split("/").pop() || cleanPath;
-  const titleMap: Record<string, string> = {
-    "1_optimal_path.png": "1. Initial Optimal Path (A*)",
-    "2_user_path.png": "2. Alternative Candidate Path",
-    "3_both_paths.png": "3. Path Comparison",
-    "4_isp_modifications.png": "4. Semantic Modifications",
-    "5_isp_with_user_path.png": "5. Route with ISP Modifications",
-    "map.png": "Procedural Base Map",
-  };
-  const displayTitle = titleMap[filename] || filename;
+  const displayTitle = getArtifactTitle(artifactPath);
   const fullUrl = artifactPath.includes("?")
     ? `${artifactPath}&t=${cacheKey}`
     : `${artifactPath}?t=${cacheKey}`;
@@ -145,7 +147,22 @@ export function ResultsView({
   const currentMapImageUrl = isBatch
     ? activeBatchItem?.mapData?.map_image_url
     : mapImageUrl;
-  const currentMapData = isBatch ? activeBatchItem?.mapData : mapData;
+  const originalMapData = isBatch ? activeBatchItem?.mapData : mapData;
+  const modifiedGrid = currentResult?.modified_grid;
+  const currentMapData = useMemo(
+    () =>
+      originalMapData && modifiedGrid
+        ? {
+            ...originalMapData,
+            ...modifiedGrid,
+            max_slope_deg:
+              modifiedGrid.max_slope_deg ?? originalMapData.max_slope_deg,
+            speeds: modifiedGrid.speeds ?? originalMapData.speeds,
+            terrain_colors: originalMapData.terrain_colors,
+          }
+        : originalMapData,
+    [originalMapData, modifiedGrid],
+  );
   const currentUserPath = isBatch
     ? (activeBatchItem?.userPath ??
       activeBatchItem?.mapData?.auto_path ??
@@ -158,14 +175,14 @@ export function ResultsView({
     mapHeight,
     mapWidth,
   );
-  const [previousMapData, setPreviousMapData] = useState(currentMapData);
-  if (previousMapData !== currentMapData) {
-    setPreviousMapData(currentMapData);
+  const [previousMapData, setPreviousMapData] = useState(originalMapData);
+  if (previousMapData !== originalMapData) {
+    setPreviousMapData(originalMapData);
     setHoveredCell(null);
     setZoomLevel(1.0);
   }
   const tacticalArtifacts = currentArtifacts.filter(
-    (artifactPath) => artifactPath.split("?")[0].split("/").pop() !== "map.png",
+    (artifactPath) => getArtifactFilename(artifactPath) !== "map.png",
   );
   const currentStatus = isBatch
     ? activeBatchItem?.status
@@ -251,13 +268,15 @@ export function ResultsView({
   const currentModificationCount = currentModifications
     ? currentModifications.terrain +
       currentModifications.obstacle +
-      currentModifications.slope
+      currentModifications.slope +
+      (currentModifications.water ?? 0)
     : 0;
   const hasCandidateModifications =
     currentModificationCount > 0 ||
     (currentModifications?.terrain_nodes?.length ?? 0) > 0 ||
     (currentModifications?.obstacle_nodes?.length ?? 0) > 0 ||
-    (currentModifications?.slope_edges?.length ?? 0) > 0;
+    (currentModifications?.slope_edges?.length ?? 0) > 0 ||
+    (currentModifications?.water_nodes?.length ?? 0) > 0;
   const isInfeasible = currentResult?.solver_status === "INFEASIBLE";
   const isCandidateSolution =
     isFailed && !isOptimal && hasCandidateModifications;
@@ -296,80 +315,116 @@ export function ResultsView({
 
   const isCellTerrainModified = Boolean(
     hoveredCell &&
-      visibleModifications?.terrain_nodes?.some(
-        ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
-      ),
+    visibleModifications?.terrain_nodes?.some(
+      ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
+    ),
   );
   const isCellObstacleModified = Boolean(
     hoveredCell &&
-      visibleModifications?.obstacle_nodes?.some(
-        ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
-      ),
+    visibleModifications?.obstacle_nodes?.some(
+      ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
+    ),
+  );
+  const isCellWaterModified = Boolean(
+    hoveredCell &&
+    visibleModifications?.water_nodes?.some(
+      ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
+    ),
   );
   const isStart = Boolean(
     hoveredCell &&
-      currentMapData &&
-      currentMapData.start[0] === hoveredCell[0] &&
-      currentMapData.start[1] === hoveredCell[1],
+    currentMapData &&
+    currentMapData.start[0] === hoveredCell[0] &&
+    currentMapData.start[1] === hoveredCell[1],
   );
   const isGoal = Boolean(
     hoveredCell &&
-      currentMapData &&
-      currentMapData.goal[0] === hoveredCell[0] &&
-      currentMapData.goal[1] === hoveredCell[1],
+    currentMapData &&
+    currentMapData.goal[0] === hoveredCell[0] &&
+    currentMapData.goal[1] === hoveredCell[1],
   );
+  const hoveredTerrain =
+    hoveredCell && currentMapData
+      ? (currentMapData.terrain[hoveredCell[0]]?.[hoveredCell[1]] ?? "-")
+      : "-";
+  const hoveredTerrainSpeed = currentMapData?.speeds?.[hoveredTerrain];
+  const hoveredTerrainBlocked =
+    !isCellWaterModified &&
+    (hoveredTerrain === "WATER_RIVER" ||
+      hoveredTerrainSpeed === undefined ||
+      hoveredTerrainSpeed <= 0);
+  const hoveredObstacleBlocked =
+    (currentMapData?.obstacle[hoveredCell?.[0] ?? -1]?.[
+      hoveredCell?.[1] ?? -1
+    ] ?? 0) !== 0 && !isCellObstacleModified;
 
-  const hoveredInfo = hoveredCell && currentMapData ? (
-    <span>
-      Cell [{hoveredCell[0]}, {hoveredCell[1]}] &bull; Terrain{" "}
-      <strong>
-        {currentMapData.terrain[hoveredCell[0]]?.[hoveredCell[1]] ?? "-"}
-      </strong>
-      {isCellTerrainModified && (
-        <strong className="mod-badge terrain" style={{ marginLeft: "0.35rem" }}>
-          ISP Modified
-        </strong>
-      )}{" "}
-      &bull; Elevation{" "}
-      <strong>
-        {currentMapData.elevation[hoveredCell[0]]?.[hoveredCell[1]]?.toFixed(1) ??
-          "-"}
-        m
-      </strong>{" "}
-      &bull; Status{" "}
-      {currentMapData.obstacle[hoveredCell[0]]?.[hoveredCell[1]] === 1 ? (
-        <strong className="cell-status cell-status-obstacle">Obstacle</strong>
-      ) : (
-        <strong className="cell-status cell-status-free">Free</strong>
-      )}
-      {isCellObstacleModified && (
-        <strong
-          className="mod-badge obstacle"
-          style={{ marginLeft: "0.35rem" }}
-        >
-          Cleared
-        </strong>
-      )}
-      {isStart && (
-        <strong
-          className="node-marker start-badge"
-          style={{ marginLeft: "0.35rem" }}
-        >
-          Start
-        </strong>
-      )}
-      {isGoal && (
-        <strong
-          className="node-marker goal-badge"
-          style={{ marginLeft: "0.35rem" }}
-        >
-          Goal
-        </strong>
-      )}
-    </span>
-  ) : (
-    <span>Hover over grid to inspect cell attributes and modifications</span>
-  );
+  const hoveredInfo =
+    hoveredCell && currentMapData ? (
+      <span>
+        Cell [{hoveredCell[0]}, {hoveredCell[1]}] &bull; Terrain{" "}
+        <strong>{hoveredTerrain}</strong>
+        {isCellTerrainModified && (
+          <strong
+            className="mod-badge terrain"
+            style={{ marginLeft: "0.35rem" }}
+          >
+            ISP Modified
+          </strong>
+        )}{" "}
+        &bull; Elevation{" "}
+        <strong>
+          {currentMapData.elevation[hoveredCell[0]]?.[hoveredCell[1]]?.toFixed(
+            1,
+          ) ?? "-"}
+          m
+        </strong>{" "}
+        &bull; Status{" "}
+        {hoveredObstacleBlocked ? (
+          <strong className="cell-status cell-status-obstacle">Obstacle</strong>
+        ) : hoveredTerrainBlocked ? (
+          <strong className="cell-status cell-status-impassable">
+            Impassable terrain
+          </strong>
+        ) : isCellWaterModified ? (
+          <strong className="cell-status cell-status-free">
+            Traversable water at base-terrain speed
+          </strong>
+        ) : (
+          <strong className="cell-status cell-status-free">Free</strong>
+        )}
+        {isCellObstacleModified && (
+          <strong
+            className="mod-badge obstacle"
+            style={{ marginLeft: "0.35rem" }}
+          >
+            Cleared
+          </strong>
+        )}
+        {isCellWaterModified && (
+          <strong className="mod-badge water" style={{ marginLeft: "0.35rem" }}>
+            Water override
+          </strong>
+        )}
+        {isStart && (
+          <strong
+            className="node-marker start-badge"
+            style={{ marginLeft: "0.35rem" }}
+          >
+            Start
+          </strong>
+        )}
+        {isGoal && (
+          <strong
+            className="node-marker goal-badge"
+            style={{ marginLeft: "0.35rem" }}
+          >
+            Goal
+          </strong>
+        )}
+      </span>
+    ) : (
+      <span>Hover over grid to inspect cell attributes and modifications</span>
+    );
 
   return (
     <section className="results-container">
@@ -480,7 +535,9 @@ export function ResultsView({
                 >
                   &minus;
                 </button>
-                <span className="zoom-value">{Math.round(zoomLevel * 100)}%</span>
+                <span className="zoom-value">
+                  {Math.round(zoomLevel * 100)}%
+                </span>
                 <button
                   type="button"
                   className="btn-zoom"
@@ -527,7 +584,7 @@ export function ResultsView({
             ref={mapCanvasContainerRef}
           >
             <TacticalMapCanvas
-              mapData={currentMapData}
+              mapData={originalMapData ?? currentMapData}
               userPath={currentUserPath}
               optimalPath={currentMapData.optimal_path}
               modifications={visibleModifications}
@@ -541,10 +598,12 @@ export function ResultsView({
           <div className="canvas-footer-info">
             <div className="cell-inspector">{hoveredInfo}</div>
             <TacticalMapLegend
+              mapData={currentMapData}
               modifications={visibleModifications}
+              showAlternativePath={currentUserPath.length > 0}
               showOptimalPath={Boolean(
                 currentMapData.optimal_path &&
-                  currentMapData.optimal_path.length > 0,
+                currentMapData.optimal_path.length > 0,
               )}
             />
           </div>
@@ -713,7 +772,7 @@ export function ResultsView({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
-              <span>{selectedImage.split("?")[0].split("/").pop()}</span>
+              <span>{getArtifactTitle(selectedImage)}</span>
               <button
                 type="button"
                 className="btn-modal-close"
@@ -729,7 +788,7 @@ export function ResultsView({
                   ? `${selectedImage}&t=${cacheKey}`
                   : `${selectedImage}?t=${cacheKey}`
               }
-              alt="Enlarged artifact"
+              alt={getArtifactTitle(selectedImage)}
               className="modal-image"
             />
           </div>

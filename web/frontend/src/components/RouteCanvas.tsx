@@ -362,6 +362,15 @@ export function RouteCanvas({
     onPathChange(previousPath);
   }
 
+  const hoveredTerrain = hoveredCell
+    ? terrain[hoveredCell[0]]?.[hoveredCell[1]] || "-"
+    : "-";
+  const hoveredTerrainSpeed = mapData.speeds?.[hoveredTerrain];
+  const hoveredTerrainBlocked =
+    hoveredTerrain === "WATER_RIVER" ||
+    hoveredTerrainSpeed === undefined ||
+    hoveredTerrainSpeed <= 0;
+
   const hoveredInfo = hoveredCell ? (
     <span>
       Cell{" "}
@@ -373,14 +382,16 @@ export function RouteCanvas({
           ({connectivity === 4 ? "Orthogonal Lock" : "45° / Orthogonal Lock"})
         </strong>
       )}{" "}
-      &bull; Terrain{" "}
-      <strong>{terrain[hoveredCell[0]]?.[hoveredCell[1]] || "-"}</strong> &bull;
-      Elevation{" "}
+      &bull; Terrain <strong>{hoveredTerrain}</strong> &bull; Elevation{" "}
       <strong>
         {elevation[hoveredCell[0]]?.[hoveredCell[1]]?.toFixed(1) ?? "-"}m
       </strong>{" "}
       &bull; Status{" "}
-      {obstacle[hoveredCell[0]]?.[hoveredCell[1]] === 1 ? (
+      {hoveredTerrainBlocked ? (
+        <strong className="cell-status cell-status-impassable">
+          Impassable terrain
+        </strong>
+      ) : (obstacle[hoveredCell[0]]?.[hoveredCell[1]] ?? 0) !== 0 ? (
         <strong className="cell-status cell-status-obstacle">Obstacle</strong>
       ) : (
         <strong className="cell-status cell-status-free">Free</strong>
@@ -405,7 +416,11 @@ export function RouteCanvas({
         </div>
 
         <div className="canvas-actions-bar">
-          <div className="canvas-control-group" role="group" aria-label="Route editing">
+          <div
+            className="canvas-control-group"
+            role="group"
+            aria-label="Route editing"
+          >
             <button
               type="button"
               className="btn btn-secondary"
@@ -440,7 +455,11 @@ export function RouteCanvas({
             </button>
           </div>
 
-          <div className="canvas-control-group canvas-view-group" role="group" aria-label="Map display">
+          <div
+            className="canvas-control-group canvas-view-group"
+            role="group"
+            aria-label="Map display"
+          >
             <button
               type="button"
               className={`btn ${showOptimalRoute ? "btn-secondary active" : "btn-ghost"}`}
@@ -590,6 +609,8 @@ export function RouteCanvas({
       <div className="canvas-footer-info">
         <div className="cell-inspector">{hoveredInfo}</div>
         <TacticalMapLegend
+          mapData={mapData}
+          showAlternativePath={userPath.length > 0}
           showOptimalPath={
             showOptimalRoute &&
             Boolean(mapData.optimal_path && mapData.optimal_path.length > 0)

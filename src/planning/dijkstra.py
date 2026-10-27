@@ -13,7 +13,7 @@ def dijkstra(
         return None, float("inf"), 0
     if not (0 <= goal[0] < grid.h and 0 <= goal[1] < grid.w):
         return None, float("inf"), 0
-    if grid.get_cell(start).is_blocked or grid.get_cell(goal).is_blocked:
+    if not grid.is_traversable(start, start) or not grid.is_traversable(goal, goal):
         return None, float("inf"), 0
 
     counter = 0

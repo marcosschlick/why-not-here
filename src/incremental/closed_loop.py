@@ -11,7 +11,7 @@ from src.config import (
     SOLVER_TIMEOUT_SEC,
 )
 from src.grid.grid import Grid
-from src.isp.semantics import SemanticModifications
+from src.isp.semantics import ISPSemantics, SemanticModifications
 from src.planning.astar import astar
 from src.reduction import create_reduced_graph, prepare_subgraph
 
@@ -134,6 +134,8 @@ class ClosedLoopISPSolver:
             full_grid, alternative_path, cost_p_star, self.tolerance
         )
         if not is_geom_ok:
+            if ISPSemantics(full_grid, alternative_path).total_z_vars == 0:
+                geom_status = "INFEASIBLE"
             return make_res(
                 False,
                 None,
@@ -279,7 +281,9 @@ class ClosedLoopISPSolver:
                             step_solver.last_solver_status or "OPTIMAL",
                         )
                     else:
-                        explanation = generate_explanation_text(delta, full_grid)
+                        explanation = generate_explanation_text(
+                            delta, full_grid, solver_status="SUBGRAPH_OPTIMAL_ONLY"
+                        )
                         return make_res(
                             False,
                             delta,
