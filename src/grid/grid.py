@@ -38,6 +38,8 @@ class Grid:
 
         self.leveled_slopes: set[tuple[tuple[int, int], tuple[int, int]]] = set()
         self.water_overrides: set[tuple[int, int]] = set()
+        self.robot_speed_edges: set[tuple[tuple[int, int], tuple[int, int]]] = set()
+        self.robot_speed_theoretical = config.ROBOT_SPEED_THEORETICAL
         self.base_seed: int | None = None
         self.effective_seed: int | None = None
         self.generation_attempt: int | None = None
@@ -79,6 +81,8 @@ class Grid:
         v_v = self._get_effective_speed(v)
         if v_u <= 0.0 or v_v <= 0.0:
             return 0.0
+        if (u, v) in self.robot_speed_edges:
+            return self.robot_speed_theoretical
         return 2.0 / ((1.0 / v_u) + (1.0 / v_v))
 
     def _get_effective_speed(self, point: tuple[int, int]) -> float:
@@ -100,6 +104,8 @@ class Grid:
         if vel <= 0.0:
             return float("inf")
         base_cost = self.get_distance(u, v) / vel
+        if (u, v) in self.robot_speed_edges:
+            return base_cost
         slope_factor = 1.0 + self.get_slope_penalty(u, v)
         return base_cost * slope_factor
 
@@ -168,6 +174,10 @@ class Grid:
             "obstacle": self.obstacle,
             "leveled_slopes": [list(edge) for edge in sorted(self.leveled_slopes)],
             "water_overrides": [list(point) for point in sorted(self.water_overrides)],
+            "robot_speed_edges": [
+                list(edge) for edge in sorted(self.robot_speed_edges)
+            ],
+            "robot_speed_theoretical": self.robot_speed_theoretical,
             "base_seed": self.base_seed,
             "effective_seed": self.effective_seed,
             "generation_attempt": self.generation_attempt,
@@ -197,6 +207,13 @@ class Grid:
         grid.water_overrides = {
             (int(point[0]), int(point[1])) for point in data.get("water_overrides", [])
         }
+        grid.robot_speed_edges = {
+            (tuple(edge[0]), tuple(edge[1]))
+            for edge in data.get("robot_speed_edges", [])
+        }
+        grid.robot_speed_theoretical = data.get(
+            "robot_speed_theoretical", config.ROBOT_SPEED_THEORETICAL
+        )
         grid.base_seed = data["base_seed"]
         grid.effective_seed = data["effective_seed"]
         grid.generation_attempt = data["generation_attempt"]

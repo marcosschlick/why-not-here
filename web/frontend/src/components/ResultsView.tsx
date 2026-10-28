@@ -269,14 +269,16 @@ export function ResultsView({
     ? currentModifications.terrain +
       currentModifications.obstacle +
       currentModifications.slope +
-      (currentModifications.water ?? 0)
+      (currentModifications.water ?? 0) +
+      (currentModifications.robot_speed ?? 0)
     : 0;
   const hasCandidateModifications =
     currentModificationCount > 0 ||
     (currentModifications?.terrain_nodes?.length ?? 0) > 0 ||
     (currentModifications?.obstacle_nodes?.length ?? 0) > 0 ||
     (currentModifications?.slope_edges?.length ?? 0) > 0 ||
-    (currentModifications?.water_nodes?.length ?? 0) > 0;
+    (currentModifications?.water_nodes?.length ?? 0) > 0 ||
+    (currentModifications?.robot_speed_edges?.length ?? 0) > 0;
   const isInfeasible = currentResult?.solver_status === "INFEASIBLE";
   const isCandidateSolution =
     isFailed && !isOptimal && hasCandidateModifications;
@@ -703,6 +705,9 @@ export function ResultsView({
               </span>
               <span className="mod-badge slope">
                 Slopes: {currentResult.modifications?.slope ?? 0} leveled
+              </span>
+              <span className="mod-badge">
+                Robot speed: {currentResult.modifications?.robot_speed ?? 0} activated
               </span>
             </div>
           </div>

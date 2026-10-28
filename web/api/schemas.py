@@ -48,10 +48,15 @@ class SemanticModificationsData(BaseModel):
     obstacle: int
     slope: int
     water: int = 0
+    robot_speed: int = 0
     terrain_nodes: list[tuple[int, int]]
     obstacle_nodes: list[tuple[int, int]]
     slope_edges: list[tuple[tuple[int, int], tuple[int, int]]]
     water_nodes: list[tuple[int, int]] = Field(default_factory=list)
+    terrain_assignments: list[tuple[tuple[int, int], str]] = Field(default_factory=list)
+    robot_speed_edges: list[tuple[tuple[int, int], tuple[int, int]]] = Field(
+        default_factory=list
+    )
 
 
 class ExportConfigRequest(BaseModel):

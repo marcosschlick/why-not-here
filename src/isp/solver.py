@@ -3,11 +3,9 @@ import numpy as np
 from scipy.sparse import lil_matrix
 
 from ..grid import Grid
-from ..planning import astar
 from ..reduction import ReducedGraph, prepare_subgraph
 from .base import BaseISPSolver
-from .precheck import check_geometric_feasibility, validate_alternative_path
-from .semantics import ISPSemantics
+from .precheck import validate_alternative_path
 from .types import SemanticModifications
 
 
@@ -33,16 +31,6 @@ class ISPSolver(BaseISPSolver):
         if start == goal and len(alternative_path) == 1:
             self.last_solver_status = "OPTIMAL"
             return True, SemanticModifications([], [], []), 0.0
-
-        _p_star, cost_p_star, _ = astar(grid, start, goal)
-        is_geometrically_feasible, status, _ = check_geometric_feasibility(
-            grid, alternative_path, cost_p_star, self.tolerance
-        )
-        if not is_geometrically_feasible:
-            if ISPSemantics(grid, alternative_path).total_z_vars == 0:
-                status = "INFEASIBLE"
-            self.last_solver_status = status
-            return False, None, float("inf")
 
         active_nodes, active_edges, costs = prepare_subgraph(
             grid, alternative_path, reduced_graph, custom_edge_costs

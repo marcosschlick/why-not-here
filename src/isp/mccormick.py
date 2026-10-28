@@ -25,3 +25,16 @@ def linearize_mccormick_terms(
 
     cross_term = M_cross.tocsr() @ y_cross
     return cross_term, constraints
+
+
+def linearize_binary_product(
+    variable: cp.Expression,
+    expression: cp.Expression,
+    upper_bound: float,
+) -> tuple[cp.Variable, list[cp.Constraint]]:
+    product = cp.Variable(nonneg=True)
+    return product, [
+        product <= upper_bound * variable,
+        product <= expression,
+        product >= expression - upper_bound * (1.0 - variable),
+    ]

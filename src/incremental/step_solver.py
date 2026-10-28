@@ -47,8 +47,18 @@ class IncrementalISPSolver(BaseISPSolver):
             self.last_solver_status = "OPTIMAL"
             return True, SemanticModifications([], [], []), 0.0
 
+        if reduced_graph is not None:
+            competing_paths = [
+                reduced_graph.expand_path(path) for path in competing_paths
+            ]
+        terrain_decision_nodes = set(alternative_path)
+        terrain_decision_nodes.update(node for path in competing_paths for node in path)
         active_nodes, active_edges, costs = prepare_subgraph(
-            grid, alternative_path, reduced_graph, None
+            grid,
+            alternative_path,
+            reduced_graph,
+            None,
+            terrain_decision_nodes=terrain_decision_nodes,
         )
 
         formulation = self._build_formulation(
@@ -57,6 +67,7 @@ class IncrementalISPSolver(BaseISPSolver):
             active_nodes=active_nodes,
             active_edges=active_edges,
             custom_edge_costs=costs,
+            terrain_decision_nodes=terrain_decision_nodes,
         )
         if formulation is None:
             self.last_solver_status = "INVALID_ALTERNATIVE_PATH"

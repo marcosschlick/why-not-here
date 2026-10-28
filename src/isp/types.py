@@ -10,6 +10,10 @@ class SemanticModifications:
     obstacle_nodes: list[tuple[int, int]]
     slope_edges: list[tuple[tuple[int, int], tuple[int, int]]]
     water_nodes: list[tuple[int, int]] = field(default_factory=list)
+    terrain_assignments: list[tuple[tuple[int, int], str]] = field(default_factory=list)
+    robot_speed_edges: list[tuple[tuple[int, int], tuple[int, int]]] = field(
+        default_factory=list
+    )
 
 
 @dataclass
@@ -24,3 +28,4 @@ class MIPFormulation:
     z_obstacle: cp.Variable | None
     z_slope: cp.Variable | None
     z_water: cp.Variable | None
+    z_robot_speed: cp.Variable | None

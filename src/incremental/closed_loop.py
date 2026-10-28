@@ -11,7 +11,7 @@ from src.config import (
     SOLVER_TIMEOUT_SEC,
 )
 from src.grid.grid import Grid
-from src.isp.semantics import ISPSemantics, SemanticModifications
+from src.isp.semantics import SemanticModifications
 from src.planning.astar import astar
 from src.reduction import create_reduced_graph, prepare_subgraph
 
@@ -19,7 +19,7 @@ from .explanation import (
     generate_cost_baseline_justification,
     generate_explanation_text,
 )
-from .precheck import check_geometric_feasibility, validate_alternative_path
+from .precheck import validate_alternative_path
 from .result import ClosedLoopResult
 from .step_solver import IncrementalISPSolver
 from .validator import (
@@ -130,39 +130,11 @@ class ClosedLoopISPSolver:
                 "OPTIMAL",
             )
 
-        is_geom_ok, geom_status, geom_msg = check_geometric_feasibility(
-            full_grid, alternative_path, cost_p_star, self.tolerance
-        )
-        if not is_geom_ok:
-            if ISPSemantics(full_grid, alternative_path).total_z_vars == 0:
-                geom_status = "INFEASIBLE"
-            return make_res(
-                False,
-                None,
-                geom_msg or "",
-                0,
-                1,
-                cost_p_prime_init,
-                geom_status or "GEOMETRICALLY_INFEASIBLE",
-            )
-
         Q: list[list[tuple[int, int]]] = [p_star] if p_star is not None else []
 
         step_solver = IncrementalISPSolver(
             solver_name=self.solver_name,
             timeout=self.timeout,
-        )
-
-        reduced_graph = create_reduced_graph(
-            full_grid,
-            p_star if p_star else alternative_path,
-            alternative_path,
-            method=method,
-            margin=self.bbox_margin,
-        )
-
-        active_nodes, active_edges, custom_costs = prepare_subgraph(
-            full_grid, alternative_path, reduced_graph, None
         )
 
         delta = None
@@ -182,6 +154,24 @@ class ClosedLoopISPSolver:
                 )
 
             step_solver.timeout = max(0.1, min(self.timeout, self.global_timeout - elapsed))
+
+            terrain_decision_nodes = set(alternative_path)
+            terrain_decision_nodes.update(node for path in Q for node in path)
+            reduced_graph = create_reduced_graph(
+                full_grid,
+                p_star if p_star else alternative_path,
+                alternative_path,
+                method=method,
+                margin=self.bbox_margin,
+                protected_nodes=terrain_decision_nodes,
+            )
+            active_nodes, active_edges, custom_costs = prepare_subgraph(
+                full_grid,
+                alternative_path,
+                reduced_graph,
+                None,
+                terrain_decision_nodes=terrain_decision_nodes,
+            )
 
             milp_ok, delta, _ = step_solver.solve_step(
                 full_grid,
@@ -315,6 +305,9 @@ class ClosedLoopISPSolver:
                     cost_p_prime,
                     "DISCONNECTED_GRAPH",
                 )
+
+            if reduced_graph is not None and scope == "SUBGRAPH":
+                q_viol = reduced_graph.expand_path(q_viol)
 
             if q_viol in Q:
                 return make_res(

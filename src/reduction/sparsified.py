@@ -8,10 +8,11 @@ def extract_sparsified(
     p_star: list[tuple[int, int]],
     p_prime: list[tuple[int, int]],
     margin: int = 2,
+    protected_nodes: set[tuple[int, int]] | None = None,
 ) -> ReducedGraph:
     bbox_graph = extract_bbox(grid, p_star, p_prime, margin=margin)
-    essential_nodes = set(p_star) | set(p_prime)
-    candidate_path_nodes = set(p_prime)
+    candidate_path_nodes = set(p_prime) | (protected_nodes or set())
+    essential_nodes = set(p_star) | candidate_path_nodes
     removable_nodes = set()
 
     for u in bbox_graph.nodes:
@@ -38,9 +39,8 @@ def extract_sparsified(
 
     nodes = bbox_graph.nodes - removable_nodes
     edges = extract_induced_edges(grid, nodes)
-    custom_edge_costs: dict[
-        tuple[tuple[int, int], tuple[int, int]], float
-    ] = {}
+    custom_edge_costs: dict[tuple[tuple[int, int], tuple[int, int]], float] = {}
+    custom_edge_paths = {}
 
     for middle in removable_nodes:
         neighbors = grid.get_neighbors(middle)
@@ -63,10 +63,9 @@ def extract_sparsified(
                     continue
 
                 edges.add(shortcut)
-                custom_edge_costs[shortcut] = min(
-                    shortcut_cost,
-                    custom_edge_costs.get(shortcut, float("inf")),
-                )
+                if shortcut_cost < custom_edge_costs.get(shortcut, float("inf")):
+                    custom_edge_costs[shortcut] = shortcut_cost
+                    custom_edge_paths[shortcut] = [u, middle, v]
 
     return ReducedGraph(
         underlying_grid=grid,
@@ -74,4 +73,5 @@ def extract_sparsified(
         edges=edges,
         method_name="SPARSIFIED",
         custom_edge_costs=custom_edge_costs,
+        custom_edge_paths=custom_edge_paths,
     )

@@ -66,10 +66,13 @@ export interface SemanticModificationsData {
   obstacle: number;
   slope: number;
   water?: number;
+  robot_speed?: number;
   terrain_nodes?: [number, number][];
   obstacle_nodes?: [number, number][];
   slope_edges?: [[number, number], [number, number]][];
   water_nodes?: [number, number][];
+  terrain_assignments?: [[number, number], string][];
+  robot_speed_edges?: [[number, number], [number, number]][];
 }
 
 export interface LastResult {

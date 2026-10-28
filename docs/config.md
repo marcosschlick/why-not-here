@@ -77,15 +77,19 @@ Automatic endpoints are selected in the same traversable component, using the la
 
 ## 5. Inverse Shortest Path Formulation (`src/config/config_isp.py`)
 
-Defines the semantic target used by terrain interventions in the MILP formulation.
+Defines the additional robot speed capability used by the MILP formulation.
 
 | Parameter        | Type    | Default Value      | Description                                                                      |
 | :--------------- | :------ | :----------------- | :------------------------------------------------------------------------------- |
-| `TARGET_TERRAIN` | `str`   | `"COMPACTED_SOIL"` | Semantic target terrain used for soil paving/upgrade modifications.              |
+| `TARGET_TERRAIN` | `str`   | `"COMPACTED_SOIL"` | Legacy target retained for compatibility; it does not restrict ISP terrain assignments. |
+| `ROBOT_SPEED_THEORETICAL` | `float` | `5.0` | Theoretical speed in m/s; must be finite and greater than the grid's maximum nominal speed. |
+| `ROBOT_SPEED_ELIGIBILITY_RATIO` | `float` | `0.75` | Minimum original effective edge speed divided by the maximum nominal speed for additional speed capability. |
 
-The MILP objective assigns unit cost to each binary terrain, obstacle, and slope intervention. Its prohibitive transition penalty is derived from the active graph and is not a user configuration parameter.
+The MILP objective counts terrain changes, obstacle removals, slope leveling, water overrides, and additional robot speed activations with unit cost. Terrain assignments use one-hot variables over all finite positive-speed terrestrial classes outside `IMPASSABLE_TERRAINS`; preserving the original class costs zero and changing it costs one. Cells with physical obstacles or impassable terrain retain their separate interventions. Incremental terrain decisions cover the desired path and all accumulated competing paths. Its prohibitive transition penalty accounts for all allowed classes and is derived from the active graph.
 
-Terrain defaults are fixed by the configuration modules and cannot be changed through the Web form, configuration API, or experiment JSON. Terrain names must be unique, colors use `#RRGGBB`, and speeds at or below `0.0` are impassable. `DEFAULT_TERRAIN` must exist in the registry. `BASE_TERRAIN` and `TARGET_TERRAIN` must reference terrains with positive speeds. `IMPASSABLE_TERRAINS` and `V_MAX` are derived from the fixed registry. The solver reads the target speed from the grid's speed registry.
+Additional speed decisions apply only to directed edges of the desired path whose original effective speed, including slope penalties, is at least `ROBOT_SPEED_ELIGIBILITY_RATIO` times the maximum nominal speed. An active decision replaces travel time with distance divided by `ROBOT_SPEED_THEORETICAL`; it does not remove obstacles, water restrictions, or prohibitive slopes. An inactive decision preserves the normal terrain-and-slope cost. Both speed parameters are configured in code only, without Web controls or experiment JSON fields. The eligibility ratio must be finite and within `[0.0, 1.0]`.
+
+Terrain defaults are fixed by the configuration modules and cannot be changed through the Web form, configuration API, or experiment JSON. Terrain names must be unique, colors use `#RRGGBB`, and speeds at or below `0.0` are impassable. `DEFAULT_TERRAIN` must exist in the registry. `BASE_TERRAIN` and legacy `TARGET_TERRAIN` must reference terrains with positive speeds. `IMPASSABLE_TERRAINS` and `V_MAX` are derived from the fixed registry. The solver reads permitted class speeds from the grid's speed registry.
 
 Procedural terrain classification uses normalized elevation and moisture fields. Every terrain produced by the classifier must exist in `TERRAINS`; generation reports a clear error when a required terrain is missing. `DEFAULT_TERRAIN` remains the terrain for uninitialized cells. The Web application uses the built-in terrain registry and palette.
 

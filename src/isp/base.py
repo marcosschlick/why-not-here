@@ -39,6 +39,7 @@ class BaseISPSolver:
         active_edges: set[tuple[tuple[int, int], tuple[int, int]]] | None = None,
         custom_edge_costs: dict[tuple[tuple[int, int], tuple[int, int]], float]
         | None = None,
+        terrain_decision_nodes: set[tuple[int, int]] | None = None,
     ) -> MIPFormulation | None:
         return build_base_formulation(
             grid=grid,
@@ -46,6 +47,7 @@ class BaseISPSolver:
             active_nodes=active_nodes,
             active_edges=active_edges,
             custom_edge_costs=custom_edge_costs,
+            terrain_decision_nodes=terrain_decision_nodes,
         )
 
     def _solve_milp(self, problem: cp.Problem) -> tuple[bool, float]:
@@ -114,6 +116,15 @@ class BaseISPSolver:
             water_start = (
                 isp.num_terrain_vars + isp.num_obstacle_vars + isp.num_slope_vars
             )
-            z_val[water_start:] = np.clip(formulation.z_water.value, 0.0, 1.0)
+            z_val[water_start : water_start + isp.num_water_vars] = np.clip(
+                formulation.z_water.value, 0.0, 1.0
+            )
+
+        if (
+            formulation.z_robot_speed is not None
+            and formulation.z_robot_speed.value is not None
+        ):
+            speed_start = isp.total_z_vars - isp.num_robot_speed_vars
+            z_val[speed_start:] = np.clip(formulation.z_robot_speed.value, 0.0, 1.0)
 
         return isp.get_modifications(z_val)

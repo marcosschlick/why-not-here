@@ -36,47 +36,42 @@ def generate_explanation_text(
     has_obstacle = bool(obstacle_nodes)
     has_slope = bool(modifications.slope_edges)
     has_water = bool(modifications.water_nodes)
+    has_robot_speed = bool(modifications.robot_speed_edges)
 
-    if not has_terrain and not has_obstacle and not has_slope and not has_water:
+    if not any((has_terrain, has_obstacle, has_slope, has_water, has_robot_speed)):
         if subgraph_only:
             return (
                 subgraph_message
-                + " No environmental changes were required within the subgraph."
+                + " No interventions were required within the subgraph."
             )
-        return "The alternative route p' already has the same estimated traversal time as the optimal route p*, so no environmental changes are needed."
+        return "The alternative route p' already has the same estimated traversal time as the optimal route p*, so no interventions are needed."
 
     lines = [
         subgraph_message + " Candidate interventions:"
         if subgraph_only
         else (
             "This contrastive explanation describes why the planner selected the optimal route p* "
-            "over the alternative route p': conditions along p' increase the robot's traversal time. "
-            "The minimum environmental changes needed to make the alternative route p' optimal are:"
+            "over the alternative route p': terrain, traversability, and robot capabilities determine their traversal times. "
+            "The minimum interventions needed to make the alternative route p' optimal are:"
         )
     ]
 
     if has_terrain:
-        target_name = config.TARGET_TERRAIN.lower().replace("_", " ")
-        terrain_count = len(modifications.terrain_nodes)
-        terrain_cell_label = "cell" if terrain_count == 1 else "cells"
-        if grid is not None:
-            counts: dict[str, int] = {}
-            for u in modifications.terrain_nodes:
-                t = grid.get_cell(u).terrain
-                name = TERRAIN_NAMES.get(t, t.lower().replace("_", " "))
-                counts[name] = counts.get(name, 0) + 1
-            details = ", ".join(
-                f"{name} ({cnt} {'cell' if cnt == 1 else 'cells'})"
-                for name, cnt in counts.items()
+        counts: dict[tuple[str, str], int] = {}
+        for node, terrain in modifications.terrain_assignments:
+            original = (
+                grid.get_cell(node).terrain if grid is not None else "original terrain"
             )
-            lines.append(
-                f"- Convert {terrain_count} terrain {terrain_cell_label} "
-                f"({details}) to the target terrain ({target_name})."
+            original_name = TERRAIN_NAMES.get(
+                original, original.lower().replace("_", " ")
             )
-        else:
+            final_name = TERRAIN_NAMES.get(terrain, terrain.lower().replace("_", " "))
+            key = (original_name, final_name)
+            counts[key] = counts.get(key, 0) + 1
+        for (original_name, final_name), count in counts.items():
+            cell_label = "cell" if count == 1 else "cells"
             lines.append(
-                f"- Convert {terrain_count} terrain {terrain_cell_label} "
-                f"to the target terrain ({target_name})."
+                f"- Convert {count} terrain {cell_label} from {original_name} to {final_name} along the desired or accumulated competing routes."
             )
 
     if has_obstacle:
@@ -106,9 +101,21 @@ def generate_explanation_text(
             f"- Make {water_count} water {water_cell_label} traversable at the base-terrain speed while preserving water terrain."
         )
 
+    if has_robot_speed:
+        count = len(modifications.robot_speed_edges)
+        edge_label = "edge" if count == 1 else "edges"
+        speed = (
+            grid.robot_speed_theoretical
+            if grid is not None
+            else config.ROBOT_SPEED_THEORETICAL
+        )
+        lines.append(
+            f"- Increase the robot speed capability to {speed:g} m/s on {count} directed {edge_label} of the alternative route."
+        )
+
     if not subgraph_only:
         lines.append(
-            "Without these changes, the alternative route has a higher traversal cost and increases mission time."
+            "These interventions make the alternative route optimal under the modified traversal model."
         )
     return "\n".join(lines)
 

@@ -12,6 +12,7 @@ def create_reduced_graph(
     p_prime: list[tuple[int, int]],
     method: str = "NONE",
     margin: int = 2,
+    protected_nodes: set[tuple[int, int]] | None = None,
 ) -> ReducedGraph | None:
     norm_method = method.strip().upper()
     if norm_method == "NONE":
@@ -21,7 +22,9 @@ def create_reduced_graph(
     if norm_method == "FLOODFILL":
         return extract_floodfill(grid, p_star, p_prime)
     if norm_method == "SPARSIFIED":
-        return extract_sparsified(grid, p_star, p_prime, margin=margin)
+        return extract_sparsified(
+            grid, p_star, p_prime, margin=margin, protected_nodes=protected_nodes
+        )
     if norm_method == "PATH_ONLY":
         return extract_path_only(grid, p_star, p_prime)
     raise ValueError(f"Unknown graph reduction method: {method}")

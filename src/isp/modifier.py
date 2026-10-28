@@ -1,4 +1,4 @@
-from ..config import TARGET_TERRAIN, WATER_TERRAIN
+from ..config import WATER_TERRAIN
 from ..grid import Grid
 from .types import SemanticModifications
 
@@ -15,6 +15,10 @@ def apply_semantic_modifications(
         max_slope_deg=grid.max_slope_deg,
     )
     new_grid.speeds = dict(grid.speeds)
+    new_grid.robot_speed_theoretical = grid.robot_speed_theoretical
+    new_grid.robot_speed_edges = set(grid.robot_speed_edges) | set(
+        modifications.robot_speed_edges
+    )
 
     new_grid.load_terrain_matrix(grid.terrain)
     new_grid.load_elevation_matrix(grid.elevation)
@@ -31,9 +35,8 @@ def apply_semantic_modifications(
     new_grid.effective_seed = grid.effective_seed
     new_grid.generation_attempt = grid.generation_attempt
 
-    for u in modifications.terrain_nodes:
-        if new_grid.get_cell(u).terrain != WATER_TERRAIN:
-            new_grid.get_cell(u).terrain = TARGET_TERRAIN
+    for u, terrain in modifications.terrain_assignments:
+        new_grid.get_cell(u).terrain = terrain
 
     for u in modifications.obstacle_nodes:
         cell = new_grid.get_cell(u)

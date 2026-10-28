@@ -31,6 +31,8 @@ def astar(
             adj.setdefault(u, []).append(v)
 
     v_max = max(grid.speeds.values())
+    if grid.robot_speed_edges:
+        v_max = max(v_max, grid.robot_speed_theoretical)
 
     counter = 0
     open_heap = []
