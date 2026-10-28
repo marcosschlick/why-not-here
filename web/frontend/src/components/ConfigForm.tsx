@@ -121,9 +121,6 @@ export function ConfigForm({
   const [maxIspIterations, setMaxIspIterations] = useState<number>(
     initialConfig?.MAX_ISP_ITERATIONS ?? 50,
   );
-  const [bboxMargin, setBboxMargin] = useState<number>(
-    initialConfig?.BBOX_MARGIN ?? 2,
-  );
   const [incrementalAstarScope, setIncrementalAstarScope] = useState<string>(
     initialConfig?.INCREMENTAL_ASTAR_SCOPE ?? "GLOBAL",
   );
@@ -180,7 +177,6 @@ export function ConfigForm({
       SOLVER_TIMEOUT_SEC: Number(solverTimeout),
       CLOSED_LOOP_TIMEOUT_SEC: Number(closedLoopTimeout),
       MAX_ISP_ITERATIONS: Number(maxIspIterations),
-      BBOX_MARGIN: Number(bboxMargin),
       INCREMENTAL_ASTAR_SCOPE: incrementalAstarScope,
       MAP_ELEVATION_SCALE: Number(mapElevationScale),
       MAP_ELEVATION_FREQ: Number(mapElevationFreq),
@@ -501,39 +497,15 @@ export function ConfigForm({
                   <option value="NONE">None (Full Grid Graph)</option>
                   <option value="BBOX">BBOX (Bounding Box)</option>
                   <option value="FLOODFILL">
-                    Floodfill (Reachable Subgraph)
+                    Floodfill (Region Between Paths)
                   </option>
                   <option value="SPARSIFIED">
-                    Sparsified (Corridor Graph)
+                    Sparsified (Chain Contraction)
                   </option>
                   <option value="PATH_ONLY">
-                    Path Only (Strict Path Corridor)
+                    Path Only (Path Edges)
                   </option>
                 </select>
-              </div>
-
-              <div
-                className={
-                  "conditional-field-wrapper " +
-                  (reductionMethod === "BBOX" ? "is-active" : "is-inactive")
-                }
-              >
-                <div className="form-group">
-                  <label htmlFor="bboxMargin">
-                    <span>BBox Margin</span>
-                    <span className="form-group-hint">Min 1 cell buffer</span>
-                  </label>
-                  <input
-                    id="bboxMargin"
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={bboxMargin}
-                    onChange={(e) => setBboxMargin(Number(e.target.value))}
-                    required
-                    disabled={reductionMethod !== "BBOX"}
-                  />
-                </div>
               </div>
             </div>
 

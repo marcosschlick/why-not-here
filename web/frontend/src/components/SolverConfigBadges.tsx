@@ -46,10 +46,7 @@ export function SolverConfigBadges({
 }: SolverConfigBadgesProps) {
   if (!config) return null;
 
-  const isBbox = config.DEFAULT_REDUCTION_METHOD === "BBOX";
-  const reductionLabel = isBbox
-    ? `${formatReductionMethod(config.DEFAULT_REDUCTION_METHOD)} (Margin: ${config.BBOX_MARGIN ?? 2})`
-    : formatReductionMethod(config.DEFAULT_REDUCTION_METHOD);
+  const reductionLabel = formatReductionMethod(config.DEFAULT_REDUCTION_METHOD);
 
   const hasReduction =
     config.DEFAULT_REDUCTION_METHOD &&

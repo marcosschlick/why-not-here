@@ -38,7 +38,6 @@ CONFIG_REGISTRY = {
     "DEFAULT_SOLVER": "config_solver.py",
     "SOLVER_TIMEOUT_SEC": "config_solver.py",
     "DEFAULT_REDUCTION_METHOD": "config_reduction.py",
-    "BBOX_MARGIN": "config_reduction.py",
     "USE_INCREMENTAL_SOLVER": "config_incremental.py",
     "MAX_ISP_ITERATIONS": "config_incremental.py",
     "CLOSED_LOOP_TIMEOUT_SEC": "config_incremental.py",
@@ -146,10 +145,6 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"{key} must be greater than zero.")
         candidate[key] = value
 
-    margin = int(candidate["BBOX_MARGIN"])
-    if margin < 0:
-        raise ValueError("BBOX_MARGIN must be at least zero.")
-    candidate["BBOX_MARGIN"] = margin
     if not isinstance(candidate["OUTPUT_DIR"], str):
         raise TypeError("OUTPUT_DIR must be a string.")
 

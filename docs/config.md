@@ -132,7 +132,12 @@ Controls subgraph pruning heuristics to reduce problem dimension before optimiza
 | Parameter                  | Type  | Default Value | Description                                                                                   |
 | :------------------------- | :---- | :------------ | :-------------------------------------------------------------------------------------------- |
 | `DEFAULT_REDUCTION_METHOD` | `str` | `"NONE"`      | Active reduction strategy (`"NONE"`, `"BBOX"`, `"FLOODFILL"`, `"SPARSIFIED"`, `"PATH_ONLY"`). |
-| `BBOX_MARGIN`              | `int` | `2`           | Cell margin padding applied around bounding box boundaries.                                   |
+
+`BBOX` contains exactly the minimum bounding rectangle of the original optimal and desired paths, without padding. `FLOODFILL` uses that rectangle, treats both paths as a barrier, and removes the exterior reached from its borders using four-neighbor flood fill. `PATH_ONLY` contains only the vertices and directed consecutive edges actually traversed by the two paths, without reverse or cross edges.
+
+`SPARSIFIED` contracts fixed traversable chains inside the minimum bounding rectangle. Only intermediate nodes with exactly two traversable neighbors can be removed; path nodes, junctions, and the semantic protection mask are preserved. Consecutive terrain and slope traversability indicators must match. Shortcut costs sum the original segment costs independently in each direction, and retain their complete physical paths. Existing cheaper connections win, with original connections preserved on ties. Impassable fixed incident links do not count as traversable neighbors and cannot create a traversable shortcut.
+
+Reduction and semantic closure are separate stages. The common entry point protects the intervention domain and its incident neighbors before sparsification. Subsequent preparation adds the nodes and edges needed for the current semantic decisions, including the accumulated competing paths in the incremental solver. Thus the prepared optimization graph may extend beyond the raw reduction. Four-neighbor raster filling, conservative chain contraction, and semantic protection are explicit grid adaptations of Eder's preprocessing description.
 
 ---
 
@@ -168,7 +173,6 @@ Standardizes export, import, and reproduction of experiments across both the Web
 | `MAX_ISP_ITERATIONS`                          | `int`               | Maximum cutting-plane iterations.                                                                                                      |
 | `INCREMENTAL_ASTAR_SCOPE`                     | `str`               | A\* search scope (`"GLOBAL"` or `"SUBGRAPH"`).                                                                                         |
 | `DEFAULT_REDUCTION_METHOD`                    | `str`               | Active reduction method (`"NONE"`, `"BBOX"`, `"FLOODFILL"`, `"SPARSIFIED"`, `"PATH_ONLY"`).                                            |
-| `BBOX_MARGIN`                                 | `int`               | Cell padding around bounding box.                                                                                                      |
 | `DEFAULT_PLANNER`                             | `str`               | Path planner algorithm (`"ASTAR"` or `"DIJKSTRA"`).                                                                                    |
 | `OUTPUT_DIR`                                  | `str`               | Directory path for generated artifacts.                                                                                                |
 | `start`                                       | `[row, col]`        | Origin coordinate pair.                                                                                                                |

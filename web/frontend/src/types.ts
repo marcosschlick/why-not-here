@@ -12,7 +12,6 @@ export interface SystemConfig {
   SOLVER_TIMEOUT_SEC?: number;
   CLOSED_LOOP_TIMEOUT_SEC?: number;
   MAX_ISP_ITERATIONS?: number;
-  BBOX_MARGIN?: number;
   INCREMENTAL_ASTAR_SCOPE?: string;
   MAP_ELEVATION_SCALE?: number;
   MAP_ELEVATION_FREQ?: number;

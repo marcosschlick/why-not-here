@@ -1,76 +1,104 @@
+from collections import deque
+from math import isfinite
+
+from ..config import IMPASSABLE_TERRAINS, WATER_TERRAIN
 from ..grid import Grid
-from .base import ReducedGraph, extract_induced_edges
+from .base import ReducedGraph
 from .bbox import extract_bbox
+
+
+def _edge_indicators(
+    grid: Grid,
+    u: tuple[int, int],
+    v: tuple[int, int],
+) -> tuple[bool, bool]:
+    terrain_blocked = False
+    for node in (u, v):
+        cell = grid.get_cell(node)
+        water_override = cell.terrain == WATER_TERRAIN and node in grid.water_overrides
+        if cell.obstacle != 0 or (
+            cell.terrain in IMPASSABLE_TERRAINS and not water_override
+        ):
+            terrain_blocked = True
+    return terrain_blocked, abs(grid.get_slope(u, v)) > grid.max_slope_deg
 
 
 def extract_sparsified(
     grid: Grid,
     p_star: list[tuple[int, int]],
     p_prime: list[tuple[int, int]],
-    margin: int = 2,
     protected_nodes: set[tuple[int, int]] | None = None,
 ) -> ReducedGraph:
-    bbox_graph = extract_bbox(grid, p_star, p_prime, margin=margin)
-    candidate_path_nodes = set(p_prime) | (protected_nodes or set())
-    essential_nodes = set(p_star) | candidate_path_nodes
-    removable_nodes = set()
+    bbox_graph = extract_bbox(grid, p_star, p_prime)
+    protected = set(p_star) | set(p_prime) | (protected_nodes or set())
+    outgoing = {node: {} for node in bbox_graph.nodes}
+    incoming = {node: set() for node in bbox_graph.nodes}
+    indicators = {}
+    for u, v in bbox_graph.edges:
+        cost = grid.get_cost(u, v)
+        outgoing[u][v] = cost
+        incoming[v].add(u)
+        if isfinite(cost):
+            indicators[(u, v)] = _edge_indicators(grid, u, v)
 
-    for u in bbox_graph.nodes:
-        if u in essential_nodes or u[0] % 2 != 1 or u[1] % 2 != 1:
-            continue
-
-        neighbors = grid.get_neighbors(u)
-        if len(neighbors) != 8 or candidate_path_nodes.intersection(neighbors):
-            continue
-
-        cell = grid.get_cell(u)
-        if cell.is_blocked or grid.speeds.get(cell.terrain, 0.0) <= 0.0:
-            continue
-
-        if any(
-            grid.get_cell(neighbor).is_blocked
-            or grid.get_cell(neighbor).terrain != cell.terrain
-            or grid.speeds.get(grid.get_cell(neighbor).terrain, 0.0) <= 0.0
-            for neighbor in neighbors
-        ):
-            continue
-
-        removable_nodes.add(u)
-
-    nodes = bbox_graph.nodes - removable_nodes
-    edges = extract_induced_edges(grid, nodes)
-    custom_edge_costs: dict[tuple[tuple[int, int], tuple[int, int]], float] = {}
+    custom_edge_costs = {}
     custom_edge_paths = {}
-
-    for middle in removable_nodes:
-        neighbors = grid.get_neighbors(middle)
-        for u in neighbors:
-            if u not in nodes or not grid.is_traversable(u, middle):
+    queue = deque(sorted(bbox_graph.nodes - protected))
+    while queue:
+        middle = queue.popleft()
+        if middle not in outgoing or middle in protected:
+            continue
+        neighbors = {
+            node for node, cost in outgoing[middle].items() if isfinite(cost)
+        } | {node for node in incoming[middle] if isfinite(outgoing[node][middle])}
+        if len(neighbors) != 2:
+            continue
+        u, w = sorted(neighbors)
+        shortcuts = []
+        compatible = True
+        for source, target in ((u, w), (w, u)):
+            first = (source, middle)
+            second = (middle, target)
+            if first not in indicators or second not in indicators:
                 continue
-            first_cost = grid.get_cost(u, middle)
-            for v in neighbors:
-                if v == u or v not in nodes or not grid.is_traversable(middle, v):
-                    continue
+            if indicators[first] != indicators[second]:
+                compatible = False
+                break
+            cost = outgoing[source][middle] + outgoing[middle][target]
+            physical_path = (
+                custom_edge_paths.get(first, [source, middle])
+                + custom_edge_paths.get(second, [middle, target])[1:]
+            )
+            shortcuts.append(((source, target), cost, physical_path, indicators[first]))
+        if not compatible or not shortcuts:
+            continue
 
-                shortcut = (u, v)
-                shortcut_cost = first_cost + grid.get_cost(middle, v)
-                direct_cost = (
-                    grid.get_cost(u, v)
-                    if v in grid.get_neighbors(u)
-                    else float("inf")
-                )
-                if direct_cost <= shortcut_cost:
-                    continue
+        incident_edges = {(node, middle) for node in incoming[middle]} | {
+            (middle, node) for node in outgoing[middle]
+        }
+        for source, target in incident_edges:
+            outgoing[source].pop(target)
+            incoming[target].remove(source)
+            indicators.pop((source, target), None)
+            custom_edge_costs.pop((source, target), None)
+            custom_edge_paths.pop((source, target), None)
+        del outgoing[middle]
+        del incoming[middle]
 
-                edges.add(shortcut)
-                if shortcut_cost < custom_edge_costs.get(shortcut, float("inf")):
-                    custom_edge_costs[shortcut] = shortcut_cost
-                    custom_edge_paths[shortcut] = [u, middle, v]
+        for edge, cost, physical_path, flags in shortcuts:
+            source, target = edge
+            if cost < outgoing[source].get(target, float("inf")):
+                outgoing[source][target] = cost
+                incoming[target].add(source)
+                indicators[edge] = flags
+                custom_edge_costs[edge] = cost
+                custom_edge_paths[edge] = physical_path
+        queue.extend(node for node in sorted(neighbors) if node not in protected)
 
     return ReducedGraph(
         underlying_grid=grid,
-        nodes=nodes,
-        edges=edges,
+        nodes=set(outgoing),
+        edges={(u, v) for u in outgoing for v in outgoing[u]},
         method_name="SPARSIFIED",
         custom_edge_costs=custom_edge_costs,
         custom_edge_paths=custom_edge_paths,

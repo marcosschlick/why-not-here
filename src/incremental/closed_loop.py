@@ -1,7 +1,6 @@
 import time
 
 from src.config import (
-    BBOX_MARGIN,
     CLOSED_LOOP_TIMEOUT_SEC,
     DEFAULT_REDUCTION_METHOD,
     DEFAULT_SOLVER,
@@ -38,7 +37,6 @@ class ClosedLoopISPSolver:
         max_iterations: int = MAX_ISP_ITERATIONS,
         tolerance: float = INCREMENTAL_TOLERANCE,
         reduction_method: str = DEFAULT_REDUCTION_METHOD,
-        bbox_margin: int = BBOX_MARGIN,
         astar_scope: str = INCREMENTAL_ASTAR_SCOPE,
     ) -> None:
         self.solver_name = solver_name
@@ -47,7 +45,6 @@ class ClosedLoopISPSolver:
         self.max_iterations = max_iterations
         self.tolerance = tolerance
         self.reduction_method = reduction_method
-        self.bbox_margin = bbox_margin
         self.astar_scope = astar_scope
 
     def solve(
@@ -162,7 +159,6 @@ class ClosedLoopISPSolver:
                 p_star if p_star else alternative_path,
                 alternative_path,
                 method=method,
-                margin=self.bbox_margin,
                 protected_nodes=terrain_decision_nodes,
             )
             active_nodes, active_edges, custom_costs = prepare_subgraph(
@@ -339,7 +335,6 @@ def solve_closed_loop(
     goal: tuple[int, int],
     alternative_path: list[tuple[int, int]],
     reduction_method: str = DEFAULT_REDUCTION_METHOD,
-    bbox_margin: int = BBOX_MARGIN,
     solver_name: str = DEFAULT_SOLVER,
     timeout: float = SOLVER_TIMEOUT_SEC,
     global_timeout: float = CLOSED_LOOP_TIMEOUT_SEC,
@@ -354,7 +349,6 @@ def solve_closed_loop(
         max_iterations=max_iterations,
         tolerance=tolerance,
         reduction_method=reduction_method,
-        bbox_margin=bbox_margin,
         astar_scope=astar_scope,
     )
     return solver.solve(

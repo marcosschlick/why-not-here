@@ -6,7 +6,6 @@ def extract_bbox(
     grid: Grid,
     p_star: list[tuple[int, int]],
     p_prime: list[tuple[int, int]],
-    margin: int = 2,
 ) -> ReducedGraph:
     all_points = p_star + p_prime
     if not all_points:
@@ -19,10 +18,10 @@ def extract_bbox(
 
     r_coords = [p[0] for p in all_points]
     c_coords = [p[1] for p in all_points]
-    r_min = max(0, min(r_coords) - margin)
-    r_max = min(grid.h - 1, max(r_coords) + margin)
-    c_min = max(0, min(c_coords) - margin)
-    c_max = min(grid.w - 1, max(c_coords) + margin)
+    r_min = min(r_coords)
+    r_max = max(r_coords)
+    c_min = min(c_coords)
+    c_max = max(c_coords)
 
     nodes = {(r, c) for r in range(r_min, r_max + 1) for c in range(c_min, c_max + 1)}
 

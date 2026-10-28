@@ -627,9 +627,6 @@ export function ResultsView({
                 {formatReductionMethod(
                   activeBatchItem.config.DEFAULT_REDUCTION_METHOD,
                 )}
-                {activeBatchItem.config.DEFAULT_REDUCTION_METHOD === "BBOX" &&
-                  activeBatchItem.config.BBOX_MARGIN !== undefined &&
-                  ` (Margin: ${activeBatchItem.config.BBOX_MARGIN})`}
               </span>
               <span className="loading-param-chip">
                 Solver:{" "}

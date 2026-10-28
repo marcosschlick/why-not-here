@@ -2,6 +2,7 @@ from collections import deque
 
 from ..grid import Grid
 from .base import ReducedGraph, extract_induced_edges
+from .bbox import extract_bbox
 
 
 def extract_floodfill(
@@ -10,6 +11,7 @@ def extract_floodfill(
     p_prime: list[tuple[int, int]],
 ) -> ReducedGraph:
     boundary = set(p_star) | set(p_prime)
+    bbox_graph = extract_bbox(grid, p_star, p_prime)
     if not boundary:
         return ReducedGraph(
             underlying_grid=grid,
@@ -20,10 +22,10 @@ def extract_floodfill(
 
     r_coords = [p[0] for p in boundary]
     c_coords = [p[1] for p in boundary]
-    r_min = max(0, min(r_coords) - 1)
-    r_max = min(grid.h - 1, max(r_coords) + 1)
-    c_min = max(0, min(c_coords) - 1)
-    c_max = min(grid.w - 1, max(c_coords) + 1)
+    r_min = min(r_coords)
+    r_max = max(r_coords)
+    c_min = min(c_coords)
+    c_max = max(c_coords)
 
     exterior = set()
     queue = deque()
@@ -52,12 +54,7 @@ def extract_floodfill(
                     exterior.add(nbr)
                     queue.append(nbr)
 
-    nodes = {
-        (r, c)
-        for r in range(r_min, r_max + 1)
-        for c in range(c_min, c_max + 1)
-        if (r, c) not in exterior
-    }
+    nodes = bbox_graph.nodes - exterior
 
     edges = extract_induced_edges(grid, nodes)
 

@@ -155,7 +155,6 @@ def run_isp(
             goal,
             p_user,
             reduction_method=config.DEFAULT_REDUCTION_METHOD,
-            bbox_margin=config.BBOX_MARGIN,
             solver_name=config.DEFAULT_SOLVER,
             timeout=config.SOLVER_TIMEOUT_SEC,
             global_timeout=config.CLOSED_LOOP_TIMEOUT_SEC,
@@ -170,7 +169,6 @@ def run_isp(
             p_star if p_star else p_user,
             p_user,
             method=config.DEFAULT_REDUCTION_METHOD,
-            margin=config.BBOX_MARGIN,
         )
         solver = ISPSolver(
             solver_name=config.DEFAULT_SOLVER,
@@ -340,11 +338,7 @@ def run_isp(
         if config.USE_INCREMENTAL_SOLVER
         else "STANDARD MONOLITHIC MILP"
     )
-    reduction_detail = (
-        f"{isp_result.reduction_method} (Margin: {config.BBOX_MARGIN})"
-        if isp_result.reduction_method == "BBOX"
-        else isp_result.reduction_method
-    )
+    reduction_detail = isp_result.reduction_method
     scope_detail = (
         f", A* Scope: {config.INCREMENTAL_ASTAR_SCOPE}"
         if config.USE_INCREMENTAL_SOLVER and config.DEFAULT_REDUCTION_METHOD != "NONE"

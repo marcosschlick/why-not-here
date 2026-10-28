@@ -1,3 +1,2 @@
 # Graph reduction settings (Éder 2024: "NONE", "BBOX", "FLOODFILL", "SPARSIFIED", "PATH_ONLY")
 DEFAULT_REDUCTION_METHOD = "NONE"
-BBOX_MARGIN = 2

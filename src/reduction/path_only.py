@@ -1,5 +1,7 @@
+from itertools import pairwise
+
 from ..grid import Grid
-from .base import ReducedGraph, extract_induced_edges
+from .base import ReducedGraph
 
 
 def extract_path_only(
@@ -16,7 +18,7 @@ def extract_path_only(
             method_name="PATH_ONLY",
         )
 
-    edges = extract_induced_edges(grid, nodes)
+    edges = set(pairwise(p_star)) | set(pairwise(p_prime))
 
     return ReducedGraph(
         underlying_grid=grid,
