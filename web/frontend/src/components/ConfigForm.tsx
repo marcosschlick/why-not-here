@@ -113,13 +113,13 @@ export function ConfigForm({
     initialConfig?.DEFAULT_SOLVER ?? "HIGHS",
   );
   const [solverTimeout, setSolverTimeout] = useState<number>(
-    initialConfig?.SOLVER_TIMEOUT_SEC ?? 6000,
+    initialConfig?.SOLVER_TIMEOUT_SEC ?? 1800,
   );
   const [closedLoopTimeout, setClosedLoopTimeout] = useState<number>(
-    initialConfig?.CLOSED_LOOP_TIMEOUT_SEC ?? 300.0,
+    initialConfig?.CLOSED_LOOP_TIMEOUT_SEC ?? 1800.0,
   );
   const [maxIspIterations, setMaxIspIterations] = useState<number>(
-    initialConfig?.MAX_ISP_ITERATIONS ?? 50,
+    initialConfig?.MAX_ISP_ITERATIONS ?? 150,
   );
   const [incrementalAstarScope, setIncrementalAstarScope] = useState<string>(
     initialConfig?.INCREMENTAL_ASTAR_SCOPE ?? "GLOBAL",

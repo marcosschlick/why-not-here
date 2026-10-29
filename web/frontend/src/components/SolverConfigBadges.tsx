@@ -57,7 +57,7 @@ export function SolverConfigBadges({
   const solverArchLabel = config.USE_INCREMENTAL_SOLVER
     ? `Incremental MILP (${config.DEFAULT_SOLVER || "HiGHS"}${
         hasReduction ? `, ${astarScopeLabel}` : ""
-      }, Max Iter: ${config.MAX_ISP_ITERATIONS ?? 50})`
+      }, Max Iter: ${config.MAX_ISP_ITERATIONS ?? 150})`
     : `Monolithic MILP (${config.DEFAULT_SOLVER || "HiGHS"})`;
 
   const gridSpecs = `${config.MAP_H}×${config.MAP_W} (${config.CONNECTIVITY}-Connected)`;
