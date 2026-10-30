@@ -19,6 +19,7 @@ class ISPSemantics:
         custom_edge_costs: dict[tuple[tuple[int, int], tuple[int, int]], float]
         | None = None,
         terrain_decision_nodes: set[tuple[int, int]] | None = None,
+        terrain_only: bool = False,
     ) -> None:
         self.grid = grid
         self.candidate_path = candidate_path
@@ -27,6 +28,7 @@ class ISPSemantics:
         self.custom_edge_costs = (
             custom_edge_costs if custom_edge_costs is not None else {}
         )
+        self.terrain_only = terrain_only
 
         path_nodes = set(candidate_path)
         terrain_domain = (
@@ -78,22 +80,24 @@ class ISPSemantics:
 
         self.obstacle_nodes: list[tuple[int, int]] = []
         self.obstacle_to_idx: dict[tuple[int, int], int] = {}
-        for u in unique_path_nodes:
-            if grid.get_cell(u).obstacle != 0:
-                idx = len(self.obstacle_nodes)
-                self.obstacle_nodes.append(u)
-                self.obstacle_to_idx[u] = idx
+        if not terrain_only:
+            for u in unique_path_nodes:
+                if grid.get_cell(u).obstacle != 0:
+                    idx = len(self.obstacle_nodes)
+                    self.obstacle_nodes.append(u)
+                    self.obstacle_to_idx[u] = idx
 
         self.water_nodes: list[tuple[int, int]] = []
         self.water_to_idx: dict[tuple[int, int], int] = {}
-        for u in unique_path_nodes:
-            if (
-                grid.get_cell(u).terrain == WATER_TERRAIN
-                and u not in grid.water_overrides
-            ):
-                idx = len(self.water_nodes)
-                self.water_nodes.append(u)
-                self.water_to_idx[u] = idx
+        if not terrain_only:
+            for u in unique_path_nodes:
+                if (
+                    grid.get_cell(u).terrain == WATER_TERRAIN
+                    and u not in grid.water_overrides
+                ):
+                    idx = len(self.water_nodes)
+                    self.water_nodes.append(u)
+                    self.water_to_idx[u] = idx
 
         self.edges: list[tuple[tuple[int, int], tuple[int, int]]] = []
         self.edge_to_idx: dict[tuple[tuple[int, int], tuple[int, int]], int] = {}
@@ -126,24 +130,25 @@ class ISPSemantics:
         self.slope_edges: list[tuple[tuple[int, int], tuple[int, int]]] = []
         self.slope_to_idx: dict[tuple[tuple[int, int], tuple[int, int]], int] = {}
 
-        for r in range(len(candidate_path) - 1):
-            edge = (candidate_path[r], candidate_path[r + 1])
-            if edge not in self.edge_to_idx or edge in self.slope_to_idx:
-                continue
-            u, v = edge
-            has_slope_pen = (
-                abs(grid.get_slope(u, v)) > grid.max_slope_deg
-                or grid.get_slope(u, v) > 1e-4
-            )
-            if (
-                has_slope_pen
-                and edge not in grid.leveled_slopes
-                and (v, u) not in grid.leveled_slopes
-            ):
-                s_idx = len(self.slope_edges)
-                self.slope_edges.append(edge)
-                self.slope_to_idx[edge] = s_idx
-                self.slope_to_idx[(v, u)] = s_idx
+        if not terrain_only:
+            for r in range(len(candidate_path) - 1):
+                edge = (candidate_path[r], candidate_path[r + 1])
+                if edge not in self.edge_to_idx or edge in self.slope_to_idx:
+                    continue
+                u, v = edge
+                has_slope_pen = (
+                    abs(grid.get_slope(u, v)) > grid.max_slope_deg
+                    or grid.get_slope(u, v) > 1e-4
+                )
+                if (
+                    has_slope_pen
+                    and edge not in grid.leveled_slopes
+                    and (v, u) not in grid.leveled_slopes
+                ):
+                    s_idx = len(self.slope_edges)
+                    self.slope_edges.append(edge)
+                    self.slope_to_idx[edge] = s_idx
+                    self.slope_to_idx[(v, u)] = s_idx
 
         if not np.isfinite(
             grid.robot_speed_theoretical
@@ -158,21 +163,23 @@ class ISPSemantics:
             )
         self.robot_speed_edges = []
         self.robot_speed_to_idx = {}
-        for edge in pairwise(candidate_path):
-            if (
-                edge in self.robot_speed_to_idx
-                or edge in grid.robot_speed_edges
-                or edge in self.custom_edge_costs
-            ):
-                continue
-            cost = grid.get_cost(*edge)
-            if (
-                np.isfinite(cost)
-                and cost > 0.0
-                and grid.get_distance(*edge) / cost >= ratio * max(grid.speeds.values())
-            ):
-                self.robot_speed_to_idx[edge] = len(self.robot_speed_edges)
-                self.robot_speed_edges.append(edge)
+        if not terrain_only:
+            for edge in pairwise(candidate_path):
+                if (
+                    edge in self.robot_speed_to_idx
+                    or edge in grid.robot_speed_edges
+                    or edge in self.custom_edge_costs
+                ):
+                    continue
+                cost = grid.get_cost(*edge)
+                if (
+                    np.isfinite(cost)
+                    and cost > 0.0
+                    and grid.get_distance(*edge) / cost
+                    >= ratio * max(grid.speeds.values())
+                ):
+                    self.robot_speed_to_idx[edge] = len(self.robot_speed_edges)
+                    self.robot_speed_edges.append(edge)
 
         self.num_terrain_vars = len(self.terrain_nodes) * len(self.terrain_classes)
         self.num_obstacle_vars = len(self.obstacle_nodes)

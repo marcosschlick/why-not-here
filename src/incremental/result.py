@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from src.isp.semantics import SemanticModifications
 
@@ -17,3 +17,4 @@ class ClosedLoopResult:
     solver_status: str
     reduction_method: str = "NONE"
     cost_baseline_text: str = ""
+    iteration_metrics: list[dict[str, object]] = field(default_factory=list)

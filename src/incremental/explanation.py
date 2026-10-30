@@ -18,6 +18,10 @@ def generate_explanation_text(
     solver_status: str = "OPTIMAL",
 ) -> str:
     subgraph_only = solver_status == "SUBGRAPH_OPTIMAL_ONLY"
+    uncertified_candidate = solver_status in {
+        "TIMEOUT",
+        "MAX_ITERATIONS_EXCEEDED",
+    }
     subgraph_message = (
         "The candidate makes the alternative route p' optimal only within the reduced subgraph. "
         "Global optimality validation failed; there is no global optimality certification."
@@ -44,15 +48,25 @@ def generate_explanation_text(
                 subgraph_message
                 + " No interventions were required within the subgraph."
             )
+        if uncertified_candidate:
+            return (
+                "A candidate intervention was found, but global optimality was not certified before the run stopped. "
+                "The candidate contains no semantic changes."
+            )
         return "The alternative route p' already has the same estimated traversal time as the optimal route p*, so no interventions are needed."
 
     lines = [
         subgraph_message + " Candidate interventions:"
         if subgraph_only
         else (
-            "This contrastive explanation describes why the planner selected the optimal route p* "
-            "over the alternative route p': terrain, traversability, and robot capabilities determine their traversal times. "
-            "The minimum interventions needed to make the alternative route p' optimal are:"
+            "A candidate intervention was found, but global optimality was not certified before the run stopped. "
+            "Candidate interventions:"
+            if uncertified_candidate
+            else (
+                "This contrastive explanation describes why the planner selected the optimal route p* "
+                "over the alternative route p': terrain, traversability, and robot capabilities determine their traversal times. "
+                "The minimum interventions needed to make the alternative route p' optimal are:"
+            )
         )
     ]
 
@@ -113,7 +127,7 @@ def generate_explanation_text(
             f"- Increase the robot speed capability to {speed:g} m/s on {count} directed {edge_label} of the alternative route."
         )
 
-    if not subgraph_only:
+    if not subgraph_only and not uncertified_candidate:
         lines.append(
             "These interventions make the alternative route optimal under the modified traversal model."
         )

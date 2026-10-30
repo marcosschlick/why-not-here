@@ -1,3 +1,5 @@
+import time
+
 import cvxpy as cp
 import numpy as np
 
@@ -25,6 +27,9 @@ class IncrementalISPSolver(BaseISPSolver):
             timeout=timeout,
             mip_gap=mip_gap,
         )
+        self.last_preparation_sec = 0.0
+        self.last_model_build_sec = 0.0
+        self.last_solver_runtime_sec = 0.0
 
     def solve_step(
         self,
@@ -34,17 +39,24 @@ class IncrementalISPSolver(BaseISPSolver):
         alternative_path: list[tuple[int, int]],
         competing_paths: list[list[tuple[int, int]]],
         reduced_graph: ReducedGraph | None = None,
+        terrain_only: bool = False,
     ) -> tuple[bool, SemanticModifications | None, float]:
+        self.last_preparation_sec = 0.0
+        self.last_model_build_sec = 0.0
+        self.last_solver_runtime_sec = 0.0
         self.last_solver_status = None
+        preparation_started = time.perf_counter()
         is_valid, status, _ = validate_alternative_path(
             grid, start, goal, alternative_path
         )
         if not is_valid:
+            self.last_preparation_sec = time.perf_counter() - preparation_started
             self.last_solver_status = status
             return False, None, float("inf")
 
         if start == goal and len(alternative_path) == 1:
             self.last_solver_status = "OPTIMAL"
+            self.last_preparation_sec = time.perf_counter() - preparation_started
             return True, SemanticModifications([], [], []), 0.0
 
         if reduced_graph is not None:
@@ -60,7 +72,9 @@ class IncrementalISPSolver(BaseISPSolver):
             None,
             terrain_decision_nodes=terrain_decision_nodes,
         )
+        self.last_preparation_sec = time.perf_counter() - preparation_started
 
+        model_started = time.perf_counter()
         formulation = self._build_formulation(
             grid,
             alternative_path,
@@ -68,8 +82,10 @@ class IncrementalISPSolver(BaseISPSolver):
             active_edges=active_edges,
             custom_edge_costs=costs,
             terrain_decision_nodes=terrain_decision_nodes,
+            terrain_only=terrain_only,
         )
         if formulation is None:
+            self.last_model_build_sec = time.perf_counter() - model_started
             self.last_solver_status = "INVALID_ALTERNATIVE_PATH"
             return False, None, float("inf")
 
@@ -107,6 +123,7 @@ class IncrementalISPSolver(BaseISPSolver):
             else cp.Constant(0.0)
         )
         problem = cp.Problem(cp.Minimize(obj_expr), constraints)
+        self.last_model_build_sec = time.perf_counter() - model_started
         success, cost = self._solve_milp(problem)
         if not success:
             return False, None, float("inf")

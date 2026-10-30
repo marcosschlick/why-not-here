@@ -38,6 +38,7 @@ class ClosedLoopISPSolver:
         tolerance: float = INCREMENTAL_TOLERANCE,
         reduction_method: str = DEFAULT_REDUCTION_METHOD,
         astar_scope: str = INCREMENTAL_ASTAR_SCOPE,
+        terrain_only: bool = False,
     ) -> None:
         self.solver_name = solver_name
         self.timeout = timeout
@@ -46,6 +47,7 @@ class ClosedLoopISPSolver:
         self.tolerance = tolerance
         self.reduction_method = reduction_method
         self.astar_scope = astar_scope
+        self.terrain_only = terrain_only
 
     def solve(
         self,
@@ -91,6 +93,7 @@ class ClosedLoopISPSolver:
         baseline_text = generate_cost_baseline_justification(
             cost_p_star, cost_p_prime_init
         )
+        iteration_metrics: list[dict[str, object]] = []
 
         def make_res(
             success: bool,
@@ -114,6 +117,7 @@ class ClosedLoopISPSolver:
                 solver_status=status,
                 reduction_method=method,
                 cost_baseline_text=baseline_text,
+                iteration_metrics=iteration_metrics,
             )
 
         if start == goal and len(alternative_path) == 1:
@@ -134,26 +138,62 @@ class ClosedLoopISPSolver:
             timeout=self.timeout,
         )
 
-        delta = None
-        cost_p_prime = float("inf")
+        last_candidate: SemanticModifications | None = None
+        last_candidate_cost = float("inf")
 
-        for iteration in range(1, self.max_iterations + 1):
-            elapsed = time.perf_counter() - start_time
-            if elapsed >= self.global_timeout:
+        def timeout_result(iterations: int, competing_count: int) -> ClosedLoopResult:
+            if last_candidate is None:
+                explanation = "The solver timed out before finding a candidate intervention."
                 return make_res(
                     False,
-                    delta,
-                    "Global execution time limit exceeded.",
-                    iteration - 1,
-                    len(Q),
-                    cost_p_prime,
+                    None,
+                    explanation,
+                    iterations,
+                    competing_count,
+                    float("inf"),
                     "TIMEOUT",
                 )
+            explanation = generate_explanation_text(
+                last_candidate,
+                full_grid,
+                solver_status="TIMEOUT",
+            )
+            return make_res(
+                False,
+                last_candidate,
+                explanation,
+                iterations,
+                competing_count,
+                last_candidate_cost,
+                "TIMEOUT",
+            )
+
+        for iteration in range(1, self.max_iterations + 1):
+            metric: dict[str, object] = {
+                "iteration": iteration,
+                "preparation_sec": 0.0,
+                "model_build_sec": 0.0,
+                "solver_sec": 0.0,
+                "validation_sec": 0.0,
+                "solver_status": "NOT_RUN",
+                "solver_attempted": False,
+                "completed": False,
+                "candidate_available": last_candidate is not None,
+                "competing_paths_before": len(Q),
+                "competing_paths_after": len(Q),
+                "cut_added": False,
+            }
+            iteration_metrics.append(metric)
+            elapsed = time.perf_counter() - start_time
+            if elapsed >= self.global_timeout:
+                metric["solver_status"] = "TIMEOUT"
+                return timeout_result(iteration - 1, len(Q))
 
             step_solver.timeout = max(0.1, min(self.timeout, self.global_timeout - elapsed))
 
             terrain_decision_nodes = set(alternative_path)
             terrain_decision_nodes.update(node for path in Q for node in path)
+            preparation_started = time.perf_counter()
             reduced_graph = create_reduced_graph(
                 full_grid,
                 p_star if p_star else alternative_path,
@@ -161,14 +201,20 @@ class ClosedLoopISPSolver:
                 method=method,
                 protected_nodes=terrain_decision_nodes,
             )
-            active_nodes, active_edges, custom_costs = prepare_subgraph(
-                full_grid,
-                alternative_path,
-                reduced_graph,
-                None,
-                terrain_decision_nodes=terrain_decision_nodes,
-            )
+            active_nodes = None
+            active_edges = None
+            custom_costs = None
+            if scope == "SUBGRAPH":
+                active_nodes, active_edges, custom_costs = prepare_subgraph(
+                    full_grid,
+                    alternative_path,
+                    reduced_graph,
+                    None,
+                    terrain_decision_nodes=terrain_decision_nodes,
+                )
+            metric["preparation_sec"] = time.perf_counter() - preparation_started
 
+            metric["solver_attempted"] = True
             milp_ok, delta, _ = step_solver.solve_step(
                 full_grid,
                 start,
@@ -176,22 +222,25 @@ class ClosedLoopISPSolver:
                 alternative_path,
                 Q,
                 reduced_graph=reduced_graph,
+                terrain_only=self.terrain_only,
             )
+            metric["preparation_sec"] = (
+                float(metric["preparation_sec"]) + step_solver.last_preparation_sec
+            )
+            metric["model_build_sec"] = step_solver.last_model_build_sec
+            metric["solver_sec"] = step_solver.last_solver_runtime_sec
+            metric["solver_status"] = step_solver.last_solver_status or "SOLVER_FAILED"
+
+            if step_solver.last_solver_status == "TIMEOUT":
+                return timeout_result(iteration, len(Q))
 
             if (
                 time.perf_counter() - start_time >= self.global_timeout
                 and not milp_ok
                 and step_solver.last_solver_status != "OPTIMAL_INACCURATE"
             ):
-                return make_res(
-                    False,
-                    delta,
-                    "Global execution time limit exceeded.",
-                    iteration,
-                    len(Q),
-                    cost_p_prime,
-                    "TIMEOUT",
-                )
+                metric["solver_status"] = "TIMEOUT"
+                return timeout_result(iteration, len(Q))
 
             if not milp_ok or delta is None:
                 solver_status = step_solver.last_solver_status or "SOLVER_FAILED"
@@ -215,6 +264,7 @@ class ClosedLoopISPSolver:
                     solver_status,
                 )
 
+            validation_started = time.perf_counter()
             if (
                 scope == "SUBGRAPH"
                 and active_nodes is not None
@@ -240,6 +290,11 @@ class ClosedLoopISPSolver:
                     delta,
                     tolerance=self.tolerance,
                 )
+            metric["validation_sec"] = time.perf_counter() - validation_started
+            metric["completed"] = True
+            metric["candidate_available"] = True
+            last_candidate = delta
+            last_candidate_cost = cost_p_prime
 
             if is_opt:
                 if scope == "SUBGRAPH":
@@ -253,6 +308,7 @@ class ClosedLoopISPSolver:
                             tolerance=self.tolerance,
                         )
                     )
+                    metric["validation_sec"] = time.perf_counter() - validation_started
                     if is_globally_opt:
                         explanation = generate_explanation_text(
                             delta, full_grid
@@ -317,14 +373,25 @@ class ClosedLoopISPSolver:
                 )
 
             Q.append(q_viol)
+            metric["cut_added"] = True
+            metric["competing_paths_after"] = len(Q)
 
+        explanation = (
+            generate_explanation_text(
+                last_candidate,
+                full_grid,
+                solver_status="MAX_ITERATIONS_EXCEEDED",
+            )
+            if last_candidate is not None
+            else "The iteration limit was reached before finding a candidate intervention."
+        )
         return make_res(
             False,
-            delta,
-            "Maximum iterations reached without global optimality certification.",
+            last_candidate,
+            explanation,
             self.max_iterations,
             len(Q),
-            cost_p_prime,
+            last_candidate_cost,
             "MAX_ITERATIONS_EXCEEDED",
         )
 
@@ -341,6 +408,7 @@ def solve_closed_loop(
     max_iterations: int = MAX_ISP_ITERATIONS,
     tolerance: float = INCREMENTAL_TOLERANCE,
     astar_scope: str = INCREMENTAL_ASTAR_SCOPE,
+    terrain_only: bool = False,
 ) -> ClosedLoopResult:
     solver = ClosedLoopISPSolver(
         solver_name=solver_name,
@@ -350,6 +418,7 @@ def solve_closed_loop(
         tolerance=tolerance,
         reduction_method=reduction_method,
         astar_scope=astar_scope,
+        terrain_only=terrain_only,
     )
     return solver.solve(
         full_grid,

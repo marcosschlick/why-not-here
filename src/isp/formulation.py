@@ -166,6 +166,7 @@ def build_base_formulation(
     custom_edge_costs: dict[tuple[tuple[int, int], tuple[int, int]], float]
     | None = None,
     terrain_decision_nodes: set[tuple[int, int]] | None = None,
+    terrain_only: bool = False,
 ) -> MIPFormulation | None:
     isp = ISPSemantics(
         grid=grid,
@@ -174,6 +175,7 @@ def build_base_formulation(
         active_edges=active_edges,
         custom_edge_costs=custom_edge_costs,
         terrain_decision_nodes=terrain_decision_nodes,
+        terrain_only=terrain_only,
     )
 
     num_edges = len(isp.edges)

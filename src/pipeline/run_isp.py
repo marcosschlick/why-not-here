@@ -45,6 +45,11 @@ def format_artifact_skip_note(result: ClosedLoopResult) -> str | None:
 
     if result.success:
         reason = "no semantic modifications were required"
+    elif modifications is not None and result.solver_status in {
+        "TIMEOUT",
+        "MAX_ITERATIONS_EXCEEDED",
+    }:
+        reason = "a candidate was found, but it contains no semantic changes to render"
     elif result.solver_status == "INFEASIBLE":
         reason = "no viable modifications were found"
     elif result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
@@ -327,9 +332,12 @@ def run_isp(
             "INFEASIBLE (No viable semantic modifications found in intervention domain)"
         )
     elif isp_result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
-        solution_quality = (
-            f"{isp_result.solver_status} (Search stopped at resource limit)"
+        outcome = (
+            "candidate found; global optimality not certified"
+            if isp_result.modifications is not None
+            else "no candidate found"
         )
+        solution_quality = f"{isp_result.solver_status} ({outcome})"
     else:
         solution_quality = f"{isp_result.solver_status}"
 
@@ -360,6 +368,42 @@ def run_isp(
         f"ISP Status: {isp_result.solver_status} "
         f"(Method: {isp_result.reduction_method}, Iterations: {isp_result.iterations}, Time: {isp_result.runtime_sec:.3f}s)"
     )
+    if isp_result.iteration_metrics:
+        solver_attempts = sum(
+            bool(metric.get("solver_attempted"))
+            for metric in isp_result.iteration_metrics
+        )
+        completed_iterations = sum(
+            bool(metric.get("completed"))
+            for metric in isp_result.iteration_metrics
+        )
+        log_lines.append(
+            f"Incremental diagnostics: {solver_attempts} solver attempts, "
+            f"{completed_iterations} completed iterations"
+        )
+        log_lines.append("Iteration timings and accumulated competing paths:")
+        for metric in isp_result.iteration_metrics:
+            log_lines.append(
+                " - Iteration {iteration}: preparation={preparation:.3f}s, "
+                "model_build={model_build:.3f}s, solver={solver:.3f}s, "
+                "validation={validation:.3f}s, status={status}, "
+                "solver_attempted={attempted}, completed={completed}, "
+                "candidate_available={candidate}, competing_paths={before}->{after}, "
+                "cut_added={cut}".format(
+                    iteration=metric.get("iteration", "-"),
+                    preparation=float(metric.get("preparation_sec", 0.0)),
+                    model_build=float(metric.get("model_build_sec", 0.0)),
+                    solver=float(metric.get("solver_sec", 0.0)),
+                    validation=float(metric.get("validation_sec", 0.0)),
+                    status=metric.get("solver_status", "UNKNOWN"),
+                    attempted=metric.get("solver_attempted", False),
+                    completed=metric.get("completed", False),
+                    candidate=metric.get("candidate_available", False),
+                    before=metric.get("competing_paths_before", 0),
+                    after=metric.get("competing_paths_after", 0),
+                    cut=metric.get("cut_added", False),
+                )
+            )
     log_lines.append(f"Solution Quality: {solution_quality}")
     log_lines.append(
         f"Strategy: {strategy_label} (Solver: {config.DEFAULT_SOLVER}, Reduction: {reduction_detail}{scope_detail}, Max Iterations: {config.MAX_ISP_ITERATIONS})"
@@ -395,6 +439,11 @@ def run_isp(
             f"(Method: {isp_result.reduction_method}, Iterations: {isp_result.iterations}, Time: {isp_result.runtime_sec:.3f}s)"
         )
         print(f"Solution Quality: {solution_quality}")
+        if isp_result.iteration_metrics:
+            print(
+                f"Incremental diagnostics: {solver_attempts} solver attempts, "
+                f"{completed_iterations} completed iterations"
+            )
         print(
             f"Strategy: {strategy_label} (Solver: {config.DEFAULT_SOLVER}, Reduction: {reduction_detail}{scope_detail}, Max Iterations: {config.MAX_ISP_ITERATIONS})"
         )

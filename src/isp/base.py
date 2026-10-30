@@ -1,3 +1,5 @@
+import time
+
 import cvxpy as cp
 import numpy as np
 
@@ -40,6 +42,7 @@ class BaseISPSolver:
         custom_edge_costs: dict[tuple[tuple[int, int], tuple[int, int]], float]
         | None = None,
         terrain_decision_nodes: set[tuple[int, int]] | None = None,
+        terrain_only: bool = False,
     ) -> MIPFormulation | None:
         return build_base_formulation(
             grid=grid,
@@ -48,13 +51,16 @@ class BaseISPSolver:
             active_edges=active_edges,
             custom_edge_costs=custom_edge_costs,
             terrain_decision_nodes=terrain_decision_nodes,
+            terrain_only=terrain_only,
         )
 
     def _solve_milp(self, problem: cp.Problem) -> tuple[bool, float]:
+        solve_started = time.perf_counter()
         solver = self._select_solver()
 
         if solver is None:
             self.last_solver_status = "SOLVER_NOT_FOUND"
+            self.last_solver_runtime_sec = time.perf_counter() - solve_started
             return False, float("inf")
 
         solver_kwargs = {}
@@ -67,7 +73,10 @@ class BaseISPSolver:
             problem.solve(solver=solver, **solver_kwargs)
         except (cp.SolverError, ValueError, TypeError, RuntimeError):
             self.last_solver_status = "SOLVER_ERROR"
+            self.last_solver_runtime_sec = time.perf_counter() - solve_started
             return False, float("inf")
+
+        self.last_solver_runtime_sec = time.perf_counter() - solve_started
 
         if problem.status == cp.OPTIMAL and problem.value is not None:
             self.last_solver_status = "OPTIMAL"
