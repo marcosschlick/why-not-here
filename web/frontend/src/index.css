@@ -164,7 +164,6 @@ kbd,
 }
 .topbar-brand,
 .topbar-actions-group,
-.brand-title-row,
 .topbar-segmented-stepper,
 .canvas-actions-bar,
 .solve-action-group,
@@ -212,9 +211,6 @@ kbd,
 .brand-text {
   min-width: 0;
 }
-.brand-title-row {
-  gap: 0.5rem;
-}
 .brand-text h1 {
   margin: 0;
   color: var(--text-inverse);
@@ -235,9 +231,7 @@ kbd,
   justify-content: flex-end;
   gap: 0.625rem;
 }
-.topbar-context-chip,
-.brand-badge,
-.brand-badge-wnh {
+.topbar-context-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
@@ -249,9 +243,7 @@ kbd,
   font-size: 0.7rem;
   font-weight: 650;
 }
-.context-chip-dot,
-.brand-badge-dot,
-.brand-badge-wnh-dot {
+.context-chip-dot {
   width: 0.45rem;
   height: 0.45rem;
   background: var(--azure-blue);
@@ -635,8 +627,7 @@ kbd,
 .form-group.inline {
   flex: 1;
 }
-.form-group label,
-.checkbox-label {
+.form-group label {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -1379,12 +1370,6 @@ kbd,
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
 }
-.checkbox-label {
-  justify-content: flex-start;
-}
-.checkbox-label input {
-  accent-color: var(--azure-blue);
-}
 .queue-progress-info {
   display: flex;
   justify-content: space-between;
@@ -2070,8 +2055,7 @@ kbd,
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
 }
-.about-meta-box,
-.about-meta-item {
+.about-meta-box {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
