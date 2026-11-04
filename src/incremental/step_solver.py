@@ -4,15 +4,57 @@ import cvxpy as cp
 import numpy as np
 
 from ..config import (
+    BASE_TERRAIN,
     DEFAULT_SOLVER,
+    IMPASSABLE_TERRAINS,
     MIP_GAP_TOLERANCE,
     SOLVER_TIMEOUT_SEC,
+    WATER_TERRAIN,
 )
 from ..grid import Grid
 from ..isp.base import BaseISPSolver
 from ..isp.precheck import validate_alternative_path
 from ..isp.semantics import SemanticModifications
+from ..isp.types import MIPFormulation
 from ..reduction import ReducedGraph, prepare_subgraph
+
+
+def external_edge_cost(
+    grid: Grid,
+    formulation: MIPFormulation,
+    edge: tuple[tuple[int, int], tuple[int, int]],
+) -> cp.Expression | float | None:
+    u, v = edge
+    isp = formulation.isp
+    if abs(grid.get_slope(u, v)) > grid.max_slope_deg:
+        return None
+    for node in edge:
+        cell = grid.get_cell(node)
+        if cell.obstacle and node not in isp.obstacle_to_idx:
+            return None
+        if cell.terrain in IMPASSABLE_TERRAINS:
+            water_open = cell.terrain == WATER_TERRAIN and (
+                node in grid.water_overrides or node in isp.water_to_idx
+            )
+            if not water_open:
+                return None
+
+    distance = grid.get_distance(u, v)
+    if edge in grid.robot_speed_edges:
+        return distance / grid.robot_speed_theoretical
+
+    factor = distance * (1.0 + grid.get_slope_penalty(u, v)) / 2.0
+    cost: cp.Expression | float = 0.0
+    for node in edge:
+        speed = grid.speeds.get(grid.get_cell(node).terrain, 0.0)
+        speed = speed if speed > 0.0 else grid.speeds[BASE_TERRAIN]
+        cost += factor / speed
+        if node in isp.terrain_to_idx and formulation.z_terrain is not None:
+            start = isp.terrain_to_idx[node] * len(isp.terrain_classes)
+            for j, terrain in enumerate(isp.terrain_classes):
+                delta = factor * (1.0 / grid.speeds[terrain] - 1.0 / speed)
+                cost += delta * formulation.z_terrain[start + j]
+    return cost
 
 
 class IncrementalISPSolver(BaseISPSolver):
@@ -92,7 +134,7 @@ class IncrementalISPSolver(BaseISPSolver):
             if len(q) < 2:
                 continue
             x_q = np.zeros(len(formulation.isp.edges), dtype=np.float64)
-            c_ext = 0.0
+            c_ext: cp.Expression | float = 0.0
             valid_q = True
             for r in range(len(q) - 1):
                 edge = (q[r], q[r + 1])
@@ -101,6 +143,15 @@ class IncrementalISPSolver(BaseISPSolver):
                 else:
                     if costs and edge in costs:
                         c_ext += costs[edge]
+                    elif (
+                        reduced_graph is not None
+                        and reduced_graph.method_name == "FLOODFILL"
+                    ):
+                        edge_cost = external_edge_cost(grid, formulation, edge)
+                        if edge_cost is None:
+                            valid_q = False
+                            break
+                        c_ext += edge_cost
                     else:
                         edge_cost = grid.get_cost(edge[0], edge[1])
                         if edge_cost == float("inf"):

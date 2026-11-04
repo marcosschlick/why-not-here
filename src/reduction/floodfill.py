@@ -1,8 +1,9 @@
-from collections import deque
+from bisect import bisect_right
+from fractions import Fraction
+from itertools import pairwise
 
 from ..grid import Grid
 from .base import ReducedGraph, extract_induced_edges
-from .bbox import extract_bbox
 
 
 def extract_floodfill(
@@ -11,56 +12,25 @@ def extract_floodfill(
     p_prime: list[tuple[int, int]],
 ) -> ReducedGraph:
     boundary = set(p_star) | set(p_prime)
-    bbox_graph = extract_bbox(grid, p_star, p_prime)
-    if not boundary:
-        return ReducedGraph(
-            underlying_grid=grid,
-            nodes=set(),
-            edges=set(),
-            method_name="FLOODFILL",
-        )
+    crossings: dict[int, list[Fraction]] = {}
+    for path in (p_star, p_prime):
+        for (r1, c1), (r2, c2) in pairwise(path):
+            if r1 == r2:
+                continue
+            for row in range(min(r1, r2), max(r1, r2)):
+                column = Fraction(c1 * (r2 - r1) + (row - r1) * (c2 - c1), r2 - r1)
+                crossings.setdefault(row, []).append(column)
 
-    r_coords = [p[0] for p in boundary]
-    c_coords = [p[1] for p in boundary]
-    r_min = min(r_coords)
-    r_max = max(r_coords)
-    c_min = min(c_coords)
-    c_max = max(c_coords)
-
-    exterior = set()
-    queue = deque()
-
-    for r in range(r_min, r_max + 1):
-        for c in (c_min, c_max):
-            pt = (r, c)
-            if pt not in boundary and pt not in exterior:
-                exterior.add(pt)
-                queue.append(pt)
-
-    for c in range(c_min, c_max + 1):
-        for r in (r_min, r_max):
-            pt = (r, c)
-            if pt not in boundary and pt not in exterior:
-                exterior.add(pt)
-                queue.append(pt)
-
-    while queue:
-        curr = queue.popleft()
-        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            nr, nc = curr[0] + dr, curr[1] + dc
-            if r_min <= nr <= r_max and c_min <= nc <= c_max:
-                nbr = (nr, nc)
-                if nbr not in boundary and nbr not in exterior:
-                    exterior.add(nbr)
-                    queue.append(nbr)
-
-    nodes = bbox_graph.nodes - exterior
-
-    edges = extract_induced_edges(grid, nodes)
+    nodes = set(boundary)
+    for row, columns in crossings.items():
+        columns.sort()
+        for column in range(max(0, int(columns[0])), min(grid.w, int(columns[-1]) + 1)):
+            if (row, column) not in boundary and bisect_right(columns, column) % 2:
+                nodes.add((row, column))
 
     return ReducedGraph(
         underlying_grid=grid,
         nodes=nodes,
-        edges=edges,
+        edges=extract_induced_edges(grid, nodes),
         method_name="FLOODFILL",
     )
