@@ -794,7 +794,7 @@ export function App() {
                     : "Save Configuration"
                   : isBatchMode
                     ? batchReviewIndex < queue.length - 1
-                      ? `Save Route & Next Map (${batchReviewIndex + 2}/${queue.length}) →`
+                      ? "Save Route & Next Map →"
                       : `Solve Batch (${queue.length} Runs)`
                     : "Solve ISP"
               }
