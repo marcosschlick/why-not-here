@@ -147,7 +147,7 @@ class IncrementalISPSolver(BaseISPSolver):
                         c_ext += costs[edge]
                     elif (
                         reduced_graph is not None
-                        and reduced_graph.method_name in {"FLOODFILL", "PATH_ONLY"}
+                        and reduced_graph.method_name in {"BBOX", "FLOODFILL", "PATH_ONLY"}
                     ):
                         edge_cost = external_edge_cost(grid, formulation, edge)
                         if edge_cost is None:

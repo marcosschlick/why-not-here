@@ -62,7 +62,7 @@ def prepare_subgraph(
                 edge: cost for edge, cost in custom_edge_costs.items() if edge in active_edges
             }
             return active_nodes, active_edges, custom_edge_costs
-        if reduced_graph.method_name == "FLOODFILL":
+        if reduced_graph.method_name in {"BBOX", "FLOODFILL"}:
             return active_nodes, active_edges, custom_edge_costs
         for edge, path in reduced_graph.custom_edge_paths.items():
             if not decision_nodes.intersection(path):
