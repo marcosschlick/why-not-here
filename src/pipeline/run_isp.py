@@ -25,6 +25,7 @@ from .artifact_names import (
     RESULTS_DIRECTORY_NAME,
     RUN_LOG_FILENAME,
 )
+from .path_metrics import measure_paths
 from .utils import create_alternative_path, get_project_path, prepare_endpoints
 
 
@@ -127,7 +128,8 @@ def run_isp(
 
     cost_user_orig = ISPValidator.compute_path_cost(grid, p_user)
 
-    msg_star = f"Optimal path ({config.DEFAULT_PLANNER}): {len(p_star)} steps (cost: {cost_star:.2f}s, expanded: {expanded} nodes)"
+    path_metrics = measure_paths(p_star, p_user, grid.cell_size)
+    msg_star = f"Optimal path ({config.DEFAULT_PLANNER}): {len(p_star)} points, {len(p_star) - 1} edges (cost: {cost_star:.2f}s, expanded: {expanded} nodes)"
     log_lines.append(msg_star)
     if verbose:
         print(msg_star)
@@ -135,9 +137,9 @@ def run_isp(
     if cost_user_orig < float("inf"):
         diff_sec = cost_user_orig - cost_star
         pct = (diff_sec / cost_star) * 100.0 if cost_star > 0 else 0.0
-        msg_user = f"Alternative candidate path: {len(p_user)} steps (cost: {cost_user_orig:.2f}s, +{diff_sec:.2f}s / +{pct:.1f}%)"
+        msg_user = f"Alternative candidate path: {len(p_user)} points, {len(p_user) - 1} edges (cost: {cost_user_orig:.2f}s, +{diff_sec:.2f}s / +{pct:.1f}%)"
     else:
-        msg_user = f"Alternative candidate path: {len(p_user)} steps (cost: impassable in original map)"
+        msg_user = f"Alternative candidate path: {len(p_user)} points, {len(p_user) - 1} edges (cost: impassable in original map)"
     log_lines.append(msg_user)
     if verbose:
         print(msg_user)
@@ -236,8 +238,11 @@ def run_isp(
             solver_status=solver_status,
             reduction_method=config.DEFAULT_REDUCTION_METHOD,
             cost_baseline_text=cost_baseline,
+            graph_nodes=solver.last_graph_nodes,
+            graph_edges=solver.last_graph_edges,
         )
 
+    isp_result.path_metrics = path_metrics
     out_dir = get_project_path(config.OUTPUT_DIR)
     results_dir = out_dir / RESULTS_DIRECTORY_NAME
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -368,6 +373,14 @@ def run_isp(
         f"ISP Status: {isp_result.solver_status} "
         f"(Method: {isp_result.reduction_method}, Iterations: {isp_result.iterations}, Time: {isp_result.runtime_sec:.3f}s)"
     )
+    graph_line = f"Formulation graph: nodes={isp_result.graph_nodes}, directed_edges={isp_result.graph_edges}"
+    path_line = (
+        f"Path geometry: optimal={path_metrics['optimal_length_cells']:.3f} cells / {path_metrics['optimal_length_m']:.3f} m, "
+        f"alternative={path_metrics['alternative_length_cells']:.3f} cells / {path_metrics['alternative_length_m']:.3f} m, "
+        f"discrete Hausdorff={path_metrics['hausdorff_cells']:.3f} cells / {path_metrics['hausdorff_m']:.3f} m, "
+        f"cell_size={grid.cell_size:g} m"
+    )
+    log_lines.extend([graph_line, path_line])
     if isp_result.iteration_metrics:
         solver_attempts = sum(
             bool(metric.get("solver_attempted"))
@@ -389,7 +402,7 @@ def run_isp(
                 "validation={validation:.3f}s, status={status}, "
                 "solver_attempted={attempted}, completed={completed}, "
                 "candidate_available={candidate}, competing_paths={before}->{after}, "
-                "cut_added={cut}".format(
+                "cut_added={cut}, graph_nodes={nodes}, graph_directed_edges={edges}".format(
                     iteration=metric.get("iteration", "-"),
                     preparation=float(metric.get("preparation_sec", 0.0)),
                     model_build=float(metric.get("model_build_sec", 0.0)),
@@ -402,6 +415,8 @@ def run_isp(
                     before=metric.get("competing_paths_before", 0),
                     after=metric.get("competing_paths_after", 0),
                     cut=metric.get("cut_added", False),
+                    nodes=metric.get("graph_nodes"),
+                    edges=metric.get("graph_edges"),
                 )
             )
     log_lines.append(f"Solution Quality: {solution_quality}")
@@ -439,6 +454,8 @@ def run_isp(
             f"(Method: {isp_result.reduction_method}, Iterations: {isp_result.iterations}, Time: {isp_result.runtime_sec:.3f}s)"
         )
         print(f"Solution Quality: {solution_quality}")
+        print(graph_line)
+        print(path_line)
         if isp_result.iteration_metrics:
             print(
                 f"Incremental diagnostics: {solver_attempts} solver attempts, "

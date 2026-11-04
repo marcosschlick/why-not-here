@@ -87,6 +87,8 @@ class IncrementalISPSolver(BaseISPSolver):
         self.last_model_build_sec = 0.0
         self.last_solver_runtime_sec = 0.0
         self.last_solver_status = None
+        self.last_graph_nodes = None
+        self.last_graph_edges = None
         preparation_started = time.perf_counter()
         is_valid, status, _ = validate_alternative_path(
             grid, start, goal, alternative_path

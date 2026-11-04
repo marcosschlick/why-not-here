@@ -139,6 +139,8 @@ Controls subgraph pruning heuristics to reduce problem dimension before optimiza
 
 Reduction and semantic closure are separate stages. The common entry point protects the intervention domain and its incident neighbors before sparsification. Subsequent preparation adds nodes and edges needed for semantic decisions, except for `FLOODFILL`, whose optimization graph stays within the extracted region. The even-odd interior and conservative chain contraction are explicit grid adaptations of Eder's preprocessing description. Reduced graphs can omit competing paths, so global validation remains necessary.
 
+Result logs and the API report the number of nodes and directed edges in the actual ISP formulation. Incremental results also report each iteration's graph size and the last constructed graph size; unavailable sizes are null. Path geometry includes lengths and symmetric discrete Hausdorff distance between cell centers in grid-cell units and meters. The monolithic runtime covers reduction and solving but excludes global validation; incremental runtime covers the closed loop, including validation, so these times have different boundaries.
+
 ---
 
 ## 9. Storage & Paths (`src/config/config_storage.py`)

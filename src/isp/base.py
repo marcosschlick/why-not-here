@@ -27,6 +27,8 @@ class BaseISPSolver:
         self.mip_gap = mip_gap
         self.tolerance = tolerance
         self.last_solver_status: str | None = None
+        self.last_graph_nodes: int | None = None
+        self.last_graph_edges: int | None = None
 
     def _select_solver(self) -> str | None:
         if self.solver_name in cp.installed_solvers():
@@ -43,7 +45,9 @@ class BaseISPSolver:
         | None = None,
         terrain_only: bool = False,
     ) -> MIPFormulation | None:
-        return build_base_formulation(
+        self.last_graph_nodes = None
+        self.last_graph_edges = None
+        formulation = build_base_formulation(
             grid=grid,
             alternative_path=alternative_path,
             active_nodes=active_nodes,
@@ -51,6 +55,10 @@ class BaseISPSolver:
             custom_edge_costs=custom_edge_costs,
             terrain_only=terrain_only,
         )
+        if formulation is not None:
+            self.last_graph_nodes = len(formulation.isp.nodes)
+            self.last_graph_edges = len(formulation.isp.edges)
+        return formulation
 
     def _solve_milp(self, problem: cp.Problem) -> tuple[bool, float]:
         solve_started = time.perf_counter()

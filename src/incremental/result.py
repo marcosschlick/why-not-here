@@ -18,3 +18,6 @@ class ClosedLoopResult:
     reduction_method: str = "NONE"
     cost_baseline_text: str = ""
     iteration_metrics: list[dict[str, object]] = field(default_factory=list)
+    graph_nodes: int | None = None
+    graph_edges: int | None = None
+    path_metrics: dict[str, float | int] | None = None

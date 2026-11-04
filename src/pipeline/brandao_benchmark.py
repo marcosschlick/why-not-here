@@ -7,7 +7,11 @@ from src.grid.grid import Grid
 from src.incremental import ISPValidator, solve_closed_loop, validate_alternative_path
 from src.planning.astar import astar
 
-from .artifact_names import MAP_DATA_FILENAME, MAP_DIRECTORY_NAME, RESULTS_DIRECTORY_NAME
+from .artifact_names import (
+    MAP_DATA_FILENAME,
+    MAP_DIRECTORY_NAME,
+    RESULTS_DIRECTORY_NAME,
+)
 from .utils import get_project_path, prepare_endpoints
 
 BENCHMARK_LOG_FILENAME = "brandao_benchmark.log"
@@ -159,6 +163,7 @@ def run_brandao_benchmark(map_path: str | Path | None = None) -> Path:
                 f"A* route: {len(optimal_path)} nodes, cost={optimal_cost:.6f}",
                 f"Alternative route: {len(alternative_path)} nodes, cost={alternative_cost:.6f}, distinct=True, traversable=True",
                 f"ISP status: {result.solver_status}; success={result.success}; iterations={result.iterations}; competing_paths={result.competing_paths_count}; runtime={result.runtime_sec:.3f}s",
+                f"Formulation graph: nodes={result.graph_nodes}; directed_edges={result.graph_edges}",
                 f"Candidate available: {result.modifications is not None}; terrain changes={terrain_changes}; final alternative cost={result.final_alternative_cost}",
                 f"Explanation: {result.explanation_text}",
             ]
@@ -177,7 +182,7 @@ def run_brandao_benchmark(map_path: str | Path | None = None) -> Path:
             )
             for metric in result.iteration_metrics:
                 log_lines.append(
-                    "Iteration {iteration}: preparation={preparation:.3f}s, model_build={model_build:.3f}s, solver={solver:.3f}s, validation={validation:.3f}s, status={status}, competing_paths={before}->{after}, cut_added={cut}".format(
+                    "Iteration {iteration}: preparation={preparation:.3f}s, model_build={model_build:.3f}s, solver={solver:.3f}s, validation={validation:.3f}s, status={status}, competing_paths={before}->{after}, cut_added={cut}, graph_nodes={nodes}, graph_directed_edges={edges}".format(
                         iteration=metric.get("iteration", "-"),
                         preparation=float(metric.get("preparation_sec", 0.0)),
                         model_build=float(metric.get("model_build_sec", 0.0)),
@@ -187,6 +192,8 @@ def run_brandao_benchmark(map_path: str | Path | None = None) -> Path:
                         before=metric.get("competing_paths_before", 0),
                         after=metric.get("competing_paths_after", 0),
                         cut=metric.get("cut_added", False),
+                        nodes=metric.get("graph_nodes"),
+                        edges=metric.get("graph_edges"),
                     )
                 )
     except (OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:

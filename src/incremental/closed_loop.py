@@ -118,6 +118,16 @@ class ClosedLoopISPSolver:
                 reduction_method=method,
                 cost_baseline_text=baseline_text,
                 iteration_metrics=iteration_metrics,
+                graph_nodes=next(
+                    (m["graph_nodes"] for m in reversed(iteration_metrics)
+                     if m.get("graph_nodes") is not None),
+                    None,
+                ),
+                graph_edges=next(
+                    (m["graph_edges"] for m in reversed(iteration_metrics)
+                     if m.get("graph_edges") is not None),
+                    None,
+                ),
             )
 
         if start == goal and len(alternative_path) == 1:
@@ -182,6 +192,8 @@ class ClosedLoopISPSolver:
                 "competing_paths_before": len(Q),
                 "competing_paths_after": len(Q),
                 "cut_added": False,
+                "graph_nodes": None,
+                "graph_edges": None,
             }
             iteration_metrics.append(metric)
             elapsed = time.perf_counter() - start_time
@@ -229,6 +241,8 @@ class ClosedLoopISPSolver:
             metric["model_build_sec"] = step_solver.last_model_build_sec
             metric["solver_sec"] = step_solver.last_solver_runtime_sec
             metric["solver_status"] = step_solver.last_solver_status or "SOLVER_FAILED"
+            metric["graph_nodes"] = step_solver.last_graph_nodes
+            metric["graph_edges"] = step_solver.last_graph_edges
 
             if step_solver.last_solver_status == "TIMEOUT":
                 return timeout_result(iteration, len(Q))

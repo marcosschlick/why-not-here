@@ -87,6 +87,10 @@ class PipelineRunner:
                             "solver_status": result.solver_status,
                             "runtime_sec": round(result.runtime_sec, 3),
                             "iterations": result.iterations,
+                            "graph_nodes": result.graph_nodes,
+                            "graph_edges": result.graph_edges,
+                            "path_metrics": result.path_metrics,
+                            "iteration_metrics": result.iteration_metrics,
                             "original_optimal_cost": _finite_round(
                                 result.original_optimal_cost, 4
                             ),

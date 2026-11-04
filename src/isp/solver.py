@@ -21,6 +21,8 @@ class ISPSolver(BaseISPSolver):
         reduced_graph: ReducedGraph | None = None,
     ) -> tuple[bool, SemanticModifications | None, float]:
         self.last_solver_status = None
+        self.last_graph_nodes = None
+        self.last_graph_edges = None
         is_valid, status, _ = validate_alternative_path(
             grid, start, goal, alternative_path
         )
