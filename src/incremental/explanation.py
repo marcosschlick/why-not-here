@@ -85,7 +85,7 @@ def generate_explanation_text(
         for (original_name, final_name), count in counts.items():
             cell_label = "cell" if count == 1 else "cells"
             lines.append(
-                f"- Convert {count} terrain {cell_label} from {original_name} to {final_name} along the desired or accumulated competing routes."
+                f"- Convert {count} terrain {cell_label} from {original_name} to {final_name} along the desired route."
             )
 
     if has_obstacle:

@@ -18,7 +18,6 @@ class ISPSemantics:
         active_edges: set[tuple[tuple[int, int], tuple[int, int]]] | None = None,
         custom_edge_costs: dict[tuple[tuple[int, int], tuple[int, int]], float]
         | None = None,
-        terrain_decision_nodes: set[tuple[int, int]] | None = None,
         terrain_only: bool = False,
     ) -> None:
         self.grid = grid
@@ -31,11 +30,7 @@ class ISPSemantics:
         self.terrain_only = terrain_only
 
         path_nodes = set(candidate_path)
-        terrain_domain = (
-            path_nodes
-            if terrain_decision_nodes is None
-            else terrain_decision_nodes | path_nodes
-        )
+        terrain_domain = path_nodes
 
         self.nodes: list[tuple[int, int]] = []
         self.node_to_idx: dict[tuple[int, int], int] = {}

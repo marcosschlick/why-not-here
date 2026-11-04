@@ -165,7 +165,6 @@ def build_base_formulation(
     active_edges: set[tuple[tuple[int, int], tuple[int, int]]] | None = None,
     custom_edge_costs: dict[tuple[tuple[int, int], tuple[int, int]], float]
     | None = None,
-    terrain_decision_nodes: set[tuple[int, int]] | None = None,
     terrain_only: bool = False,
 ) -> MIPFormulation | None:
     isp = ISPSemantics(
@@ -174,7 +173,6 @@ def build_base_formulation(
         active_nodes=active_nodes,
         active_edges=active_edges,
         custom_edge_costs=custom_edge_costs,
-        terrain_decision_nodes=terrain_decision_nodes,
         terrain_only=terrain_only,
     )
 
@@ -286,6 +284,10 @@ def build_base_formulation(
             extra_constraints.append(
                 cp.sum(z_terrain[i * class_count : (i + 1) * class_count]) == 1.0
             )
+            original_speed = grid.speeds[grid.get_cell(isp.terrain_nodes[i]).terrain]
+            for j, terrain in enumerate(isp.terrain_classes):
+                if grid.speeds[terrain] < original_speed:
+                    extra_constraints.append(z_terrain[i * class_count + j] == 0.0)
 
     if z_water is not None:
         extra_constraints.append(z_water == 1.0)

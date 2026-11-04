@@ -192,7 +192,6 @@ class ClosedLoopISPSolver:
             step_solver.timeout = max(0.1, min(self.timeout, self.global_timeout - elapsed))
 
             terrain_decision_nodes = set(alternative_path)
-            terrain_decision_nodes.update(node for path in Q for node in path)
             preparation_started = time.perf_counter()
             reduced_graph = create_reduced_graph(
                 full_grid,

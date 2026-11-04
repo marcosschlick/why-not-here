@@ -63,14 +63,11 @@ class IncrementalISPSolver(BaseISPSolver):
             competing_paths = [
                 reduced_graph.expand_path(path) for path in competing_paths
             ]
-        terrain_decision_nodes = set(alternative_path)
-        terrain_decision_nodes.update(node for path in competing_paths for node in path)
         active_nodes, active_edges, costs = prepare_subgraph(
             grid,
             alternative_path,
             reduced_graph,
             None,
-            terrain_decision_nodes=terrain_decision_nodes,
         )
         self.last_preparation_sec = time.perf_counter() - preparation_started
 
@@ -81,7 +78,6 @@ class IncrementalISPSolver(BaseISPSolver):
             active_nodes=active_nodes,
             active_edges=active_edges,
             custom_edge_costs=costs,
-            terrain_decision_nodes=terrain_decision_nodes,
             terrain_only=terrain_only,
         )
         if formulation is None:
