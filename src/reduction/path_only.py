@@ -19,6 +19,7 @@ def extract_path_only(
         )
 
     edges = set(pairwise(p_star)) | set(pairwise(p_prime))
+    edges |= {(v, u) for u, v in edges}
 
     return ReducedGraph(
         underlying_grid=grid,
