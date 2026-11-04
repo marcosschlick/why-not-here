@@ -57,6 +57,11 @@ def prepare_subgraph(
             custom_edge_costs = dict(reduced_graph.custom_edge_costs)
         else:
             custom_edge_costs = dict(custom_edge_costs)
+        if reduced_graph.method_name == "PATH_ONLY":
+            custom_edge_costs = {
+                edge: cost for edge, cost in custom_edge_costs.items() if edge in active_edges
+            }
+            return active_nodes, active_edges, custom_edge_costs
         if reduced_graph.method_name == "FLOODFILL":
             return active_nodes, active_edges, custom_edge_costs
         for edge, path in reduced_graph.custom_edge_paths.items():
