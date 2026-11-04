@@ -62,6 +62,7 @@ const MODIFICATION_TERRAIN_RGB: Rgb = [255, 59, 141];
 const MODIFICATION_OBSTACLE_RGB: Rgb = [198, 255, 0];
 const MODIFICATION_SLOPE_RGB: Rgb = [168, 85, 247];
 const MODIFICATION_WATER_RGB: Rgb = [0, 201, 199];
+const MODIFICATION_SPEED_RGB: Rgb = [219, 84, 97];
 const MODIFICATION_EDGE_RGB: Rgb = [40, 40, 40];
 const GRID_RGB: Rgb = [255, 255, 255];
 const MODIFICATION_RADIUS = 0.39;
@@ -192,6 +193,38 @@ function drawModificationCircle(
   ctx.strokeStyle = rgba(MODIFICATION_EDGE_RGB);
   ctx.lineWidth = cellSize * MODIFICATION_EDGE_WIDTH;
   ctx.stroke();
+}
+
+function drawSpeedArrow(
+  ctx: CanvasRenderingContext2D,
+  from: GridPoint,
+  to: GridPoint,
+  cellSize: number,
+  offset: number,
+) {
+  const angle = Math.atan2(to[0] - from[0], to[1] - from[1]);
+  if (from[0] === to[0] && from[1] === to[1]) return;
+  ctx.save();
+  ctx.translate(
+    ((from[1] + to[1] + 1) / 2 - Math.sin(angle) * offset) * cellSize,
+    ((from[0] + to[0] + 1) / 2 + Math.cos(angle) * offset) * cellSize,
+  );
+  ctx.rotate(angle);
+  ctx.beginPath();
+  ctx.moveTo(-0.3 * cellSize, 0);
+  ctx.lineTo(0.3 * cellSize, 0);
+  ctx.moveTo(0.08 * cellSize, -0.2 * cellSize);
+  ctx.lineTo(0.3 * cellSize, 0);
+  ctx.lineTo(0.08 * cellSize, 0.2 * cellSize);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = rgba(MODIFICATION_EDGE_RGB);
+  ctx.lineWidth = 0.18 * cellSize;
+  ctx.stroke();
+  ctx.strokeStyle = rgba(MODIFICATION_SPEED_RGB);
+  ctx.lineWidth = 0.1 * cellSize;
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawSlopeEdge(
@@ -494,8 +527,8 @@ export function TacticalMapCanvas({
   );
   const { h, w, start, goal, terrain, elevation, obstacle } = mapData;
   const effectiveCellSize = cellSize * zoomLevel;
-  const logicalWidth = Math.max(1, Math.round(w * effectiveCellSize));
-  const logicalHeight = Math.max(1, Math.round(h * effectiveCellSize));
+  const logicalWidth = Math.max(1, w * effectiveCellSize);
+  const logicalHeight = Math.max(1, h * effectiveCellSize);
   const renderScale = Math.min(
     deviceScale,
     4096 / Math.max(1, logicalWidth, logicalHeight),
@@ -538,8 +571,7 @@ export function TacticalMapCanvas({
         const y = Math.round(row * effectiveCellSize);
         const width = Math.round((col + 1) * effectiveCellSize) - x;
         const height = Math.round((row + 1) * effectiveCellSize) - y;
-        const terrainName =
-          terrain[row]?.[col] || "GRASS";
+        const terrainName = terrain[row]?.[col] || "GRASS";
         const isObstacle = (obstacle[row]?.[col] ?? 0) !== 0;
         const cellElevation = elevation[row]?.[col] ?? 0;
         const baseTerrainColor = terrainColor(
@@ -588,7 +620,9 @@ export function TacticalMapCanvas({
     );
     if (conflictingCellChanges.length > 0) {
       console.error(
-        new Error("Cell modification categories overlap at the same grid cells."),
+        new Error(
+          "Cell modification categories overlap at the same grid cells.",
+        ),
         conflictingCellChanges,
       );
     }
@@ -649,12 +683,20 @@ export function TacticalMapCanvas({
       effectiveCellSize,
     );
     for (const [from, to] of slopeEdges) {
-      drawSlopeEdge(
+      drawSlopeEdge(ctx, from, to, MODIFICATION_SLOPE_RGB, effectiveCellSize);
+    }
+    const speedEdges = modifications?.robot_speed_edges ?? [];
+    const speedEdgeKeys = new Set(
+      speedEdges.map(([from, to]) => `${from[0]},${from[1]}:${to[0]},${to[1]}`),
+    );
+    for (const [from, to] of speedEdges) {
+      const reverseKey = `${to[0]},${to[1]}:${from[0]},${from[1]}`;
+      drawSpeedArrow(
         ctx,
         from,
         to,
-        MODIFICATION_SLOPE_RGB,
         effectiveCellSize,
+        speedEdgeKeys.has(reverseKey) ? 0.16 : 0,
       );
     }
 
@@ -827,7 +869,10 @@ export function TacticalMapLegend({
     modifications?.slope ?? modifications?.slope_edges?.length ?? 0;
   const waterCount =
     modifications?.water ?? modifications?.water_nodes?.length ?? 0;
-  const hasChanges = terrainCount + obstacleCount + slopeCount + waterCount > 0;
+  const speedCount =
+    modifications?.robot_speed ?? modifications?.robot_speed_edges?.length ?? 0;
+  const hasChanges =
+    terrainCount + obstacleCount + slopeCount + waterCount + speedCount > 0;
 
   return (
     <div className="canvas-legend" aria-label="Map legend">
@@ -878,7 +923,8 @@ export function TacticalMapLegend({
             {name.toLowerCase().replaceAll("_", " ")} (
             {Number(speed).toLocaleString("en-US", {
               maximumSignificantDigits: 6,
-            })} m/s)
+            })}{" "}
+            m/s)
           </span>
         ))}
         <span className="legend-item">
@@ -911,6 +957,22 @@ export function TacticalMapLegend({
             <span className="legend-item">
               <span className="legend-color legend-change-cell legend-change-water" />
               Water opened ({waterCount})
+            </span>
+          )}
+          {speedCount > 0 && (
+            <span className="legend-item">
+              <svg
+                className="legend-speed-arrow"
+                viewBox="0 0 20 14"
+                aria-hidden="true"
+              >
+                <path
+                  className="legend-speed-outline"
+                  d="M2 7h15M11 2l6 5-6 5"
+                />
+                <path className="legend-speed-color" d="M2 7h15M11 2l6 5-6 5" />
+              </svg>
+              Robot speed activated ({speedCount})
             </span>
           )}
         </div>

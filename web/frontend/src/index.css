@@ -1323,6 +1323,21 @@ kbd,
 .legend-change-water {
   background: var(--map-change-water);
 }
+.legend-speed-arrow {
+  width: 1.1rem;
+  height: 0.8rem;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.legend-speed-outline {
+  stroke: var(--shadow-grey);
+  stroke-width: 4;
+}
+.legend-speed-color {
+  stroke: var(--lobster-pink);
+  stroke-width: 2;
+}
 
 .queue-panel-header,
 .results-header {
@@ -1692,6 +1707,19 @@ kbd,
 }
 .metric-card.modifications-card {
   border-top: 0.2rem solid var(--yale-blue);
+}
+.iteration-table-wrapper {
+  overflow-x: auto;
+}
+.iteration-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.iteration-table th,
+.iteration-table td {
+  padding: 0.45rem;
+  border-bottom: 1px solid var(--border-subtle);
 }
 .results-map-card {
   display: grid;

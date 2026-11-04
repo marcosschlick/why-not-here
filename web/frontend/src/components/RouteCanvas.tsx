@@ -40,7 +40,7 @@ export function RouteCanvas({
   batchStepper,
 }: RouteCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [wrapper, setWrapper] = useState<HTMLDivElement | null>(null);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [hoveredCell, setHoveredCell] = useState<GridPoint | null>(null);
   const [isShiftDown, setIsShiftDown] = useState<boolean>(false);
@@ -58,11 +58,12 @@ export function RouteCanvas({
 
   const { h, w, start, goal, connectivity, terrain, elevation, obstacle } =
     mapData;
-  const cellSize = useMapCanvasFit(wrapperRef, h, w);
+  const cellSize = useMapCanvasFit(wrapper, h, w);
 
   if (zoomMapData !== mapData) {
     setZoomMapData(mapData);
     setZoomLevel(1.0);
+    setHoveredCell(null);
   }
 
   const isConnectedToGoal =
@@ -116,13 +117,15 @@ export function RouteCanvas({
   useLayoutEffect(() => {
     if (mapDataRef.current !== mapData) {
       undoHistoryRef.current = [];
+      rawHoveredCellRef.current = null;
+      dragOriginRef.current = null;
+      strokeBasePathRef.current = null;
       setUndoDepth(0);
       mapDataRef.current = mapData;
     }
   }, [mapData]);
 
   useEffect(() => {
-    const wrapper = wrapperRef.current;
     if (!wrapper) return;
 
     function handleWheel(e: WheelEvent) {
@@ -138,7 +141,7 @@ export function RouteCanvas({
 
     wrapper.addEventListener("wheel", handleWheel, { passive: false });
     return () => wrapper.removeEventListener("wheel", handleWheel);
-  }, []);
+  }, [wrapper]);
 
   function getCellFromCoordinates(
     event: ReactPointerEvent<HTMLCanvasElement>,
@@ -582,7 +585,7 @@ export function RouteCanvas({
         </div>
       </div>
 
-      <div className="canvas-wrapper" ref={wrapperRef}>
+      <div className="canvas-wrapper" ref={setWrapper}>
         <TacticalMapCanvas
           mapData={mapData}
           userPath={userPath}

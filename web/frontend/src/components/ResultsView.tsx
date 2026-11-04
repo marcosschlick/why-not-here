@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type {
   LastResult,
@@ -30,6 +30,27 @@ interface ResultsViewProps {
 
 function getArtifactFilename(artifactPath: string): string {
   return artifactPath.split("?")[0].split("/").pop() || artifactPath;
+}
+
+function formatMetric(value: number | null | undefined, decimals = 0): string {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value.toLocaleString("en-US", { maximumFractionDigits: decimals })
+    : "Unavailable";
+}
+
+function formatDistance(
+  cells: number | null | undefined,
+  meters: number | null | undefined,
+): string {
+  const cellValue =
+    cells == null || !Number.isFinite(cells)
+      ? "Unavailable"
+      : `${formatMetric(cells, 3)} cells`;
+  const meterValue =
+    meters == null || !Number.isFinite(meters)
+      ? "Unavailable"
+      : `${formatMetric(meters, 3)} m`;
+  return `${cellValue} / ${meterValue}`;
 }
 
 function getArtifactTitle(artifactPath: string): string {
@@ -115,7 +136,8 @@ export function ResultsView({
   const [internalBatchIndex, setInternalBatchIndex] = useState<number>(0);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const mapCanvasContainerRef = useRef<HTMLDivElement | null>(null);
+  const [mapCanvasContainer, setMapCanvasContainer] =
+    useState<HTMLDivElement | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [hoveredCell, setHoveredCell] = useState<GridPoint | null>(null);
 
@@ -170,14 +192,15 @@ export function ResultsView({
     : userPath;
   const mapHeight = currentMapData?.h;
   const mapWidth = currentMapData?.w;
-  const mapCellSize = useMapCanvasFit(
-    mapCanvasContainerRef,
-    mapHeight,
-    mapWidth,
-  );
+  const mapCellSize = useMapCanvasFit(mapCanvasContainer, mapHeight, mapWidth);
   const [previousMapData, setPreviousMapData] = useState(originalMapData);
-  if (previousMapData !== originalMapData) {
+  const [previousBatchIndex, setPreviousBatchIndex] = useState(currentBatchIdx);
+  if (
+    previousMapData !== originalMapData ||
+    previousBatchIndex !== currentBatchIdx
+  ) {
     setPreviousMapData(originalMapData);
+    setPreviousBatchIndex(currentBatchIdx);
     setHoveredCell(null);
     setZoomLevel(1.0);
   }
@@ -197,7 +220,7 @@ export function ResultsView({
       currentStatus === "awaiting_route");
 
   useEffect(() => {
-    const wrapper = mapCanvasContainerRef.current;
+    const wrapper = mapCanvasContainer;
     if (!wrapper) return;
 
     function handleWheel(e: WheelEvent) {
@@ -213,7 +236,7 @@ export function ResultsView({
 
     wrapper.addEventListener("wheel", handleWheel, { passive: false });
     return () => wrapper.removeEventListener("wheel", handleWheel);
-  }, []);
+  }, [mapCanvasContainer]);
 
   function getCellFromCoordinates(
     event: ReactPointerEvent<HTMLCanvasElement>,
@@ -583,7 +606,7 @@ export function ResultsView({
 
           <div
             className="canvas-wrapper results-map-canvas-wrapper"
-            ref={mapCanvasContainerRef}
+            ref={setMapCanvasContainer}
           >
             <TacticalMapCanvas
               mapData={originalMapData ?? currentMapData}
@@ -691,6 +714,76 @@ export function ResultsView({
             <span className="metric-value">{altCostDisplay}</span>
           </div>
 
+          <div className="metric-card">
+            <span className="metric-label">Graph Nodes</span>
+            <span className="metric-value">
+              {formatMetric(currentResult.graph_nodes)}
+            </span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Directed Edges</span>
+            <span className="metric-value">
+              {formatMetric(currentResult.graph_edges)}
+            </span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Optimal Route Length</span>
+            <span className="metric-value">
+              {formatDistance(
+                currentResult.path_metrics?.optimal_length_cells,
+                currentResult.path_metrics?.optimal_length_m,
+              )}
+            </span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Alternative Route Length</span>
+            <span className="metric-value">
+              {formatDistance(
+                currentResult.path_metrics?.alternative_length_cells,
+                currentResult.path_metrics?.alternative_length_m,
+              )}
+            </span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Discrete Hausdorff Distance</span>
+            <span className="metric-value">
+              {formatDistance(
+                currentResult.path_metrics?.hausdorff_cells,
+                currentResult.path_metrics?.hausdorff_m,
+              )}
+            </span>
+          </div>
+
+          {currentConfig?.USE_INCREMENTAL_SOLVER && (
+            <div className="metric-card span-all">
+              <span className="metric-label">Graph Size by Iteration</span>
+              {currentResult.iteration_metrics?.length ? (
+                <div className="iteration-table-wrapper">
+                  <table className="iteration-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Iteration</th>
+                        <th scope="col">Nodes</th>
+                        <th scope="col">Directed edges</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentResult.iteration_metrics.map((metric, index) => (
+                        <tr key={index}>
+                          <td>{formatMetric(metric.iteration)}</td>
+                          <td>{formatMetric(metric.graph_nodes)}</td>
+                          <td>{formatMetric(metric.graph_edges)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <span>Unavailable</span>
+              )}
+            </div>
+          )}
+
           <div className="metric-card span-all modifications-card">
             <span className="metric-label">Semantic Modifications Applied</span>
             <div className="modifications-badges">
@@ -703,8 +796,19 @@ export function ResultsView({
               <span className="mod-badge slope">
                 Slopes: {currentResult.modifications?.slope ?? 0} leveled
               </span>
+              <span className="mod-badge water">
+                Water:{" "}
+                {currentResult.modifications?.water ??
+                  currentResult.modifications?.water_nodes?.length ??
+                  0}{" "}
+                opened
+              </span>
               <span className="mod-badge">
-                Robot speed: {currentResult.modifications?.robot_speed ?? 0} activated
+                Robot speed:{" "}
+                {currentResult.modifications?.robot_speed ??
+                  currentResult.modifications?.robot_speed_edges?.length ??
+                  0}{" "}
+                activated
               </span>
             </div>
           </div>

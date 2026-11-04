@@ -79,6 +79,23 @@ export interface LastResult {
   solver_status: string;
   runtime_sec: number;
   iterations: number;
+  graph_nodes?: number | null;
+  graph_edges?: number | null;
+  path_metrics?: {
+    optimal_length_cells?: number | null;
+    optimal_length_m?: number | null;
+    alternative_length_cells?: number | null;
+    alternative_length_m?: number | null;
+    hausdorff_cells?: number | null;
+    hausdorff_m?: number | null;
+  } | null;
+  iteration_metrics?:
+    | {
+        iteration?: number | null;
+        graph_nodes?: number | null;
+        graph_edges?: number | null;
+      }[]
+    | null;
   explanation_text: string;
   original_optimal_cost?: number | null;
   final_alternative_cost?: number | null;
