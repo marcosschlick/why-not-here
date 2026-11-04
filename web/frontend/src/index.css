@@ -2199,6 +2199,9 @@ kbd,
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
 }
+.batch-results-tabs-wrapper {
+  margin-bottom: 1.25rem;
+}
 .batch-stepper-label {
   justify-content: space-between;
   gap: 1rem;
