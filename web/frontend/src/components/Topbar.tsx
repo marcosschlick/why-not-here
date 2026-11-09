@@ -25,18 +25,17 @@ export function Topbar({
   return (
     <header className="app-topbar">
       <div className="topbar-brand">
-        <div className="brand-logo-frame" aria-label="Why Not Here Logo">
+        <h1 className="brand-logo-frame">
           <img
             src="/logo.svg"
-            alt="Why Not Here Logo"
+            alt="Why Not Here?"
             className="brand-logo-img"
-            width="38"
-            height="38"
+            width="1000"
+            height="256"
           />
-        </div>
+        </h1>
 
         <div className="brand-text">
-          <h1>Why Not Here?</h1>
           <span className="brand-tagline">
             Contrastive explanations for autonomous path planning via Inverse
             Shortest Path (ISP) on 2D grids

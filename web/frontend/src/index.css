@@ -185,44 +185,25 @@ kbd,
   gap: 0.75rem;
 }
 .brand-logo-frame {
-  display: grid;
   flex: 0 0 auto;
-  place-items: center;
-  width: 3.25rem;
-  height: 3.25rem;
-  padding: 0.25rem;
-  background: color-mix(in srgb, var(--yale-blue) 62%, var(--shadow-grey));
-  border: 1px solid color-mix(in srgb, var(--azure-blue) 62%, transparent);
+  width: 15rem;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.25rem 0.4rem;
+  background: var(--bright-snow);
   border-radius: var(--radius-md);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--bright-snow) 18%, transparent),
-    var(--shadow-xs);
-  transition:
-    transform var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out);
 }
 .brand-logo-img {
   display: block;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius-xs);
+  width: 100%;
+  height: auto;
 }
 .brand-text {
   min-width: 0;
 }
-.brand-text h1 {
-  margin: 0;
-  color: var(--text-inverse);
-  font-size: clamp(1rem, 1.6vw, 1.2rem);
-  font-weight: 750;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
-}
 .brand-tagline {
   display: block;
   max-width: 38rem;
-  margin-top: 0.25rem;
   color: color-mix(in srgb, var(--bright-snow) 74%, var(--azure-blue));
   font-size: 0.7rem;
   line-height: 1.35;
@@ -2329,11 +2310,6 @@ kbd,
   }
 }
 @media (hover: hover) and (pointer: fine) {
-  .brand-logo-frame:hover {
-    transform: translateY(-0.0625rem);
-    border-color: var(--azure-blue);
-    box-shadow: var(--shadow-sm);
-  }
   .stepper-tab:not(:disabled):hover {
     color: var(--bright-snow);
     background: color-mix(in srgb, var(--bright-snow) 10%, transparent);
@@ -2500,12 +2476,7 @@ kbd,
     display: none;
   }
   .brand-logo-frame {
-    width: 2.8rem;
-    height: 2.8rem;
-  }
-  .brand-logo-img {
-    width: 2.15rem;
-    height: 2.15rem;
+    width: min(15rem, 100%);
   }
   .btn-about span:last-child,
   .stepper-label {
@@ -2558,7 +2529,6 @@ kbd,
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
   }
-  .brand-logo-frame,
   .stepper-tab,
   .btn,
   .btn-about,
