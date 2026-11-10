@@ -455,6 +455,20 @@ export function QuestionnaireAdmin({
       }
     });
   }
+  function removeQuestionnaire() {
+    if (!selected) return;
+    if (
+      !window.confirm(
+        `Delete questionnaire "${selected.title}"? This action cannot be undone.`,
+      )
+    )
+      return;
+    void perform(async () => {
+      await api(`/questionnaires/${selected.id}`, "DELETE");
+      await loadList();
+      newDraft();
+    });
+  }
   function moveQuestion(index: number, direction: number) {
     if (!selected) return;
     const ids = selected.questions.map((question) => question.id);
@@ -1036,6 +1050,25 @@ export function QuestionnaireAdmin({
                     )}
                   </div>
                 )}
+              </section>
+              <section className="qa-panel qa-danger-panel">
+                <div className="qa-heading">
+                  <div>
+                    <span className="qa-overline">DANGER ZONE</span>
+                    <h2>Delete questionnaire</h2>
+                    <p className="qa-muted">
+                      Permanently delete this questionnaire along with its questions and scenarios.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="qa-danger"
+                    disabled={busy}
+                    onClick={removeQuestionnaire}
+                  >
+                    Delete questionnaire
+                  </button>
+                </div>
               </section>
             </>
           )}

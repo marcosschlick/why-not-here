@@ -327,3 +327,40 @@ def delete_question(questionnaire_id: int, question_id: int):
     except errors.ForeignKeyViolation as error:
         raise HTTPException(status_code=409, detail="Question has answers") from error
     return Response(status_code=204)
+
+
+@router.delete("/{questionnaire_id}", status_code=204)
+def delete_questionnaire(questionnaire_id: int):
+    try:
+        with connect_database() as connection:
+            get_questionnaire(connection, questionnaire_id, lock=True)
+            if connection.execute(
+                "SELECT 1 FROM participations WHERE questionnaire_id = %s LIMIT 1",
+                (questionnaire_id,),
+            ).fetchone():
+                raise HTTPException(
+                    status_code=409,
+                    detail="Questionnaire has recorded participations and cannot be deleted",
+                )
+            connection.execute(
+                "DELETE FROM route_confirmations WHERE question_id IN "
+                "(SELECT id FROM questions WHERE questionnaire_id = %s)",
+                (questionnaire_id,),
+            )
+            connection.execute(
+                "DELETE FROM questions WHERE questionnaire_id = %s",
+                (questionnaire_id,),
+            )
+            connection.execute(
+                "DELETE FROM scenarios WHERE questionnaire_id = %s",
+                (questionnaire_id,),
+            )
+            connection.execute(
+                "DELETE FROM questionnaires WHERE id = %s",
+                (questionnaire_id,),
+            )
+    except errors.ForeignKeyViolation as error:
+        raise HTTPException(
+            status_code=409, detail="Questionnaire has linked records"
+        ) from error
+    return Response(status_code=204)
