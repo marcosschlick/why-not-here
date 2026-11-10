@@ -231,6 +231,7 @@ export function QuestionnaireAdmin({
     "control",
   );
   const [busy, setBusy] = useState(false);
+  const [selecting, setSelecting] = useState(false);
   const [error, setError] = useState("");
   const [scenarioTitle, setScenarioTitle] = useState("");
   const [height, setHeight] = useState("16");
@@ -264,8 +265,8 @@ export function QuestionnaireAdmin({
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [hasUnsavedChanges]);
   useEffect(() => {
-    if (error) errorRef.current?.focus();
-  }, [error]);
+    if (error && !selecting) errorRef.current?.focus();
+  }, [error, selecting]);
 
   function confirmDiscard(dirty = hasUnsavedChanges) {
     return !dirty || window.confirm("Discard unsaved changes?");
@@ -335,18 +336,20 @@ export function QuestionnaireAdmin({
     }
   }
   function select(id: number) {
-    if (id === selected?.id) return;
+    if (busy || id === selected?.id) return;
     if (!confirmDiscard()) return;
-    setExportKey("");
-    setConfirmDelete(false);
+    setSelecting(true);
     void perform(async () => {
       await loadQuestionnaire(id, true);
+      setExportKey("");
+      setConfirmDelete(false);
       resetQuestion();
       resetScenario();
       setPreview(false);
-    });
+    }).finally(() => setSelecting(false));
   }
   function newDraft() {
+    if (busy) return;
     if (!confirmDiscard()) return;
     setExportKey("");
     setConfirmDelete(false);
@@ -508,6 +511,7 @@ export function QuestionnaireAdmin({
     (item) => item.id === selectedScenario,
   );
   const editable = !selected || selected.status === "draft";
+  const panelBusy = busy && !selecting;
 
   return (
     <>
@@ -528,7 +532,8 @@ export function QuestionnaireAdmin({
                 type="button"
                 className="btn btn-primary btn-sm"
                 onClick={newDraft}
-                disabled={busy}
+                disabled={busy && !selecting}
+                aria-disabled={busy}
                 title="Create a new draft questionnaire"
               >
                 <span>+</span> New
@@ -550,7 +555,8 @@ export function QuestionnaireAdmin({
                   className={`qa-list-item ${selected?.id === item.id ? "is-active" : ""}`}
                   key={item.id}
                   onClick={() => select(item.id)}
-                  disabled={busy}
+                  disabled={busy && !selecting}
+                  aria-disabled={busy}
                   type="button"
                 >
                   <strong>{item.title}</strong>
@@ -560,13 +566,16 @@ export function QuestionnaireAdmin({
             </nav>
           )}
         </aside>
-        <main className="qa-content">
+        <span className="qa-visually-hidden" role="status">
+          {selecting ? "Loading questionnaire…" : ""}
+        </span>
+        <main className="qa-content" inert={selecting}>
           {error && (
             <div className="qa-error" role="alert" tabIndex={-1} ref={errorRef}>
               {error}
             </div>
           )}
-          {busy && !activity.startsWith("Generating scenario") && (
+          {busy && !selecting && !activity.startsWith("Generating scenario") && (
             <p role="status" className="qa-notice">
               {activity}
             </p>
@@ -599,7 +608,7 @@ export function QuestionnaireAdmin({
             {selected?.status === "draft" && (
               <button
                 type="button"
-                disabled={busy}
+                disabled={panelBusy}
                 onClick={() => {
                   if (!confirmDiscard()) return;
                   if (
@@ -646,7 +655,7 @@ export function QuestionnaireAdmin({
               <button
                 type="button"
                 className="qa-secondary"
-                disabled={busy}
+                disabled={panelBusy}
                 onClick={() => {
                   if (
                     !window.confirm(
@@ -674,10 +683,10 @@ export function QuestionnaireAdmin({
                     required
                     value={exportKey}
                     onChange={(event) => setExportKey(event.target.value)}
-                    disabled={busy}
+                    disabled={panelBusy}
                   />
                 </label>
-                <button type="submit" className="qa-secondary" disabled={busy}>
+                <button type="submit" className="qa-secondary" disabled={panelBusy}>
                   Download results (JSON)
                 </button>
               </form>
@@ -691,7 +700,7 @@ export function QuestionnaireAdmin({
                     maxLength={100}
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    disabled={busy || !editable}
+                    disabled={panelBusy || !editable}
                   />
                 </label>
                 <label>
@@ -701,10 +710,10 @@ export function QuestionnaireAdmin({
                     maxLength={1000}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    disabled={busy || !editable}
+                    disabled={panelBusy || !editable}
                   />
                 </label>
-                <button disabled={busy || !editable} type="submit">
+                <button disabled={panelBusy || !editable} type="submit">
                   {selected ? "Save details" : "Create draft"}
                 </button>
               </form>
@@ -771,7 +780,7 @@ export function QuestionnaireAdmin({
                         <button
                           type="button"
                           aria-label={`Move question ${i + 1} up`}
-                          disabled={busy || !editable || i === 0}
+                          disabled={panelBusy || !editable || i === 0}
                           onClick={() => moveQuestion(i, -1)}
                         >
                           ↑
@@ -780,7 +789,7 @@ export function QuestionnaireAdmin({
                           type="button"
                           aria-label={`Move question ${i + 1} down`}
                           disabled={
-                            busy ||
+                            panelBusy ||
                             !editable ||
                             i === selected.questions.length - 1
                           }
@@ -790,14 +799,14 @@ export function QuestionnaireAdmin({
                         </button>
                         <button
                           type="button"
-                          disabled={busy || !editable}
+                          disabled={panelBusy || !editable}
                           onClick={() => editQuestion(q)}
                         >
                           Edit
                         </button>
                         <button
                           type="button"
-                          disabled={busy || !editable}
+                          disabled={panelBusy || !editable}
                           onClick={() => removeQuestion(q.id)}
                         >
                           Delete
@@ -821,7 +830,7 @@ export function QuestionnaireAdmin({
                           type: e.target.value as QuestionType,
                         })
                       }
-                      disabled={busy || !editable}
+                      disabled={panelBusy || !editable}
                     >
                       {Object.entries(labels).map(([value, label]) => (
                         <option key={value} value={value}>
@@ -838,7 +847,7 @@ export function QuestionnaireAdmin({
                         setForm({ ...form, prompt: e.target.value })
                       }
                       required
-                      disabled={busy || !editable}
+                      disabled={panelBusy || !editable}
                     />
                   </label>
                   {form.type === "text" && (
@@ -875,7 +884,7 @@ export function QuestionnaireAdmin({
                         onChange={(e) =>
                           setForm({ ...form, scenarioId: e.target.value })
                         }
-                        disabled={busy || !editable}
+                        disabled={panelBusy || !editable}
                       >
                         <option value="">Select a saved scenario</option>
                         {scenarios.map((s) => (
@@ -887,7 +896,7 @@ export function QuestionnaireAdmin({
                     </label>
                   )}
                   <div className="qa-actions">
-                    <button type="submit" disabled={busy || !editable}>
+                    <button type="submit" disabled={panelBusy || !editable}>
                       {editing ? "Save question" : "Add question"}
                     </button>
                     {editing && (
@@ -925,7 +934,7 @@ export function QuestionnaireAdmin({
                       required
                       value={scenarioTitle}
                       onChange={(e) => setScenarioTitle(e.target.value)}
-                      disabled={busy || !editable}
+                      disabled={panelBusy || !editable}
                     />
                   </label>
                   <div className="qa-fields">
@@ -938,7 +947,7 @@ export function QuestionnaireAdmin({
                         required
                         value={height}
                         onChange={(e) => setHeight(e.target.value)}
-                        disabled={busy || !editable}
+                        disabled={panelBusy || !editable}
                       />
                     </label>
                     <label>
@@ -950,7 +959,7 @@ export function QuestionnaireAdmin({
                         required
                         value={width}
                         onChange={(e) => setWidth(e.target.value)}
-                        disabled={busy || !editable}
+                        disabled={panelBusy || !editable}
                       />
                     </label>
                     <label>
@@ -960,7 +969,7 @@ export function QuestionnaireAdmin({
                         step="1"
                         value={seed}
                         onChange={(e) => setSeed(e.target.value)}
-                        disabled={busy || !editable}
+                        disabled={panelBusy || !editable}
                       />
                     </label>
                     <label>
@@ -971,7 +980,7 @@ export function QuestionnaireAdmin({
                         required
                         value={timeout}
                         onChange={(e) => setTimeoutValue(e.target.value)}
-                        disabled={busy || !editable}
+                        disabled={panelBusy || !editable}
                       />
                     </label>
                     <label>
@@ -979,7 +988,7 @@ export function QuestionnaireAdmin({
                       <select
                         value={reduction}
                         onChange={(e) => setReduction(e.target.value)}
-                        disabled={busy || !editable}
+                        disabled={panelBusy || !editable}
                       >
                         {[
                           "NONE",
@@ -998,7 +1007,7 @@ export function QuestionnaireAdmin({
                       {activity}
                     </p>
                   )}
-                  <button type="submit" disabled={busy || !editable}>
+                  <button type="submit" disabled={panelBusy || !editable}>
                     Generate scenario
                   </button>
                 </form>
@@ -1061,7 +1070,7 @@ export function QuestionnaireAdmin({
                   <button
                     type="button"
                     className="qa-danger"
-                    disabled={busy}
+                    disabled={panelBusy}
                     onClick={() => setConfirmDelete(true)}
                   >
                     Delete questionnaire
