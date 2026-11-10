@@ -1,6 +1,19 @@
 import os
 
 import psycopg
+from psycopg.rows import dict_row
+
+
+def connect_database() -> psycopg.Connection:
+    return psycopg.connect(
+        host=os.getenv("DB_HOST", "127.0.0.1"),
+        port=os.getenv("DB_PORT", "5432"),
+        user=os.environ["DB_USER"],
+        password=os.environ["DB_PASSWORD"],
+        dbname=os.environ["DB_NAME"],
+        connect_timeout=5,
+        row_factory=dict_row,
+    )
 
 
 def initialize_database() -> None:
@@ -45,16 +58,20 @@ def initialize_database() -> None:
             UNIQUE (participation_id, question_id)
         )
         """,
+        "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'draft'",
+        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS questionnaire_id BIGINT REFERENCES questionnaires(id)",
+        "ALTER TABLE questions ALTER COLUMN scenario_id DROP NOT NULL",
+        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'text'",
+        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS configuration JSONB NOT NULL DEFAULT '{}'::jsonb",
+        """
+        UPDATE questions SET questionnaire_id = scenarios.questionnaire_id
+        FROM scenarios
+        WHERE questions.scenario_id = scenarios.id AND questions.questionnaire_id IS NULL
+        """,
+        "ALTER TABLE questions ALTER COLUMN questionnaire_id SET NOT NULL",
     )
     try:
-        with psycopg.connect(
-            host=os.getenv("DB_HOST", "127.0.0.1"),
-            port=os.getenv("DB_PORT", "5432"),
-            user=os.environ["DB_USER"],
-            password=os.environ["DB_PASSWORD"],
-            dbname=os.environ["DB_NAME"],
-            connect_timeout=5,
-        ) as connection:
+        with connect_database() as connection:
             for statement in statements:
                 connection.execute(statement)
     except (KeyError, psycopg.Error) as error:

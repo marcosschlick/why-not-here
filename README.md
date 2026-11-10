@@ -62,6 +62,9 @@ export DB_NAME=your_database_name
 database and user must already exist. The API creates its tables on startup
 and does not start if database initialization fails.
 
+Questionnaire draft and question endpoints, including their request formats,
+are available in the API documentation at `http://localhost:8000/docs`.
+
 ```bash
 # Terminal 1: Backend API (port 8000)
 ./venv/bin/python -B -m uvicorn web.api.app:app --host 127.0.0.1 --port 8000 --reload
