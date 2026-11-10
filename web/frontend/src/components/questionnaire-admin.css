@@ -414,3 +414,22 @@
   color: var(--text-muted);
   justify-self: end;
 }
+
+.qa-likert-info {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.qa-likert-labels {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-structural);
+  display: grid;
+  gap: 0.2rem;
+}
+
+.qa-likert-group {
+  display: grid;
+  gap: 0.4rem;
+}

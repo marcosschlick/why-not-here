@@ -32,13 +32,13 @@ class EmptyConfiguration(BaseModel):
 class LikertConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    min: int = Field(strict=True)
-    max: int = Field(strict=True)
+    min: int = 1
+    max: int = 5
 
     @model_validator(mode="after")
     def validate_bounds(self):
-        if self.min >= self.max:
-            raise ValueError("Minimum must be less than maximum")
+        if self.min != 1 or self.max != 5:
+            raise ValueError("Likert questions must use a fixed 1 to 5 scale")
         return self
 
 
@@ -80,7 +80,7 @@ class TextQuestion(QuestionBase):
 
 class LikertQuestion(QuestionBase):
     type: Literal["likert"]
-    configuration: LikertConfiguration
+    configuration: LikertConfiguration = Field(default_factory=LikertConfiguration)
 
 
 class NumericQuestion(QuestionBase):

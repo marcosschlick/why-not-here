@@ -36,6 +36,14 @@ export type ParticipantQuestionnaire = {
 };
 type Answer = string | number | Point[];
 
+const LIKERT_OPTIONS = [
+  { value: 1, label: "Strongly disagree" },
+  { value: 2, label: "Somewhat disagree" },
+  { value: 3, label: "Neither agree nor disagree" },
+  { value: 4, label: "Somewhat agree" },
+  { value: 5, label: "Strongly agree" },
+];
+
 function toMap(scenario: Scenario): MapData {
   return {
     ...scenario.map,
@@ -356,6 +364,17 @@ export function Participant({
           return;
         }
       }
+      if (question.type === "likert") {
+        const num = value as number;
+        const min = question.configuration.min ?? 1;
+        const max = question.configuration.max ?? 5;
+        if (typeof num !== "number" || !Number.isInteger(num) || num < min || num > max) {
+          setError(
+            `Question ${questionnaire.questions.indexOf(question) + 1}: Please select a value between ${min} and ${max}.`,
+          );
+          return;
+        }
+      }
       if (
         question.type === "route_choice" &&
         question.confirmed_choice !== value
@@ -553,29 +572,50 @@ export function Participant({
                           {option}
                         </label>
                       ))}
-                    {q.type === "likert" && (
-                      <label className="qa-response-label">
-                        Choose a value ({q.configuration.min}–
-                        {q.configuration.max})
-                        <input
-                          type="number"
-                          step="1"
-                          min={q.configuration.min}
-                          max={q.configuration.max}
-                          required
-                          value={(answers[q.id] as number | undefined) ?? ""}
-                          onChange={(e) =>
-                            e.target.value === ""
-                              ? setAnswers((a) => {
-                                  const next = { ...a };
-                                  delete next[q.id];
-                                  return next;
-                                })
-                              : update(q.id, Number(e.target.value))
-                          }
-                        />
-                      </label>
-                    )}
+                    {q.type === "likert" &&
+                      (q.configuration.min ?? 1) === 1 &&
+                      (q.configuration.max ?? 5) === 5 ? (
+                        <div className="qa-likert-group" role="radiogroup" aria-label={q.prompt}>
+                          {LIKERT_OPTIONS.map((opt) => (
+                            <label className="qa-option" key={opt.value}>
+                              <input
+                                type="radio"
+                                name={`q-${q.id}`}
+                                checked={answers[q.id] === opt.value}
+                                onChange={() => update(q.id, opt.value)}
+                                required
+                              />
+                              <span>
+                                {opt.value}. {opt.label}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        q.type === "likert" && (
+                          <label className="qa-response-label">
+                            Choose a value ({q.configuration.min}–
+                            {q.configuration.max})
+                            <input
+                              type="number"
+                              step="1"
+                              min={q.configuration.min}
+                              max={q.configuration.max}
+                              required
+                              value={(answers[q.id] as number | undefined) ?? ""}
+                              onChange={(e) =>
+                                e.target.value === ""
+                                  ? setAnswers((a) => {
+                                      const next = { ...a };
+                                      delete next[q.id];
+                                      return next;
+                                    })
+                                  : update(q.id, Number(e.target.value))
+                              }
+                            />
+                          </label>
+                        )
+                      )}
                     {q.type === "numeric" && (
                       <label className="qa-response-label">
                         Choose a value (0–100)

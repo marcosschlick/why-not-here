@@ -51,15 +51,11 @@ type Form = {
   prompt: string;
   type: QuestionType;
   scenarioId: string;
-  min: string;
-  max: string;
 };
 const emptyForm: Form = {
   prompt: "",
   type: "route_choice",
   scenarioId: "",
-  min: "1",
-  max: "5",
 };
 const labels: Record<QuestionType, string> = {
   route_choice: "Choose a route",
@@ -408,8 +404,6 @@ export function QuestionnaireAdmin({
       prompt: question.prompt,
       type: question.type === "choice" ? "text" : question.type,
       scenarioId: question.scenario_id?.toString() || "",
-      min: question.configuration.min?.toString() ?? (question.type === "likert" ? "1" : ""),
-      max: question.configuration.max?.toString() ?? (question.type === "likert" ? "5" : ""),
     };
     setForm(nextForm);
     setInitialForm(nextForm);
@@ -426,8 +420,8 @@ export function QuestionnaireAdmin({
       } else if (form.type === "text") {
         configuration.max_length = 1000;
       } else if (form.type === "likert") {
-        if (form.min !== "") configuration.min = Number(form.min);
-        if (form.max !== "") configuration.max = Number(form.max);
+        configuration.min = 1;
+        configuration.max = 5;
       }
       const body = {
         type: form.type,
@@ -846,33 +840,17 @@ export function QuestionnaireAdmin({
                     </p>
                   )}
                   {form.type === "likert" && (
-                    <div className="qa-fields">
-                      <label>
-                        Minimum
-                        <input
-                          type="number"
-                          step="1"
-                          required
-                          value={form.min}
-                          onChange={(e) =>
-                            setForm({ ...form, min: e.target.value })
-                          }
-                          disabled={busy || !editable}
-                        />
-                      </label>
-                      <label>
-                        Maximum
-                        <input
-                          type="number"
-                          step="1"
-                          required
-                          value={form.max}
-                          onChange={(e) =>
-                            setForm({ ...form, max: e.target.value })
-                          }
-                          disabled={busy || !editable}
-                        />
-                      </label>
+                    <div className="qa-likert-info">
+                      <p className="qa-muted">
+                        Fixed 1 to 5 scale:
+                      </p>
+                      <ol className="qa-likert-labels">
+                        <li>Strongly disagree</li>
+                        <li>Somewhat disagree</li>
+                        <li>Neither agree nor disagree</li>
+                        <li>Somewhat agree</li>
+                        <li>Strongly agree</li>
+                      </ol>
                     </div>
                   )}
                   {(form.type === "route_choice" ||

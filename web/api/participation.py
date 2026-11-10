@@ -358,7 +358,7 @@ def validate_answer(question, value):
     if kind == "choice":
         return type(value) is int and 0 <= value < len(config.get("options", []))
     if kind == "likert":
-        return type(value) is int and config["min"] <= value <= config["max"]
+        return type(value) is int and config.get("min", 1) <= value <= config.get("max", 5)
     if kind == "numeric":
         return (
             type(value) in (float, int)
