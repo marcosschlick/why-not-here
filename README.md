@@ -100,11 +100,17 @@ groups, and route ordering; they exclude access tokens and submission keys.
 The export key does not protect other administrative routes.
 
 ```bash
-# Terminal 1: Backend API (port 8000)
-./venv/bin/python -B -m uvicorn web.api.app:app --host 127.0.0.1 --port 8000 --reload
+# Terminal 1: Local backend API (port 8000)
+./venv/bin/python -B -m uvicorn web.api.app:app --host 127.0.0.1 --port 8000 --no-proxy-headers --reload
 
-# Terminal 2: Frontend Dashboard (port 5173)
-cd web/frontend && npm run dev
+# Terminal 2: Participant backend (port 8001, local proxy target only)
+./venv/bin/python -B -m uvicorn web.api.public_app:app --host 127.0.0.1 --port 8001 --no-proxy-headers --reload
+
+# Terminal 3: Local dashboard (port 5173)
+cd web/frontend && VITE_PUBLIC_BASE_URL=http://YOUR_LAN_IP:5174 npm run dev -- --host 127.0.0.1 --port 5173
+
+# Terminal 4: Participant frontend (port 5174)
+cd web/frontend && VITE_PUBLIC_ONLY=true VITE_BACKEND_URL=http://127.0.0.1:8001 VITE_PUBLIC_BASE_URL=http://YOUR_LAN_IP:5174 npm run dev -- --host 0.0.0.0 --port 5174
 ```
 
 ---
@@ -116,6 +122,10 @@ Set `DB_USER`, `DB_PASSWORD`, and `DB_NAME` in the shell or in an untracked
 port published by PostgreSQL; it defaults to `5432`. The backend connects
 to the database service on its internal port, independently of `DB_PORT`.
 Set `ADMIN_EXPORT_KEY` in the shell or `.env` to enable protected JSON export.
+Set `PUBLIC_PARTICIPANT_URL` to the URL participants can reach, for example
+`http://YOUR_LAN_IP:5174`. The local administration screen uses this URL to
+build participant links; without it the link is unavailable. Recreate the
+frontend services after changing the URL.
 
 Run the entire stack (PostgreSQL + backend API + frontend) with:
 
@@ -125,6 +135,14 @@ docker compose up --build
 
 - API: `http://localhost:8000`
 - Dashboard: `http://localhost:5173`
+- Participant frontend: `http://YOUR_LAN_IP:5174`
+
+Only the participant frontend is published to the network. Its API proxy
+connects to a separate service exposing only participation endpoints. Do not
+expose the local dashboard, administrative API, or PostgreSQL through another
+proxy. `POST /api/questionnaires/{id}/close` permanently closes an active
+questionnaire: new submissions are rejected, and previously saved data remains
+available for export. An identical retry of a completed submission is accepted.
 
 PostgreSQL data is stored in the named `postgres_data` volume and persists
 across container restarts and recreation. The PostgreSQL image applies the

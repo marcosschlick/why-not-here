@@ -111,7 +111,7 @@ QuestionInput = Annotated[
 
 
 def get_questionnaire(connection, questionnaire_id: int, *, lock: bool = False):
-    query = "SELECT id, title, description, status, created_at, access_token FROM questionnaires WHERE id = %s"
+    query = "SELECT id, title, description, status, created_at, closed_at, access_token FROM questionnaires WHERE id = %s"
     if lock:
         query += " FOR UPDATE"
     questionnaire = connection.execute(query, (questionnaire_id,)).fetchone()

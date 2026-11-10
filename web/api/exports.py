@@ -25,7 +25,7 @@ def export_questionnaire(
     with connect_database() as connection:
         connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         questionnaire = connection.execute(
-            "SELECT id, title, description, status, created_at FROM questionnaires WHERE id = %s",
+            "SELECT id, title, description, status, created_at, closed_at FROM questionnaires WHERE id = %s",
             (questionnaire_id,),
         ).fetchone()
         if questionnaire is None:

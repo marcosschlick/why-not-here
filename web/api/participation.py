@@ -14,12 +14,14 @@ from src.visual.appearance import resolve_map_appearance
 from web.api.database import connect_database
 from web.api.questionnaires import (
     QuestionInput,
+    get_questionnaire,
     require_draft,
     valid_drawing_scenario,
     validate_scenario,
 )
 
 router = APIRouter(prefix="/api", tags=["participation"])
+public_router = APIRouter(prefix="/api", tags=["participation"])
 question_adapter = TypeAdapter(QuestionInput)
 
 
@@ -97,8 +99,25 @@ def activate_questionnaire(questionnaire_id: int):
         return {"status": "active", "access_token": token}
 
 
-def active_questionnaire(connection, token, *, lock=False):
-    query = "SELECT id, title, description, group_secret FROM questionnaires WHERE access_token = %s AND status = 'active'"
+@router.post("/questionnaires/{questionnaire_id}/close")
+def close_questionnaire(questionnaire_id: int):
+    with connect_database() as connection:
+        questionnaire = get_questionnaire(connection, questionnaire_id, lock=True)
+        if questionnaire["status"] == "closed":
+            return {"status": "closed", "closed_at": questionnaire["closed_at"]}
+        if questionnaire["status"] != "active":
+            raise HTTPException(
+                status_code=409, detail="Only active questionnaires can be closed"
+            )
+        return connection.execute(
+            "UPDATE questionnaires SET status = 'closed', closed_at = CURRENT_TIMESTAMP "
+            "WHERE id = %s RETURNING status, closed_at",
+            (questionnaire_id,),
+        ).fetchone()
+
+
+def active_questionnaire(connection, token, *, lock=False, allow_closed=False):
+    query = "SELECT id, title, description, group_secret, status FROM questionnaires WHERE access_token = %s AND status IN ('active', 'closed')"
     if lock:
         query += " FOR UPDATE"
     questionnaire = connection.execute(
@@ -107,6 +126,8 @@ def active_questionnaire(connection, token, *, lock=False):
     ).fetchone()
     if questionnaire is None:
         raise HTTPException(status_code=404, detail="Questionnaire not found")
+    if questionnaire["status"] == "closed" and not allow_closed:
+        raise HTTPException(status_code=410, detail="This questionnaire is closed")
     return questionnaire
 
 
@@ -172,7 +193,7 @@ def public_question(question, submission_key: UUID, saved_order=None, study_grou
     return public
 
 
-@router.get("/participate/{token}")
+@public_router.get("/participate/{token}")
 def get_public_questionnaire(token: str, submission_key: UUID):
     with connect_database() as connection:
         questionnaire = active_questionnaire(connection, token, lock=True)
@@ -269,10 +290,12 @@ def same_value(first, second):
     return type(first) is type(second) and first == second
 
 
-@router.post("/participate/{token}/submit", status_code=status.HTTP_201_CREATED)
+@public_router.post("/participate/{token}/submit", status_code=status.HTTP_201_CREATED)
 def submit_answers(token: str, payload: SubmissionInput):
     with connect_database() as connection:
-        questionnaire = active_questionnaire(connection, token, lock=True)
+        questionnaire = active_questionnaire(
+            connection, token, lock=True, allow_closed=True
+        )
         existing = connection.execute(
             "SELECT id FROM participations WHERE questionnaire_id = %s AND submission_key = %s",
             (questionnaire["id"], payload.submission_key),
@@ -295,6 +318,8 @@ def submit_answers(token: str, payload: SubmissionInput):
                     detail="This submission was already completed with different answers",
                 )
             return {"status": "completed", "participation_id": existing["id"]}
+        if questionnaire["status"] == "closed":
+            raise HTTPException(status_code=410, detail="This questionnaire is closed")
         if len(answers) != len(payload.answers) or set(answers) != {
             q["id"] for q in questions
         }:

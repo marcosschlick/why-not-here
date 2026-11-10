@@ -13,7 +13,18 @@ export function Root() {
   }, []);
   const prefix = "#/participate/";
   const token = hash.startsWith(prefix) ? hash.slice(prefix.length) : null;
-  return token !== null ? <Participant key={token} token={token} /> : <App />;
+  if (token !== null) return <Participant key={token} token={token} />;
+  if (import.meta.env.VITE_PUBLIC_ONLY === "true") {
+    return (
+      <main className="qa-content">
+        <section className="qa-panel">
+          <h1>Participant questionnaire</h1>
+          <p>Open the participant link provided by the administrator.</p>
+        </section>
+      </main>
+    );
+  }
+  return <App />;
 }
 
 createRoot(document.getElementById("root")!).render(

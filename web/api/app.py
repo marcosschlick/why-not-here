@@ -1,9 +1,10 @@
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -16,6 +17,7 @@ if str(SRC_DIR) not in sys.path:
 from src.pipeline.utils import get_project_path
 from web.api.database import initialize_database
 from web.api.exports import router as exports_router
+from web.api.participation import public_router
 from web.api.participation import router as participation_router
 from web.api.questionnaires import router as questionnaires_router
 from web.api.routes import router
@@ -30,18 +32,36 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Trajectory Planning & ISP API", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+@app.middleware("http")
+async def protect_local_access(request, call_next):
+    try:
+        host = urlsplit("//" + request.headers.get("host", "")).hostname
+    except ValueError:
+        host = None
+    allowed_origins = {
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    }
+    origin = request.headers.get("origin")
+    if (
+        host not in {"localhost", "127.0.0.1"}
+        or (origin and origin not in allowed_origins)
+        or request.headers.get("sec-fetch-site") == "cross-site"
+    ):
+        return JSONResponse(
+            status_code=403, content={"detail": "Local access required"}
+        )
+    return await call_next(request)
+
 
 app.include_router(router)
 app.include_router(questionnaires_router)
 app.include_router(scenarios_router)
 app.include_router(participation_router)
+app.include_router(public_router)
 app.include_router(exports_router)
 
 from fastapi import HTTPException

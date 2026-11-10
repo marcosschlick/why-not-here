@@ -149,6 +149,7 @@ export function Participant({ token }: { token: string }) {
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [closed, setClosed] = useState(false);
   const [submissionKey] = useState(() => {
     const key = `participation:${token}`;
     let value = sessionStorage.getItem(key);
@@ -224,6 +225,7 @@ export function Participant({ token }: { token: string }) {
         },
       );
       if (!response.ok) {
+        if (response.status === 410) setClosed(true);
         if (response.status === 409) setConflict(true);
         const body = await response.json().catch(() => null);
         throw new Error(
@@ -284,6 +286,11 @@ export function Participant({ token }: { token: string }) {
             <button type="button" onClick={() => window.location.reload()}>
               Start a new participation
             </button>
+          </section>
+        ) : closed ? (
+          <section className="qa-panel">
+            <h2>Questionnaire closed</h2>
+            <p>This questionnaire is no longer accepting answers.</p>
           </section>
         ) : !questionnaire ? (
           !error && <p role="status">Loading questionnaire…</p>

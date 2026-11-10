@@ -62,6 +62,26 @@ const labels: Record<QuestionType, string> = {
   route_drawing: "Draw a route",
 };
 
+function participantLink(token: string): string | null {
+  const base = import.meta.env.VITE_PUBLIC_BASE_URL;
+  if (!base) return null;
+  try {
+    const url = new URL(base);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    )
+      return null;
+    url.hash = `/participate/${token}`;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 async function api<T>(
   path: string,
   method = "GET",
@@ -443,15 +463,44 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
                 Activate questionnaire
               </button>
             )}
-            {selected?.status === "active" && selected.access_token && (
-              <label className="qa-form">
-                Participant link
-                <input
-                  readOnly
-                  value={`${window.location.origin}${window.location.pathname}#/participate/${selected.access_token}`}
-                  onFocus={(event) => event.currentTarget.select()}
-                />
-              </label>
+            {selected?.status === "active" &&
+              selected.access_token &&
+              (participantLink(selected.access_token) ? (
+                <label className="qa-form">
+                  Participant link
+                  <input
+                    readOnly
+                    value={participantLink(selected.access_token) || ""}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                </label>
+              ) : (
+                <p className="qa-notice">
+                  Configure PUBLIC_PARTICIPANT_URL to create the participant
+                  link.
+                </p>
+              ))}
+            {selected?.status === "active" && (
+              <button
+                type="button"
+                className="qa-secondary"
+                disabled={busy}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Close this questionnaire? New submissions will no longer be accepted.",
+                    )
+                  )
+                    return;
+                  void perform(async () => {
+                    await api(`/questionnaires/${selected.id}/close`, "POST");
+                    await loadList();
+                    await loadQuestionnaire(selected.id);
+                  });
+                }}
+              >
+                Close questionnaire
+              </button>
             )}
             {selected && (
               <form onSubmit={exportResults} className="qa-form">

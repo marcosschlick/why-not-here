@@ -59,6 +59,7 @@ def initialize_database() -> None:
         )
         """,
         "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'draft'",
+        "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ",
         "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS access_token TEXT UNIQUE",
         "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS group_secret TEXT",
         "ALTER TABLE participations ADD COLUMN IF NOT EXISTS submission_key UUID",
