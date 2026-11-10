@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Participant } from "./Participant";
 import type { ParticipantQuestionnaire } from "./Participant";
 import { TacticalMapCanvas } from "./TacticalMapCanvas";
+import { Topbar } from "./Topbar";
 import type { MapAppearance, MapData } from "../types";
 import "./questionnaire-admin.css";
 
@@ -207,7 +208,13 @@ function buildPreview(
   };
 }
 
-export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
+export function QuestionnaireAdmin({
+  onBack,
+  onOpenAbout,
+}: {
+  onBack: () => void;
+  onOpenAbout: () => void;
+}) {
   const [list, setList] = useState<Summary[]>([]);
   const [selected, setSelected] = useState<Questionnaire | null>(null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
@@ -492,23 +499,16 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
   const editable = !selected || selected.status === "draft";
 
   return (
-    <div className="qa-app">
-      <header className="qa-header">
-        <div>
-          <span className="qa-overline">WHY NOT HERE? / RESEARCH TOOLS</span>
-          <h1>Questionnaire administration</h1>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (confirmDiscard()) onBack();
-          }}
-          className="qa-ghost"
-        >
-          ← Back to simulation
-        </button>
-      </header>
-      <div className="qa-layout">
+    <>
+      <Topbar
+        view="admin"
+        onBack={() => {
+          if (confirmDiscard()) onBack();
+        }}
+        onOpenAbout={onOpenAbout}
+      />
+      <div className="qa-app">
+        <div className="qa-layout">
         <aside className="qa-sidebar">
           <div className="qa-side-heading">
             <h2>Questionnaires</h2>
@@ -1050,5 +1050,6 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
         </main>
       </div>
     </div>
-  );
+  </>
+);
 }

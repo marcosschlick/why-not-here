@@ -80,11 +80,6 @@
   outline: 3px solid var(--yale-blue);
   outline-offset: 2px;
 }
-.qa-app .qa-ghost {
-  border: 1px solid var(--bright-snow);
-  background: transparent;
-  white-space: nowrap;
-}
 .qa-app .qa-secondary {
   background: var(--surface-subtle);
   color: var(--text-structural);
@@ -342,9 +337,6 @@
   padding: 0;
 }
 
-.qa-header button:focus-visible {
-  outline-color: var(--bright-snow);
-}
 .qa-error:focus {
   outline: 3px solid var(--yale-blue);
   outline-offset: 2px;

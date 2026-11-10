@@ -675,7 +675,17 @@ export function App() {
     }
   }
 
-  if (showAdmin) return <QuestionnaireAdmin onBack={() => setShowAdmin(false)} />;
+  if (showAdmin) {
+    return (
+      <>
+        <QuestionnaireAdmin
+          onBack={() => setShowAdmin(false)}
+          onOpenAbout={() => setIsAboutOpen(true)}
+        />
+        <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
+      </>
+    );
+  }
 
   return (
     <div className="app-layout">
