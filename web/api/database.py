@@ -59,6 +59,7 @@ def initialize_database() -> None:
         )
         """,
         "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'draft'",
+        "ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT '{}'::jsonb",
         "ALTER TABLE questions ADD COLUMN IF NOT EXISTS questionnaire_id BIGINT REFERENCES questionnaires(id)",
         "ALTER TABLE questions ALTER COLUMN scenario_id DROP NOT NULL",
         "ALTER TABLE questions ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'text'",

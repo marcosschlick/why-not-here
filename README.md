@@ -64,6 +64,10 @@ and does not start if database initialization fails.
 
 Questionnaire draft and question endpoints, including their request formats,
 are available in the API documentation at `http://localhost:8000/docs`.
+Draft scenarios can be generated synchronously with
+`POST /api/questionnaires/{id}/scenarios` and retrieved through the scenario
+list and detail endpoints. Generation can take as long as the configured solver
+limits; only successful results are saved.
 
 ```bash
 # Terminal 1: Backend API (port 8000)

@@ -17,6 +17,7 @@ from src.pipeline.utils import get_project_path
 from web.api.database import initialize_database
 from web.api.questionnaires import router as questionnaires_router
 from web.api.routes import router
+from web.api.scenarios import router as scenarios_router
 
 
 @asynccontextmanager
@@ -37,6 +38,7 @@ app.add_middleware(
 
 app.include_router(router)
 app.include_router(questionnaires_router)
+app.include_router(scenarios_router)
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
