@@ -77,7 +77,7 @@
 .qa-app input:focus-visible,
 .qa-app textarea:focus-visible,
 .qa-app select:focus-visible {
-  outline: 3px solid var(--focus-ring);
+  outline: 3px solid var(--yale-blue);
   outline-offset: 2px;
 }
 .qa-app .qa-ghost {
@@ -340,4 +340,16 @@
 }
 .qa-preview-app .qa-content {
   padding: 0;
+}
+
+.qa-header button:focus-visible {
+  outline-color: var(--bright-snow);
+}
+.qa-error:focus {
+  outline: 3px solid var(--yale-blue);
+  outline-offset: 2px;
+}
+.qa-direction-controls button {
+  min-width: 44px;
+  min-height: 44px;
 }

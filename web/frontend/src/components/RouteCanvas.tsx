@@ -416,8 +416,9 @@ export function RouteCanvas({
     </span>
   ) : (
     <span>
-      Hover over grid or drag pointer to interact (hold Shift for
-      straight/diagonal lines)
+      {participantMode
+        ? "Drag on the map to draw, or use the directional buttons below to move the route endpoint."
+        : "Hover over grid or drag pointer to interact (hold Shift for straight/diagonal lines)"}
     </span>
   );
 

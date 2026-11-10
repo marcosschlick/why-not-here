@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Participant } from "./Participant";
 import type { ParticipantQuestionnaire } from "./Participant";
@@ -216,6 +216,7 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
   const [description, setDescription] = useState("");
   const [form, setForm] = useState<Form>(emptyForm);
   const [editing, setEditing] = useState<number | null>(null);
+  const [initialForm, setInitialForm] = useState<Form>(emptyForm);
   const [preview, setPreview] = useState(false);
   const [previewGroup, setPreviewGroup] = useState<"control" | "experimental">(
     "control",
@@ -229,37 +230,89 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
   const [reduction, setReduction] = useState("PATH_ONLY");
   const [timeout, setTimeoutValue] = useState("60");
   const [exportKey, setExportKey] = useState("");
+  const [scenarioBaseline, setScenarioBaseline] = useState(
+    JSON.stringify(["", "16", "16", "", "PATH_ONLY", "60"]),
+  );
+  const [activity, setActivity] = useState("");
+  const errorRef = useRef<HTMLDivElement>(null);
+  const detailsDirty =
+    title !== (selected?.title ?? "") ||
+    description !== (selected?.description ?? "");
+  const questionDirty = JSON.stringify(form) !== JSON.stringify(initialForm);
+  const scenarioDirty =
+    JSON.stringify([scenarioTitle, height, width, seed, reduction, timeout]) !==
+    scenarioBaseline;
+  const hasUnsavedChanges = detailsDirty || questionDirty || scenarioDirty;
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [hasUnsavedChanges]);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+
+  function confirmDiscard(dirty = hasUnsavedChanges) {
+    return !dirty || window.confirm("Discard unsaved changes?");
+  }
+  function resetScenario() {
+    setScenarioTitle("");
+    setHeight("16");
+    setWidth("16");
+    setSeed("");
+    setReduction("PATH_ONLY");
+    setTimeoutValue("60");
+    setScenarioBaseline(
+      JSON.stringify(["", "16", "16", "", "PATH_ONLY", "60"]),
+    );
+  }
+  function resetQuestion() {
+    setEditing(null);
+    setForm(emptyForm);
+    setInitialForm(emptyForm);
+  }
 
   const loadList = useCallback(
     async () => setList(await api<Summary[]>("/questionnaires")),
     [],
   );
-  const loadQuestionnaire = useCallback(async (id: number) => {
-    const [questionnaire, summaries] = await Promise.all([
-      api<Questionnaire>(`/questionnaires/${id}`),
-      api<{ id: number }[]>(`/questionnaires/${id}/scenarios`),
-    ]);
-    const details = await Promise.all(
-      summaries.map((item) =>
-        api<Scenario>(`/questionnaires/${id}/scenarios/${item.id}`),
-      ),
-    );
-    setSelected(questionnaire);
-    setTitle(questionnaire.title);
-    setDescription(questionnaire.description || "");
-    setScenarios(details);
-    setSelectedScenario((previous) =>
-      details.some((item) => item.id === previous)
-        ? previous
-        : details[0]?.id || null,
-    );
-  }, []);
+  const loadQuestionnaire = useCallback(
+    async (id: number, resetDetails = false) => {
+      const [questionnaire, summaries] = await Promise.all([
+        api<Questionnaire>(`/questionnaires/${id}`),
+        api<{ id: number }[]>(`/questionnaires/${id}/scenarios`),
+      ]);
+      const details = await Promise.all(
+        summaries.map((item) =>
+          api<Scenario>(`/questionnaires/${id}/scenarios/${item.id}`),
+        ),
+      );
+      setSelected(questionnaire);
+      if (resetDetails) {
+        setTitle(questionnaire.title);
+        setDescription(questionnaire.description || "");
+      }
+      setScenarios(details);
+      setSelectedScenario((previous) =>
+        details.some((item) => item.id === previous)
+          ? previous
+          : details[0]?.id || null,
+      );
+    },
+    [],
+  );
   useEffect(() => {
     api<Summary[]>("/questionnaires")
       .then(setList)
       .catch((reason: Error) => setError(reason.message));
   }, []);
-  async function perform(action: () => Promise<void>) {
+  async function perform(action: () => Promise<void>, message = "Working…") {
+    setActivity(message);
     setBusy(true);
     setError("");
     try {
@@ -268,25 +321,29 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
       setError(reason instanceof Error ? reason.message : "Request failed.");
     } finally {
       setBusy(false);
+      setActivity("");
     }
   }
   function select(id: number) {
+    if (id === selected?.id) return;
+    if (!confirmDiscard()) return;
     setExportKey("");
     void perform(async () => {
-      await loadQuestionnaire(id);
-      setEditing(null);
-      setForm(emptyForm);
+      await loadQuestionnaire(id, true);
+      resetQuestion();
+      resetScenario();
       setPreview(false);
     });
   }
   function newDraft() {
+    if (!confirmDiscard()) return;
     setExportKey("");
     setSelected(null);
     setTitle("");
     setDescription("");
     setScenarios([]);
-    setForm(emptyForm);
-    setEditing(null);
+    resetQuestion();
+    resetScenario();
     setPreview(false);
     setError("");
   }
@@ -299,7 +356,7 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
         { title, description: description || null },
       );
       await loadList();
-      await loadQuestionnaire(item.id);
+      await loadQuestionnaire(item.id, true);
     });
   }
   function exportResults(event: FormEvent) {
@@ -332,15 +389,19 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
     });
   }
   function editQuestion(question: Question) {
+    if (editing === question.id) return;
+    if (!confirmDiscard(questionDirty)) return;
     setEditing(question.id);
-    setForm({
+    const nextForm: Form = {
       prompt: question.prompt,
       type: question.type,
       scenarioId: question.scenario_id?.toString() || "",
       options: question.configuration.options?.join("\n") || "",
       min: question.configuration.min?.toString() ?? "",
       max: question.configuration.max?.toString() ?? "",
-    });
+    };
+    setForm(nextForm);
+    setInitialForm(nextForm);
   }
   function saveQuestion(event: FormEvent) {
     event.preventDefault();
@@ -371,18 +432,21 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
         body,
       );
       await loadQuestionnaire(selected.id);
-      setEditing(null);
-      setForm(emptyForm);
+      resetQuestion();
     });
   }
   function removeQuestion(id: number) {
-    if (!selected || !window.confirm("Delete this question?")) return;
+    if (
+      !selected ||
+      (editing === id && !confirmDiscard(questionDirty)) ||
+      !window.confirm("Delete this question?")
+    )
+      return;
     void perform(async () => {
       await api(`/questionnaires/${selected.id}/questions/${id}`, "DELETE");
       await loadQuestionnaire(selected.id);
       if (editing === id) {
-        setEditing(null);
-        setForm(emptyForm);
+        resetQuestion();
       }
     });
   }
@@ -417,7 +481,10 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
       await loadQuestionnaire(selected.id);
       setSelectedScenario(item.id);
       setScenarioTitle("");
-    });
+      setScenarioBaseline(
+        JSON.stringify(["", height, width, seed, reduction, timeout]),
+      );
+    }, "Generating scenario… This may take several minutes.");
   }
   const currentScenario = scenarios.find(
     (item) => item.id === selectedScenario,
@@ -431,7 +498,13 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
           <span className="qa-overline">WHY NOT HERE? / RESEARCH TOOLS</span>
           <h1>Questionnaire administration</h1>
         </div>
-        <button type="button" onClick={onBack} className="qa-ghost">
+        <button
+          type="button"
+          onClick={() => {
+            if (confirmDiscard()) onBack();
+          }}
+          className="qa-ghost"
+        >
           ← Back to simulation
         </button>
       </header>
@@ -464,13 +537,13 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
         </aside>
         <main className="qa-content">
           {error && (
-            <div className="qa-error" role="alert">
+            <div className="qa-error" role="alert" tabIndex={-1} ref={errorRef}>
               {error}
             </div>
           )}
-          {busy && (
+          {busy && !activity.startsWith("Generating scenario") && (
             <p role="status" className="qa-notice">
-              Working… scenario generation may take several minutes.
+              {activity}
             </p>
           )}
           <section className="qa-panel">
@@ -503,12 +576,17 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
                 type="button"
                 disabled={busy}
                 onClick={() => {
+                  if (!confirmDiscard()) return;
                   if (
                     !window.confirm(
                       "Activate this questionnaire? It can no longer be edited.",
                     )
                   )
                     return;
+                  setTitle(selected.title);
+                  setDescription(selected.description || "");
+                  resetQuestion();
+                  resetScenario();
                   void perform(async () => {
                     await api(
                       `/questionnaires/${selected.id}/activate`,
@@ -813,8 +891,8 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
                         type="button"
                         className="qa-secondary"
                         onClick={() => {
-                          setEditing(null);
-                          setForm(emptyForm);
+                          if (!confirmDiscard(questionDirty)) return;
+                          resetQuestion();
                         }}
                       >
                         Cancel
@@ -911,6 +989,11 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
                       </select>
                     </label>
                   </div>
+                  {busy && activity.startsWith("Generating scenario") && (
+                    <p role="status" className="qa-notice">
+                      {activity}
+                    </p>
+                  )}
                   <button type="submit" disabled={busy || !editable}>
                     Generate scenario
                   </button>

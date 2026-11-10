@@ -5,3 +5,5 @@ maps/
 output/
 results/
 .ruff_cache
+.env
+

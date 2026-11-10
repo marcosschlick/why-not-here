@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { RouteCanvas } from "./RouteCanvas";
 import { TacticalMapCanvas } from "./TacticalMapCanvas";
@@ -103,31 +103,59 @@ function DrawingAnswer({
         isSolving={false}
         participantMode
       />
-      <div className="qa-actions" role="group" aria-label="Move route endpoint">
-        <button type="button" onClick={() => step(-1, 0)}>
+      <div
+        className="qa-actions qa-direction-controls"
+        role="group"
+        aria-label="Move route endpoint"
+      >
+        <button type="button" aria-label="Move up" onClick={() => step(-1, 0)}>
           ↑
         </button>
-        <button type="button" onClick={() => step(0, -1)}>
+        <button
+          type="button"
+          aria-label="Move left"
+          onClick={() => step(0, -1)}
+        >
           ←
         </button>
-        <button type="button" onClick={() => step(0, 1)}>
+        <button
+          type="button"
+          aria-label="Move right"
+          onClick={() => step(0, 1)}
+        >
           →
         </button>
-        <button type="button" onClick={() => step(1, 0)}>
+        <button type="button" aria-label="Move down" onClick={() => step(1, 0)}>
           ↓
         </button>
         {map.connectivity === 8 && (
           <>
-            <button type="button" onClick={() => step(-1, -1)}>
+            <button
+              type="button"
+              aria-label="Move up and left"
+              onClick={() => step(-1, -1)}
+            >
               ↖
             </button>
-            <button type="button" onClick={() => step(-1, 1)}>
+            <button
+              type="button"
+              aria-label="Move up and right"
+              onClick={() => step(-1, 1)}
+            >
               ↗
             </button>
-            <button type="button" onClick={() => step(1, -1)}>
+            <button
+              type="button"
+              aria-label="Move down and left"
+              onClick={() => step(1, -1)}
+            >
               ↙
             </button>
-            <button type="button" onClick={() => step(1, 1)}>
+            <button
+              type="button"
+              aria-label="Move down and right"
+              onClick={() => step(1, 1)}
+            >
               ↘
             </button>
           </>
@@ -158,6 +186,11 @@ export function Participant({
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState<number | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
   const [completed, setCompleted] = useState(false);
   const [closed, setClosed] = useState(false);
   const [submissionKey] = useState(() => {
@@ -212,6 +245,7 @@ export function Participant({
     const choice = answers[question.id];
     if (typeof choice !== "number") return;
     setBusy(true);
+    setConfirming(question.id);
     setError("");
     try {
       if (preview) {
@@ -288,6 +322,7 @@ export function Participant({
       );
     } finally {
       setBusy(false);
+      setConfirming(null);
     }
   }
   async function submit(event: FormEvent) {
@@ -389,7 +424,7 @@ export function Participant({
       )}
       <main className="qa-content qa-participant">
         {error && (
-          <div role="alert" className="qa-error">
+          <div role="alert" className="qa-error" tabIndex={-1} ref={errorRef}>
             {error}
           </div>
         )}
@@ -558,6 +593,14 @@ export function Participant({
                       ))}
                     {q.type === "route_choice" && (
                       <>
+                        {q.confirmed_choice == null && (
+                          <p className="qa-muted">
+                            Your choice will be locked after confirmation.
+                          </p>
+                        )}
+                        {confirming === q.id && (
+                          <p role="status">Confirming route choice…</p>
+                        )}
                         {q.confirmed_choice == null ? (
                           <button
                             type="button"
@@ -604,7 +647,7 @@ export function Participant({
                 </section>
               ))}
               <button type="submit" disabled={busy}>
-                {busy ? "Submitting…" : "Submit answers"}
+                {busy && confirming === null ? "Submitting…" : "Submit answers"}
               </button>
             </form>
           </>
