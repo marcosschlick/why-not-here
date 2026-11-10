@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { RouteCanvas } from "./RouteCanvas";
 import { TacticalMapCanvas } from "./TacticalMapCanvas";
 import type { MapAppearance, MapData } from "../types";
+import { validateDrawingRoute } from "../utils/validateRoute";
 import "./questionnaire-admin.css";
 
 type Point = [number, number];
@@ -14,7 +15,7 @@ type Scenario = {
   appearance: MapAppearance;
   routes?: Point[][];
 };
-type Question = {
+export type ParticipantQuestion = {
   id: number;
   prompt: string;
   type:
@@ -22,12 +23,16 @@ type Question = {
   configuration: { options?: string[]; min?: number; max?: number };
   scenario?: Scenario;
   justification?: string;
+  justification_pending?: boolean;
+  confirmed_choice?: number | null;
+  preview_scenario_id?: number | null;
+  preview_justification?: string;
 };
-type Questionnaire = {
+export type ParticipantQuestionnaire = {
   title: string;
   description: string | null;
   submission_completed: boolean;
-  questions: Question[];
+  questions: ParticipantQuestion[];
 };
 type Answer = string | number | Point[];
 
@@ -140,10 +145,15 @@ function DrawingAnswer({
   );
 }
 
-export function Participant({ token }: { token: string }) {
-  const [questionnaire, setQuestionnaire] = useState<Questionnaire | null>(
-    null,
-  );
+export function Participant({
+  token = "",
+  preview,
+}: {
+  token?: string;
+  preview?: ParticipantQuestionnaire;
+}) {
+  const [questionnaire, setQuestionnaire] =
+    useState<ParticipantQuestionnaire | null>(preview ?? null);
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
@@ -151,6 +161,7 @@ export function Participant({ token }: { token: string }) {
   const [completed, setCompleted] = useState(false);
   const [closed, setClosed] = useState(false);
   const [submissionKey] = useState(() => {
+    if (preview) return "";
     const key = `participation:${token}`;
     let value = sessionStorage.getItem(key);
     if (!value) {
@@ -166,6 +177,7 @@ export function Participant({ token }: { token: string }) {
     return value;
   });
   useEffect(() => {
+    if (preview) return;
     fetch(
       `/api/participate/${encodeURIComponent(token)}?submission_key=${encodeURIComponent(submissionKey)}`,
     )
@@ -180,11 +192,103 @@ export function Participant({ token }: { token: string }) {
         }
         return response.json();
       })
-      .then(setQuestionnaire)
+      .then((data: ParticipantQuestionnaire) => {
+        setQuestionnaire(data);
+        setAnswers((current) => {
+          const next = { ...current };
+          for (const question of data.questions) {
+            if (question.confirmed_choice != null)
+              next[question.id] = question.confirmed_choice;
+          }
+          return next;
+        });
+      })
       .catch((reason: Error) => setError(reason.message));
-  }, [token, submissionKey]);
+  }, [token, submissionKey, preview]);
   function update(id: number, value: Answer) {
     setAnswers((current) => ({ ...current, [id]: value }));
+  }
+  async function confirmChoice(question: ParticipantQuestion) {
+    const choice = answers[question.id];
+    if (typeof choice !== "number") return;
+    setBusy(true);
+    setError("");
+    try {
+      if (preview) {
+        setQuestionnaire((current) => {
+          if (!current) return current;
+          const updated = current.questions.map((item) =>
+            item.id === question.id
+              ? { ...item, confirmed_choice: choice }
+              : item,
+          );
+          return {
+            ...current,
+            questions: updated.map((item) => {
+              const pending =
+                item.preview_scenario_id != null &&
+                updated.some(
+                  (other) =>
+                    other.preview_scenario_id === item.preview_scenario_id &&
+                    other.type === "route_choice" &&
+                    other.confirmed_choice == null,
+                );
+              return {
+                ...item,
+                justification_pending: pending,
+                justification: pending ? undefined : item.preview_justification,
+              };
+            }),
+          };
+        });
+      } else {
+        const response = await fetch(
+          `/api/participate/${encodeURIComponent(token)}/questions/${question.id}/confirm`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ submission_key: submissionKey, choice }),
+          },
+        );
+        if (!response.ok) {
+          if (response.status === 410) setClosed(true);
+          const body = await response.json().catch(() => null);
+          throw new Error(
+            typeof body?.detail === "string"
+              ? body.detail
+              : "Unable to confirm route choice.",
+          );
+        }
+        setQuestionnaire((current) =>
+          current
+            ? {
+                ...current,
+                questions: current.questions.map((item) =>
+                  item.id === question.id
+                    ? { ...item, confirmed_choice: choice }
+                    : item,
+                ),
+              }
+            : current,
+        );
+        const refreshed = await fetch(
+          `/api/participate/${encodeURIComponent(token)}?submission_key=${encodeURIComponent(submissionKey)}`,
+        );
+        if (!refreshed.ok)
+          throw new Error(
+            "Choice confirmed. Refresh the page to load the justification.",
+          );
+        setQuestionnaire(await refreshed.json());
+      }
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to confirm route choice.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -199,15 +303,37 @@ export function Participant({ token }: { token: string }) {
         setError("Please answer every question before submitting.");
         return;
       }
+      if (
+        question.type === "route_choice" &&
+        question.confirmed_choice !== value
+      ) {
+        setError(
+          `Confirm your route choice for question ${questionnaire.questions.indexOf(question) + 1}.`,
+        );
+        return;
+      }
       if (question.type === "route_drawing") {
         const path = value as Point[];
-        const goal = question.scenario!.goal;
-        const last = path[path.length - 1];
-        if (!last || last[0] !== goal[0] || last[1] !== goal[1]) {
-          setError("Draw a route that reaches the goal before submitting.");
+        const scenario = question.scenario!;
+        const message = validateDrawingRoute(
+          path,
+          scenario.start,
+          scenario.goal,
+          scenario.map.h!,
+          scenario.map.w!,
+          scenario.map.connectivity!,
+        );
+        if (message) {
+          setError(
+            `Question ${questionnaire.questions.indexOf(question) + 1}: ${message}`,
+          );
           return;
         }
       }
+    }
+    if (preview) {
+      setCompleted(true);
+      return;
     }
     setBusy(true);
     setError("");
@@ -226,8 +352,13 @@ export function Participant({ token }: { token: string }) {
       );
       if (!response.ok) {
         if (response.status === 410) setClosed(true);
-        if (response.status === 409) setConflict(true);
         const body = await response.json().catch(() => null);
+        if (
+          response.status === 409 &&
+          body?.detail ===
+            "This submission was already completed with different answers"
+        )
+          setConflict(true);
         throw new Error(
           typeof body?.detail === "string"
             ? body.detail
@@ -247,13 +378,15 @@ export function Participant({ token }: { token: string }) {
     }
   }
   return (
-    <div className="qa-app">
-      <header className="qa-header">
-        <div>
-          <span className="qa-overline">WHY NOT HERE? / RESEARCH STUDY</span>
-          <h1>Questionnaire</h1>
-        </div>
-      </header>
+    <div className={`qa-app ${preview ? "qa-preview-app" : ""}`}>
+      {!preview && (
+        <header className="qa-header">
+          <div>
+            <span className="qa-overline">WHY NOT HERE? / RESEARCH STUDY</span>
+            <h1>Questionnaire</h1>
+          </div>
+        </header>
+      )}
       <main className="qa-content qa-participant">
         {error && (
           <div role="alert" className="qa-error">
@@ -282,8 +415,21 @@ export function Participant({ token }: { token: string }) {
         {completed ? (
           <section className="qa-panel">
             <h2>Thank you for participating</h2>
-            <p>Your answers have been submitted.</p>
-            <button type="button" onClick={() => window.location.reload()}>
+            <p>
+              {preview
+                ? "Preview complete. No answers were saved."
+                : "Your answers have been submitted."}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                if (preview) {
+                  setQuestionnaire(preview);
+                  setAnswers({});
+                  setCompleted(false);
+                } else window.location.reload();
+              }}
+            >
               Start a new participation
             </button>
           </section>
@@ -315,7 +461,13 @@ export function Participant({ token }: { token: string }) {
                       <br />
                       <strong>{q.prompt}</strong>
                     </legend>
-                    {q.justification && (
+                    {q.justification_pending && (
+                      <p className="qa-notice">
+                        Confirm all route choices for this scenario to view the
+                        justification.
+                      </p>
+                    )}
+                    {q.justification && q.type !== "route_choice" && (
                       <div className="qa-justification">
                         <strong>Justification</strong>
                         <p>{q.justification}</p>
@@ -396,6 +548,7 @@ export function Participant({ token }: { token: string }) {
                               name={`q-${q.id}`}
                               checked={answers[q.id] === i}
                               onChange={() => update(q.id, i)}
+                              disabled={q.confirmed_choice != null}
                               required
                             />{" "}
                             Route {i === 0 ? "A" : "B"}
@@ -403,12 +556,49 @@ export function Participant({ token }: { token: string }) {
                           <RouteOption scenario={q.scenario!} path={path} />
                         </label>
                       ))}
+                    {q.type === "route_choice" && (
+                      <>
+                        {q.confirmed_choice == null ? (
+                          <button
+                            type="button"
+                            disabled={busy || typeof answers[q.id] !== "number"}
+                            onClick={() => void confirmChoice(q)}
+                          >
+                            Confirm route choice
+                          </button>
+                        ) : (
+                          <p role="status">Route choice confirmed.</p>
+                        )}
+                        {q.justification && (
+                          <div className="qa-justification">
+                            <strong>Justification</strong>
+                            <p>{q.justification}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
                     {q.type === "route_drawing" && q.scenario && (
-                      <DrawingAnswer
-                        scenario={q.scenario}
-                        value={(answers[q.id] as Point[]) || [q.scenario.start]}
-                        onChange={(value) => update(q.id, value)}
-                      />
+                      <>
+                        <DrawingAnswer
+                          scenario={q.scenario}
+                          value={
+                            (answers[q.id] as Point[]) || [q.scenario.start]
+                          }
+                          onChange={(value) => update(q.id, value)}
+                        />
+                        {Array.isArray(answers[q.id]) && (
+                          <p role="status" className="qa-muted">
+                            {validateDrawingRoute(
+                              answers[q.id] as Point[],
+                              q.scenario.start,
+                              q.scenario.goal,
+                              q.scenario.map.h!,
+                              q.scenario.map.w!,
+                              q.scenario.map.connectivity!,
+                            )}
+                          </p>
+                        )}
+                      </>
                     )}
                   </fieldset>
                 </section>

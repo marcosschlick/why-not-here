@@ -32,7 +32,7 @@ export default defineConfig({
               path === "/docs" ||
               path === "/openapi.json" ||
               path === "/redoc") &&
-            !/^\/api\/participate\/[^/]+(?:\/submit)?$/.test(path)
+            !/^\/api\/participate\/[^/]+(?:\/submit|\/questions\/\d+\/confirm)?$/.test(path)
           ) {
             response.statusCode = 404;
             response.end("Not Found");

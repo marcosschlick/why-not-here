@@ -58,6 +58,15 @@ def initialize_database() -> None:
             UNIQUE (participation_id, question_id)
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS route_confirmations (
+            question_id BIGINT NOT NULL REFERENCES questions(id),
+            submission_key UUID NOT NULL,
+            choice SMALLINT NOT NULL CHECK (choice IN (0, 1)),
+            route_order JSONB NOT NULL,
+            PRIMARY KEY (question_id, submission_key)
+        )
+        """,
         "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'draft'",
         "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ",
         "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS access_token TEXT UNIQUE",

@@ -1,4 +1,5 @@
 import json
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -78,9 +79,14 @@ def create_scenario(questionnaire_id: int, payload: ScenarioInput):
     configuration = {
         key: current[key] for key in EXPERIMENT_CONFIG_REGISTRY if key in current
     }
+    overrides = dict(payload.config)
+    seed = overrides.get("MAP_DEFAULT_SEED")
+    automatic_seed = seed is None or (isinstance(seed, str) and not seed.strip())
+    if automatic_seed:
+        overrides["MAP_DEFAULT_SEED"] = secrets.randbits(32)
     request = {
         "configuration": configuration,
-        "overrides": payload.config,
+        "overrides": overrides,
         "start": payload.start,
         "goal": payload.goal,
         "alternative_path": payload.alternative_path,
@@ -117,6 +123,7 @@ def create_scenario(questionnaire_id: int, payload: ScenarioInput):
             status_code=status_code,
             detail={"status": result["status"], "message": result["error"]},
         )
+    result["data"]["requested_seed"] = None if automatic_seed else seed
     with connect_database() as connection:
         require_draft(connection, questionnaire_id)
         scenario = connection.execute(

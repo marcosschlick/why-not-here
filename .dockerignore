@@ -5,3 +5,4 @@ docs/*.pdf
 web/frontend/node_modules/
 web/frontend/dist/
 .git
+.env

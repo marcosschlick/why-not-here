@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { Participant } from "./Participant";
+import type { ParticipantQuestionnaire } from "./Participant";
 import { TacticalMapCanvas } from "./TacticalMapCanvas";
 import type { MapAppearance, MapData } from "../types";
 import "./questionnaire-admin.css";
@@ -30,7 +32,10 @@ type Scenario = {
   configuration: Record<string, unknown>;
   appearance: MapAppearance | null;
   data: {
-    map?: Partial<MapData>;
+    map?: Partial<MapData> & { base_seed?: number; effective_seed?: number };
+    requested_seed?: number | string | null;
+    cost_baseline_text?: string;
+    explanation_text?: string;
     start?: Point;
     goal?: Point;
     optimal_path?: Point[];
@@ -151,6 +156,57 @@ function ScenarioMap({
   );
 }
 
+function buildPreview(
+  questionnaire: Questionnaire,
+  scenarios: Scenario[],
+  group: "control" | "experimental",
+): ParticipantQuestionnaire {
+  return {
+    title: questionnaire.title,
+    description: questionnaire.description,
+    submission_completed: false,
+    questions: questionnaire.questions.map((question) => {
+      const saved = scenarios.find((item) => item.id === question.scenario_id);
+      const data = saved?.data;
+      const pending =
+        !!saved &&
+        questionnaire.questions.some(
+          (item) =>
+            item.scenario_id === saved.id && item.type === "route_choice",
+        );
+      const justification =
+        group === "control" ? data?.cost_baseline_text : data?.explanation_text;
+      const scenario =
+        data?.map && data.start && data.goal && saved?.appearance
+          ? {
+              map: data.map,
+              start: data.start,
+              goal: data.goal,
+              appearance: saved.appearance,
+              terrain_colors: (saved.configuration.TERRAIN_COLORS ||
+                {}) as Record<string, string>,
+              routes:
+                data.optimal_path && data.alternative_path
+                  ? [data.optimal_path, data.alternative_path]
+                  : undefined,
+            }
+          : undefined;
+      return {
+        id: question.id,
+        prompt: question.prompt,
+        type: question.type,
+        configuration: question.configuration,
+        scenario,
+        preview_scenario_id: question.scenario_id,
+        preview_justification: justification,
+        justification: pending ? undefined : justification,
+        justification_pending: pending,
+        confirmed_choice: null,
+      };
+    }),
+  };
+}
+
 export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
   const [list, setList] = useState<Summary[]>([]);
   const [selected, setSelected] = useState<Questionnaire | null>(null);
@@ -161,6 +217,9 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
   const [form, setForm] = useState<Form>(emptyForm);
   const [editing, setEditing] = useState<number | null>(null);
   const [preview, setPreview] = useState(false);
+  const [previewGroup, setPreviewGroup] = useState<"control" | "experimental">(
+    "control",
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [scenarioTitle, setScenarioTitle] = useState("");
@@ -548,67 +607,26 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
           </section>
           {selected && preview && (
             <section className="qa-panel qa-preview">
-              <span className="qa-overline">READ-ONLY PREVIEW</span>
-              <h2>{selected.title}</h2>
-              {selected.description && <p>{selected.description}</p>}
-              {selected.questions.length === 0 && (
-                <p className="qa-muted">
-                  This questionnaire has no questions yet.
-                </p>
-              )}
-              {selected.questions.map((q, i) => {
-                const scenario = scenarios.find((s) => s.id === q.scenario_id);
-                return (
-                  <article className="qa-preview-question" key={q.id}>
-                    <span className="qa-overline">
-                      QUESTION {i + 1} / {labels[q.type]}
-                    </span>
-                    <h3>{q.prompt}</h3>
-                    {q.type === "choice" && (
-                      <ul>
-                        {q.configuration.options?.map((option, n) => (
-                          <li key={n}>{option}</li>
-                        ))}
-                      </ul>
-                    )}
-                    {q.type === "likert" && (
-                      <p>
-                        Scale: {q.configuration.min}–{q.configuration.max}
-                      </p>
-                    )}
-                    {q.type === "numeric" && (
-                      <p>
-                        Numeric response
-                        {q.configuration.min != null
-                          ? ` · Minimum ${q.configuration.min}`
-                          : ""}
-                        {q.configuration.max != null
-                          ? ` · Maximum ${q.configuration.max}`
-                          : ""}
-                      </p>
-                    )}
-                    {q.type === "text" && (
-                      <p className="qa-muted">Free-text response</p>
-                    )}
-                    {(q.type === "route_choice" ||
-                      q.type === "route_drawing") &&
-                      (scenario ? (
-                        <>
-                          <p className="qa-muted">{scenario.title}</p>
-                          <ScenarioMap
-                            scenario={scenario}
-                            showRoutes={q.type === "route_choice"}
-                          />
-                          {q.type === "route_choice" && (
-                            <p>Options: Optimal route / Alternative route</p>
-                          )}
-                        </>
-                      ) : (
-                        <p className="qa-muted">Scenario unavailable.</p>
-                      ))}
-                  </article>
-                );
-              })}
+              <span className="qa-overline">PARTICIPANT PREVIEW</span>
+              <label>
+                Group
+                <select
+                  value={previewGroup}
+                  onChange={(event) =>
+                    setPreviewGroup(
+                      event.target.value as "control" | "experimental",
+                    )
+                  }
+                >
+                  <option value="control">Control</option>
+                  <option value="experimental">Experimental</option>
+                </select>
+              </label>
+              <p className="qa-muted">This preview does not save answers.</p>
+              <Participant
+                key={`${selected.id}-${previewGroup}`}
+                preview={buildPreview(selected, scenarios, previewGroup)}
+              />
             </section>
           )}
           {selected && !preview && (
@@ -915,7 +933,31 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
                       </select>
                     </label>
                     {currentScenario && (
-                      <ScenarioMap scenario={currentScenario} />
+                      <>
+                        <p className="qa-muted">
+                          Requested seed:{" "}
+                          {currentScenario.data.requested_seed === null
+                            ? "Automatic"
+                            : String(
+                                currentScenario.data.requested_seed ??
+                                  currentScenario.data.map?.base_seed ??
+                                  currentScenario.configuration
+                                    .MAP_DEFAULT_SEED ??
+                                  "Unavailable",
+                              )}{" "}
+                          · Generation seed:{" "}
+                          {String(
+                            currentScenario.data.map?.base_seed ??
+                              "Unavailable",
+                          )}{" "}
+                          · Effective seed:{" "}
+                          {String(
+                            currentScenario.data.map?.effective_seed ??
+                              "Unavailable",
+                          )}
+                        </p>
+                        <ScenarioMap scenario={currentScenario} />
+                      </>
                     )}
                   </div>
                 )}

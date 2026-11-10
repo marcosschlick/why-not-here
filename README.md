@@ -73,7 +73,7 @@ Draft scenarios can be generated synchronously with
 list and detail endpoints. Generation can take as long as the configured solver
 limits; only successful results are saved.
 Use **Questionnaires** in the application navigation to administer drafts and
-preview their saved questions and scenarios. The API saves question ordering via
+preview their saved questions and scenarios for either group without saving answers. The scenario view shows the requested and effective seeds; leaving the seed blank generates a new one. The API saves question ordering via
 `PUT /api/questionnaires/{id}/questions/order`, with a `question_ids` array
 containing every question in the desired order.
 Activate a draft in the administration screen to lock it and obtain a
@@ -85,7 +85,13 @@ The participant GET requires the `submission_key` UUID query parameter. It
 determines a stable randomized route order for each question and attempt. New
 route-choice answers store their displayed order in `answers.route_order`;
 older answers have a null order and used optimal followed by alternative.
-Repeating a completed submission with different answers returns a conflict.
+Before revealing a scenario justification, the participant must confirm every
+route-choice question linked to that scenario using
+`POST /api/participate/{token}/questions/{question_id}/confirm` with
+`submission_key` and the selected `choice` (0 or 1). The confirmation and route
+order persist across reloads; changing a confirmed choice returns a conflict.
+The final submission must contain the confirmed choice. Repeating a completed
+submission with different answers returns a conflict.
 
 Each new participation is assigned to either the control group (cost baseline)
 or experimental group (contrastive explanation). The assignment remains stable

@@ -58,7 +58,7 @@
 }
 .qa-app button {
   border: 0;
-  background: var(--azure-blue);
+  background: color-mix(in srgb, var(--azure-blue) 70%, var(--yale-blue));
   color: var(--bright-snow);
   border-radius: var(--radius-sm);
   padding: 0.65rem 0.9rem;
@@ -67,7 +67,7 @@
   font-weight: 650;
 }
 .qa-app button:hover:not(:disabled) {
-  background: var(--state-primary-hover);
+  background: color-mix(in srgb, var(--azure-blue) 60%, var(--yale-blue));
 }
 .qa-app button:disabled {
   cursor: not-allowed;
@@ -140,7 +140,7 @@
   font-size: 0.88rem;
 }
 .qa-count {
-  color: var(--azure-blue);
+  color: var(--text-structural);
 }
 .qa-form {
   display: grid;
@@ -206,7 +206,7 @@
 .qa-question-number {
   display: inline-block;
   width: 2.3rem;
-  color: var(--azure-blue);
+  color: var(--text-structural);
   font-weight: 700;
 }
 .qa-actions {
@@ -333,4 +333,11 @@
 .qa-response-label {
   display: grid;
   gap: 0.4rem;
+}
+
+.qa-preview-app {
+  min-height: 0;
+}
+.qa-preview-app .qa-content {
+  padding: 0;
 }
