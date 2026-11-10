@@ -238,6 +238,7 @@ export function QuestionnaireAdmin({
   const [reduction, setReduction] = useState("PATH_ONLY");
   const [timeout, setTimeoutValue] = useState("60");
   const [exportKey, setExportKey] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [scenarioBaseline, setScenarioBaseline] = useState(
     JSON.stringify(["", "16", "16", "", "PATH_ONLY", "60"]),
   );
@@ -336,6 +337,7 @@ export function QuestionnaireAdmin({
     if (id === selected?.id) return;
     if (!confirmDiscard()) return;
     setExportKey("");
+    setConfirmDelete(false);
     void perform(async () => {
       await loadQuestionnaire(id, true);
       resetQuestion();
@@ -346,6 +348,7 @@ export function QuestionnaireAdmin({
   function newDraft() {
     if (!confirmDiscard()) return;
     setExportKey("");
+    setConfirmDelete(false);
     setSelected(null);
     setTitle("");
     setDescription("");
@@ -455,16 +458,11 @@ export function QuestionnaireAdmin({
       }
     });
   }
-  function removeQuestionnaire() {
+  function handleConfirmDelete() {
     if (!selected) return;
-    if (
-      !window.confirm(
-        `Delete questionnaire "${selected.title}"? This action cannot be undone.`,
-      )
-    )
-      return;
     void perform(async () => {
       await api(`/questionnaires/${selected.id}`, "DELETE");
+      setConfirmDelete(false);
       await loadList();
       newDraft();
     });
@@ -1064,7 +1062,7 @@ export function QuestionnaireAdmin({
                     type="button"
                     className="qa-danger"
                     disabled={busy}
-                    onClick={removeQuestionnaire}
+                    onClick={() => setConfirmDelete(true)}
                   >
                     Delete questionnaire
                   </button>
@@ -1074,6 +1072,71 @@ export function QuestionnaireAdmin({
           )}
         </main>
       </div>
+      {confirmDelete && selected && (
+        <div
+          className="modal-backdrop is-visible"
+          onClick={() => !busy && setConfirmDelete(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="confirm-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="confirm-modal-header">
+              <h3>Delete Questionnaire</h3>
+              <button
+                type="button"
+                className="btn-modal-close"
+                onClick={() => !busy && setConfirmDelete(false)}
+                aria-label="Close dialog"
+                disabled={busy}
+              >
+                &times;
+              </button>
+            </div>
+
+            <p className="confirm-modal-desc">
+              The questionnaire <strong>&quot;{selected.title}&quot;</strong>{" "}
+              currently contains{" "}
+              <strong>{selected.questions.length} question(s)</strong>
+              {scenarios.length > 0 && (
+                <>
+                  {" "}and <strong>{scenarios.length} scenario(s)</strong>
+                </>
+              )}
+              .
+            </p>
+
+            <div className="confirm-modal-warning">
+              Continuing will permanently delete this questionnaire along with all
+              its configured questions, scenarios, and generated routes.
+            </div>
+
+            <div className="confirm-modal-actions">
+              <button
+                type="button"
+                className="btn btn-ghost qa-secondary"
+                onClick={() => setConfirmDelete(false)}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="btn qa-danger"
+                onClick={handleConfirmDelete}
+                disabled={busy}
+              >
+                {busy
+                  ? "Deleting Questionnaire..."
+                  : "Continue & Delete Questionnaire"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   </>
 );
