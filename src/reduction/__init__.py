@@ -1,4 +1,5 @@
 from ..grid import Grid
+from ..resources import require_memory
 from .base import ReducedGraph, extract_induced_edges, prepare_subgraph
 from .bbox import extract_bbox
 from .floodfill import extract_floodfill
@@ -14,6 +15,20 @@ def create_reduced_graph(
     protected_nodes: set[tuple[int, int]] | None = None,
 ) -> ReducedGraph | None:
     norm_method = method.strip().upper()
+    if norm_method in {"BBOX", "SPARSIFIED", "FLOODFILL"}:
+        points = p_star + p_prime
+        rows = [u[0] for u in points]
+        cols = [u[1] for u in points]
+        node_count = (
+            (max(rows) - min(rows) + 1) * (max(cols) - min(cols) + 1) if points else 0
+        )
+    elif norm_method == "PATH_ONLY":
+        node_count = len(p_star) + len(p_prime)
+    else:
+        node_count = grid.h * grid.w
+    require_memory(
+        node_count * (512 + grid.connectivity * 2048), "ISP graph preparation"
+    )
     if norm_method == "NONE":
         return None
     if norm_method == "BBOX":

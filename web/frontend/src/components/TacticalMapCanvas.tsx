@@ -1,6 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { MapData, SemanticModificationsData } from "../types";
+import { useMapViewport } from "../utils/useMapViewport";
+import { createReliefShader } from "../utils/mapRelief";
+import {
+  createOverviewPatterns,
+  drawTextureMotif,
+  textureVariant,
+} from "../utils/mapTextures";
+import type {
+  MapAppearance,
+  MapData,
+  SemanticModificationsData,
+} from "../types";
 import type { GridPoint } from "../utils/geometry";
 
 interface TacticalMapCanvasProps {
@@ -32,9 +43,9 @@ function rgba([red, green, blue]: Rgb, alpha = 1): string {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
-function shadedColor([red, green, blue]: Rgb, factor: number): string {
+function shadedColor([red, green, blue]: Rgb): string {
   const channels = [red, green, blue].map((channel) =>
-    Math.min(255, Math.max(0, Math.round(channel * factor))),
+    Math.min(255, Math.max(0, Math.round(channel))),
   );
   return `rgb(${channels[0]},${channels[1]},${channels[2]})`;
 }
@@ -50,7 +61,6 @@ function terrainColor(hexColor: string | undefined): Rgb {
   ];
 }
 
-const OBSTACLE_RGB: Rgb = [20, 20, 23];
 const START_RGB: Rgb = [0, 176, 255];
 const START_EDGE_RGB: Rgb = [0, 51, 102];
 const GOAL_RGB: Rgb = [255, 215, 0];
@@ -61,7 +71,7 @@ const OPTIMAL_PATH_RGB: Rgb = [50, 125, 225];
 const MODIFICATION_TERRAIN_RGB: Rgb = [255, 59, 141];
 const MODIFICATION_OBSTACLE_RGB: Rgb = [198, 255, 0];
 const MODIFICATION_SLOPE_RGB: Rgb = [168, 85, 247];
-const MODIFICATION_WATER_RGB: Rgb = [0, 201, 199];
+const MODIFICATION_OPENED_TERRAIN_RGB: Rgb = [0, 201, 199];
 const MODIFICATION_SPEED_RGB: Rgb = [219, 84, 97];
 const MODIFICATION_EDGE_RGB: Rgb = [40, 40, 40];
 const GRID_RGB: Rgb = [255, 255, 255];
@@ -285,7 +295,7 @@ function drawSlopeEdge(
 function overlappingCellChanges(
   terrainNodes: GridPoint[],
   obstacleNodes: GridPoint[],
-  waterNodes: GridPoint[],
+  openedTerrainNodes: GridPoint[],
 ): string[] {
   const owners = new Map<string, string>();
   const conflicts = new Set<string>();
@@ -293,7 +303,7 @@ function overlappingCellChanges(
   for (const [category, points] of [
     ["terrain", terrainNodes],
     ["obstacle", obstacleNodes],
-    ["water", waterNodes],
+    ["opened terrain", openedTerrainNodes],
   ] as const) {
     for (const [row, col] of points) {
       const key = `${row},${col}`;
@@ -478,6 +488,29 @@ function drawModificationCells(
   );
 }
 
+function drawTerrainTexture(
+  ctx: CanvasRenderingContext2D,
+  appearance: MapAppearance,
+  terrain: string,
+  x: number,
+  y: number,
+  size: number,
+  row: number,
+  col: number,
+) {
+  const texture = appearance.terrain_textures[terrain];
+  if (!texture) return;
+  ctx.save();
+  ctx.globalAlpha = appearance.texture_opacity;
+  ctx.strokeStyle = appearance.texture_color;
+  ctx.fillStyle = appearance.texture_color;
+  ctx.lineWidth = size * appearance.texture_line_width;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  drawTextureMotif(ctx, textureVariant(texture, row, col), x, y, size);
+  ctx.restore();
+}
+
 function drawHatch(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -488,17 +521,13 @@ function drawHatch(
 ) {
   ctx.save();
   ctx.beginPath();
-  ctx.rect(x, y, width, height);
-  ctx.clip();
+  ctx.moveTo(x + width * 0.2, y + height * 0.8);
+  ctx.lineTo(x + width * 0.8, y + height * 0.2);
+  ctx.moveTo(x + width * 0.2, y + height * 0.2);
+  ctx.lineTo(x + width * 0.8, y + height * 0.8);
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1;
-  const spacing = Math.max(4, Math.floor(Math.min(width, height) / 2));
-  for (let offset = -height; offset < width; offset += spacing) {
-    ctx.beginPath();
-    ctx.moveTo(x + offset, y + height);
-    ctx.lineTo(x + offset + height, y);
-    ctx.stroke();
-  }
+  ctx.lineWidth = Math.min(width, height) * 0.06;
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -520,6 +549,7 @@ export function TacticalMapCanvas({
   onPointerUp,
   onPointerLeave,
 }: TacticalMapCanvasProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const [deviceScale] = useState<number>(() =>
@@ -529,9 +559,15 @@ export function TacticalMapCanvas({
   const effectiveCellSize = cellSize * zoomLevel;
   const logicalWidth = Math.max(1, w * effectiveCellSize);
   const logicalHeight = Math.max(1, h * effectiveCellSize);
+  const viewport = useMapViewport(rootRef, logicalWidth, logicalHeight);
   const renderScale = Math.min(
     deviceScale,
-    4096 / Math.max(1, logicalWidth, logicalHeight),
+    4096 / Math.max(1, viewport.width, viewport.height),
+  );
+
+  const overviewPatterns = useMemo(
+    () => createOverviewPatterns(mapData.appearance, effectiveCellSize),
+    [mapData.appearance, effectiveCellSize],
   );
 
   useEffect(() => {
@@ -540,65 +576,107 @@ export function TacticalMapCanvas({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const pixelWidth = Math.round(logicalWidth * renderScale);
-    const pixelHeight = Math.round(logicalHeight * renderScale);
+    const pixelWidth = Math.max(1, Math.round(viewport.width * renderScale));
+    const pixelHeight = Math.max(1, Math.round(viewport.height * renderScale));
     if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
     if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
-    if (canvas.style.width !== `${logicalWidth}px`) {
-      canvas.style.width = `${logicalWidth}px`;
+    if (canvas.style.width !== `${viewport.width}px`) {
+      canvas.style.width = `${viewport.width}px`;
     }
-    if (canvas.style.height !== `${logicalHeight}px`) {
-      canvas.style.height = `${logicalHeight}px`;
+    if (canvas.style.height !== `${viewport.height}px`) {
+      canvas.style.height = `${viewport.height}px`;
     }
-    ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+    ctx.setTransform(
+      renderScale,
+      0,
+      0,
+      renderScale,
+      -viewport.x * renderScale,
+      -viewport.y * renderScale,
+    );
 
-    let minElev = Infinity;
-    let maxElev = -Infinity;
-    for (let row = 0; row < h; row++) {
-      for (let col = 0; col < w; col++) {
-        const value = elevation[row]?.[col] ?? 0;
-        if (value < minElev) minElev = value;
-        if (value > maxElev) maxElev = value;
-      }
-    }
-    const elevationRange = maxElev - minElev;
-    const elevationShadeMin = mapData.elevation_shade_min ?? 1.0;
-    const elevationShadeMax = mapData.elevation_shade_max ?? 1.5;
-
-    for (let row = 0; row < h; row++) {
-      for (let col = 0; col < w; col++) {
+    const step = Math.max(1, Math.floor(1 / effectiveCellSize));
+    const firstRow = Math.max(
+      0,
+      Math.floor(viewport.y / effectiveCellSize / step) * step,
+    );
+    const firstCol = Math.max(
+      0,
+      Math.floor(viewport.x / effectiveCellSize / step) * step,
+    );
+    const lastRow = Math.min(
+      h,
+      Math.ceil((viewport.y + viewport.height) / effectiveCellSize),
+    );
+    const lastCol = Math.min(
+      w,
+      Math.ceil((viewport.x + viewport.width) / effectiveCellSize),
+    );
+    const appearance = mapData.appearance;
+    const reliefShader = createReliefShader(
+      elevation,
+      mapData.cell_size,
+      appearance.relief,
+    );
+    for (let row = firstRow; row < lastRow; row += step) {
+      for (let col = firstCol; col < lastCol; col += step) {
         const x = Math.round(col * effectiveCellSize);
         const y = Math.round(row * effectiveCellSize);
-        const width = Math.round((col + 1) * effectiveCellSize) - x;
-        const height = Math.round((row + 1) * effectiveCellSize) - y;
+        const width =
+          Math.round(Math.min(w, col + step) * effectiveCellSize) - x;
+        const height =
+          Math.round(Math.min(h, row + step) * effectiveCellSize) - y;
         const terrainName = terrain[row]?.[col] || "GRASS";
         const isObstacle = (obstacle[row]?.[col] ?? 0) !== 0;
-        const cellElevation = elevation[row]?.[col] ?? 0;
         const baseTerrainColor = terrainColor(
-          mapData.terrain_colors?.[terrainName],
+          mapData.terrain_colors[terrainName],
         );
-        const shade =
-          elevationRange > 0
-            ? elevationShadeMin +
-              (elevationShadeMax - elevationShadeMin) *
-                ((cellElevation - minElev) / elevationRange)
-            : 1;
-
-        if (terrainName === "WATER_RIVER") {
-          ctx.fillStyle = shadedColor(baseTerrainColor, shade);
-        } else if (isObstacle) {
-          ctx.fillStyle = shadedColor(OBSTACLE_RGB, shade);
-        } else {
-          ctx.fillStyle = shadedColor(baseTerrainColor, shade);
-        }
+        const baseColor =
+          isObstacle && terrainName !== "WATER_RIVER"
+            ? (baseTerrainColor.map(
+                (channel) => channel * appearance.obstacle_shade,
+              ) as Rgb)
+            : baseTerrainColor;
+        ctx.fillStyle = shadedColor(
+          terrainName === "WATER_RIVER"
+            ? baseTerrainColor
+            : reliefShader(baseColor, row, col),
+        );
         ctx.fillRect(x, y, width, height);
 
-        if (
-          isObstacle &&
-          terrainName !== "WATER_RIVER" &&
-          effectiveCellSize >= 8
-        ) {
-          drawHatch(ctx, x, y, width, height, "rgba(248,248,248,0.28)");
+        if (effectiveCellSize >= appearance.texture_min_cell_pixels) {
+          if (isObstacle) {
+            drawHatch(
+              ctx,
+              x,
+              y,
+              width,
+              height,
+              rgba(
+                terrainColor(appearance.obstacle_texture_color),
+                appearance.obstacle_texture_opacity,
+              ),
+            );
+          } else {
+            drawTerrainTexture(
+              ctx,
+              appearance,
+              terrainName,
+              x,
+              y,
+              effectiveCellSize,
+              row,
+              col,
+            );
+          }
+        } else if (!isObstacle) {
+          const pattern = overviewPatterns.get(terrainName);
+          if (pattern) {
+            ctx.fillStyle = pattern;
+            ctx.globalAlpha = appearance.texture_overview.opacity;
+            ctx.fillRect(x, y, width, height);
+            ctx.globalAlpha = 1;
+          }
         }
 
         if (effectiveCellSize >= 10) {
@@ -612,11 +690,11 @@ export function TacticalMapCanvas({
     const terrainNodes = modifications?.terrain_nodes ?? [];
     const obstacleNodes = modifications?.obstacle_nodes ?? [];
     const slopeEdges = modifications?.slope_edges ?? [];
-    const waterNodes = modifications?.water_nodes ?? [];
+    const openedTerrainNodes = modifications?.opened_terrain_nodes ?? [];
     const conflictingCellChanges = overlappingCellChanges(
       terrainNodes,
       obstacleNodes,
-      waterNodes,
+      openedTerrainNodes,
     );
     if (conflictingCellChanges.length > 0) {
       console.error(
@@ -678,8 +756,8 @@ export function TacticalMapCanvas({
     );
     drawModificationCells(
       ctx,
-      waterNodes,
-      MODIFICATION_WATER_RGB,
+      openedTerrainNodes,
+      MODIFICATION_OPENED_TERRAIN_RGB,
       effectiveCellSize,
     );
     for (const [from, to] of slopeEdges) {
@@ -734,6 +812,7 @@ export function TacticalMapCanvas({
   }, [
     cellSize,
     deviceScale,
+    viewport,
     elevation,
     effectiveCellSize,
     goal,
@@ -743,6 +822,7 @@ export function TacticalMapCanvas({
     mapData,
     modifications,
     obstacle,
+    overviewPatterns,
     optimalPath,
     renderScale,
     start,
@@ -758,18 +838,25 @@ export function TacticalMapCanvas({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const pixelWidth = Math.round(logicalWidth * renderScale);
-    const pixelHeight = Math.round(logicalHeight * renderScale);
+    const pixelWidth = Math.max(1, Math.round(viewport.width * renderScale));
+    const pixelHeight = Math.max(1, Math.round(viewport.height * renderScale));
     if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
     if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
-    if (canvas.style.width !== `${logicalWidth}px`) {
-      canvas.style.width = `${logicalWidth}px`;
+    if (canvas.style.width !== `${viewport.width}px`) {
+      canvas.style.width = `${viewport.width}px`;
     }
-    if (canvas.style.height !== `${logicalHeight}px`) {
-      canvas.style.height = `${logicalHeight}px`;
+    if (canvas.style.height !== `${viewport.height}px`) {
+      canvas.style.height = `${viewport.height}px`;
     }
-    ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
-    ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+    ctx.setTransform(
+      renderScale,
+      0,
+      0,
+      renderScale,
+      -viewport.x * renderScale,
+      -viewport.y * renderScale,
+    );
+    ctx.clearRect(viewport.x, viewport.y, viewport.width, viewport.height);
 
     if (!hoveredCell) return;
     const [row, col] = hoveredCell;
@@ -777,8 +864,8 @@ export function TacticalMapCanvas({
 
     const x = Math.round(col * effectiveCellSize);
     const y = Math.round(row * effectiveCellSize);
-    const width = Math.round((col + 1) * effectiveCellSize) - x;
-    const height = Math.round((row + 1) * effectiveCellSize) - y;
+    const width = Math.round(Math.min(w, col + 1) * effectiveCellSize) - x;
+    const height = Math.round(Math.min(h, row + 1) * effectiveCellSize) - y;
     ctx.strokeStyle = rgba(START_RGB);
     ctx.lineWidth = 2;
     ctx.strokeRect(x, y, width, height);
@@ -804,6 +891,7 @@ export function TacticalMapCanvas({
       ctx.restore();
     }
   }, [
+    viewport,
     dragOrigin,
     effectiveCellSize,
     h,
@@ -820,6 +908,7 @@ export function TacticalMapCanvas({
 
   return (
     <div
+      ref={rootRef}
       className={`tactical-map-canvas ${className}`}
       style={{
         width: `${logicalWidth + 2}px`,
@@ -829,7 +918,12 @@ export function TacticalMapCanvas({
       <canvas
         ref={canvasRef}
         className="map-canvas-layer map-canvas-base"
-        style={{ width: `${logicalWidth}px`, height: `${logicalHeight}px` }}
+        style={{
+          left: viewport.x,
+          top: viewport.y,
+          width: viewport.width,
+          height: viewport.height,
+        }}
         aria-hidden="true"
       />
       <canvas
@@ -837,7 +931,14 @@ export function TacticalMapCanvas({
         className={`map-canvas-layer interactive-canvas ${
           interactive ? "" : "is-read-only"
         } ${isConnectedToGoal ? "is-locked" : ""}`}
-        style={{ width: `${logicalWidth}px`, height: `${logicalHeight}px` }}
+        style={{
+          left: viewport.x,
+          top: viewport.y,
+          width: viewport.width,
+          height: viewport.height,
+        }}
+        data-offset-x={viewport.x}
+        data-offset-y={viewport.y}
         aria-label="Tactical map"
         role={interactive ? undefined : "img"}
         onPointerDown={interactive ? onPointerDown : undefined}
@@ -867,12 +968,16 @@ export function TacticalMapLegend({
     modifications?.obstacle ?? modifications?.obstacle_nodes?.length ?? 0;
   const slopeCount =
     modifications?.slope ?? modifications?.slope_edges?.length ?? 0;
-  const waterCount =
-    modifications?.water ?? modifications?.water_nodes?.length ?? 0;
+  const openedTerrainCount = modifications?.opened_terrain ?? 0;
   const speedCount =
     modifications?.robot_speed ?? modifications?.robot_speed_edges?.length ?? 0;
   const hasChanges =
-    terrainCount + obstacleCount + slopeCount + waterCount + speedCount > 0;
+    terrainCount +
+      obstacleCount +
+      slopeCount +
+      openedTerrainCount +
+      speedCount >
+    0;
 
   return (
     <div className="canvas-legend" aria-label="Map legend">
@@ -953,10 +1058,10 @@ export function TacticalMapLegend({
               Slope leveled ({slopeCount})
             </span>
           )}
-          {waterCount > 0 && (
+          {openedTerrainCount > 0 && (
             <span className="legend-item">
-              <span className="legend-color legend-change-cell legend-change-water" />
-              Water opened ({waterCount})
+              <span className="legend-color legend-change-cell legend-change-opened-terrain" />
+              Terrain opened ({openedTerrainCount})
             </span>
           )}
           {speedCount > 0 && (

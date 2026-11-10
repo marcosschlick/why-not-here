@@ -39,10 +39,12 @@ def generate_explanation_text(
         obstacle_nodes = [u for u in obstacle_nodes if grid.get_cell(u).obstacle != 0]
     has_obstacle = bool(obstacle_nodes)
     has_slope = bool(modifications.slope_edges)
-    has_water = bool(modifications.water_nodes)
+    has_opened_terrain = bool(modifications.opened_terrain_nodes)
     has_robot_speed = bool(modifications.robot_speed_edges)
 
-    if not any((has_terrain, has_obstacle, has_slope, has_water, has_robot_speed)):
+    if not any(
+        (has_terrain, has_obstacle, has_slope, has_opened_terrain, has_robot_speed)
+    ):
         if subgraph_only:
             return (
                 subgraph_message
@@ -108,12 +110,25 @@ def generate_explanation_text(
                 "that slow or prevent continuous robot traversal."
             )
 
-    if has_water:
-        water_count = len(modifications.water_nodes)
-        water_cell_label = "cell" if water_count == 1 else "cells"
-        lines.append(
-            f"- Make {water_count} water {water_cell_label} traversable at the base-terrain speed while preserving water terrain."
-        )
+    if has_opened_terrain:
+        counts: dict[str, int] = {}
+        for node in modifications.opened_terrain_nodes:
+            terrain = (
+                grid.get_cell(node).terrain
+                if grid is not None
+                else "impassable terrain"
+            )
+            name = (
+                "water"
+                if terrain == "WATER_RIVER"
+                else terrain.lower().replace("_", " ")
+            )
+            counts[name] = counts.get(name, 0) + 1
+        for name, count in counts.items():
+            label = "cell" if count == 1 else "cells"
+            lines.append(
+                f"- Make {count} {name} {label} traversable at the base-terrain speed while preserving the original terrain."
+            )
 
     if has_robot_speed:
         count = len(modifications.robot_speed_edges)

@@ -14,6 +14,7 @@ from src import config
 from src.grid import Grid
 from src.incremental import ISPValidator
 from src.isp.precheck import validate_alternative_path
+from src.map.profiles import map_profiles
 from src.pipeline.artifact_names import (
     MAP_DIRECTORY_NAME,
     MAP_IMAGE_FILENAME,
@@ -33,6 +34,7 @@ from src.pipeline.utils import (
     prepare_endpoints,
 )
 from src.planning import plan_path
+from src.visual.appearance import resolve_map_appearance
 from src.visual.layers import find_steep_cells
 
 from .artifacts import collect_artifacts
@@ -75,9 +77,10 @@ def _grid_layers(grid: Grid) -> dict[str, Any]:
         "max_slope_deg": grid.max_slope_deg,
         "speeds": grid.speeds,
         "terrain_colors": config.TERRAIN_COLORS,
+        "appearance": resolve_map_appearance(grid.h, grid.w),
+        "terrain_overrides": sorted(grid.terrain_overrides),
+        "generation_profile": grid.generation_profile,
         "steep_cells": sorted(find_steep_cells(grid)),
-        "elevation_shade_min": config.MAP_ELEVATION_SHADE_MIN,
-        "elevation_shade_max": config.MAP_ELEVATION_SHADE_MAX,
     }
 
 
@@ -91,6 +94,11 @@ def sanitize_floats(obj: Any) -> Any:
     if isinstance(obj, (list, tuple)):
         return [sanitize_floats(item) for item in obj]
     return obj
+
+
+@router.get("/map-profiles")
+def read_map_profiles() -> list[dict]:
+    return map_profiles()
 
 
 @router.get("/config")
@@ -342,12 +350,12 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
                 terrain=len(result.modifications.terrain_nodes),
                 obstacle=len(result.modifications.obstacle_nodes),
                 slope=len(result.modifications.slope_edges),
-                water=len(result.modifications.water_nodes),
+                opened_terrain=len(result.modifications.opened_terrain_nodes),
+                opened_terrain_nodes=result.modifications.opened_terrain_nodes,
                 robot_speed=len(result.modifications.robot_speed_edges),
                 terrain_nodes=result.modifications.terrain_nodes,
                 obstacle_nodes=result.modifications.obstacle_nodes,
                 slope_edges=result.modifications.slope_edges,
-                water_nodes=result.modifications.water_nodes,
                 terrain_assignments=result.modifications.terrain_assignments,
                 robot_speed_edges=result.modifications.robot_speed_edges,
             ).model_dump(mode="json")
@@ -422,6 +430,8 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
             runner.state["status"] = "failed"
         if isinstance(exc, HTTPException):
             raise
+        if isinstance(exc, (TypeError, ValueError)):
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         if isinstance(exc, FileNotFoundError):
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         raise HTTPException(

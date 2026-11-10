@@ -127,13 +127,17 @@ class BaseISPSolver:
             slope_end = slope_start + isp.num_slope_vars
             z_val[slope_start:slope_end] = np.clip(formulation.z_slope.value, 0.0, 1.0)
 
-        if formulation.z_water is not None and formulation.z_water.value is not None:
-            water_start = (
+        if (
+            formulation.z_opened_terrain is not None
+            and formulation.z_opened_terrain.value is not None
+        ):
+            opened_terrain_start = (
                 isp.num_terrain_vars + isp.num_obstacle_vars + isp.num_slope_vars
             )
-            z_val[water_start : water_start + isp.num_water_vars] = np.clip(
-                formulation.z_water.value, 0.0, 1.0
-            )
+            z_val[
+                opened_terrain_start : opened_terrain_start
+                + isp.num_opened_terrain_vars
+            ] = np.clip(formulation.z_opened_terrain.value, 0.0, 1.0)
 
         if (
             formulation.z_robot_speed is not None

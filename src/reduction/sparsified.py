@@ -1,7 +1,7 @@
 from collections import deque
 from math import isfinite
 
-from ..config import IMPASSABLE_TERRAINS, WATER_TERRAIN
+from ..config import IMPASSABLE_TERRAINS
 from ..grid import Grid
 from .base import ReducedGraph
 from .bbox import extract_bbox
@@ -15,9 +15,9 @@ def _edge_indicators(
     terrain_blocked = False
     for node in (u, v):
         cell = grid.get_cell(node)
-        water_override = cell.terrain == WATER_TERRAIN and node in grid.water_overrides
+        terrain_override = node in grid.terrain_overrides
         if cell.obstacle != 0 or (
-            cell.terrain in IMPASSABLE_TERRAINS and not water_override
+            cell.terrain in IMPASSABLE_TERRAINS and not terrain_override
         ):
             terrain_blocked = True
     return terrain_blocked, abs(grid.get_slope(u, v)) > grid.max_slope_deg

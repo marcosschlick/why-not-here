@@ -12,6 +12,7 @@ import { formatReductionMethod } from "../utils/formatters";
 import { useMapCanvasFit } from "../utils/useMapCanvasFit";
 import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
 import type { GridPoint } from "../utils/geometry";
+import { hasTerrainOverride } from "../utils/terrainAccess";
 
 interface ResultsViewProps {
   result: LastResult | null;
@@ -177,9 +178,6 @@ export function ResultsView({
         ? {
             ...originalMapData,
             ...modifiedGrid,
-            max_slope_deg:
-              modifiedGrid.max_slope_deg ?? originalMapData.max_slope_deg,
-            speeds: modifiedGrid.speeds ?? originalMapData.speeds,
             terrain_colors: originalMapData.terrain_colors,
           }
         : originalMapData,
@@ -193,6 +191,7 @@ export function ResultsView({
   const mapHeight = currentMapData?.h;
   const mapWidth = currentMapData?.w;
   const mapCellSize = useMapCanvasFit(mapCanvasContainer, mapHeight, mapWidth);
+  const maxZoomLevel = Math.max(3, 24 / mapCellSize);
   const [previousMapData, setPreviousMapData] = useState(originalMapData);
   const [previousBatchIndex, setPreviousBatchIndex] = useState(currentBatchIdx);
   if (
@@ -203,6 +202,8 @@ export function ResultsView({
     setPreviousBatchIndex(currentBatchIdx);
     setHoveredCell(null);
     setZoomLevel(1.0);
+  } else if (zoomLevel > maxZoomLevel) {
+    setZoomLevel(maxZoomLevel);
   }
   const tacticalArtifacts = currentArtifacts.filter(
     (artifactPath) => getArtifactFilename(artifactPath) !== "map.png",
@@ -227,24 +228,30 @@ export function ResultsView({
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         if (e.deltaY < 0) {
-          setZoomLevel((z) => Math.min(3.0, +(z + 0.25).toFixed(2)));
+          setZoomLevel((z) => Math.min(maxZoomLevel, z * 2));
         } else if (e.deltaY > 0) {
-          setZoomLevel((z) => Math.max(1.0, +(z - 0.25).toFixed(2)));
+          setZoomLevel((z) => Math.max(1.0, z / 2));
         }
       }
     }
 
     wrapper.addEventListener("wheel", handleWheel, { passive: false });
     return () => wrapper.removeEventListener("wheel", handleWheel);
-  }, [mapCanvasContainer]);
+  }, [mapCanvasContainer, maxZoomLevel]);
 
   function getCellFromCoordinates(
     event: ReactPointerEvent<HTMLCanvasElement>,
   ): GridPoint | null {
     if (!currentMapData) return null;
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const x =
+      event.clientX -
+      rect.left +
+      Number(event.currentTarget.dataset.offsetX ?? 0);
+    const y =
+      event.clientY -
+      rect.top +
+      Number(event.currentTarget.dataset.offsetY ?? 0);
 
     const c = Math.floor(x / zoomLevel / mapCellSize);
     const r = Math.floor(y / zoomLevel / mapCellSize);
@@ -292,7 +299,7 @@ export function ResultsView({
     ? currentModifications.terrain +
       currentModifications.obstacle +
       currentModifications.slope +
-      (currentModifications.water ?? 0) +
+      (currentModifications?.opened_terrain ?? 0) +
       (currentModifications.robot_speed ?? 0)
     : 0;
   const hasCandidateModifications =
@@ -300,7 +307,7 @@ export function ResultsView({
     (currentModifications?.terrain_nodes?.length ?? 0) > 0 ||
     (currentModifications?.obstacle_nodes?.length ?? 0) > 0 ||
     (currentModifications?.slope_edges?.length ?? 0) > 0 ||
-    (currentModifications?.water_nodes?.length ?? 0) > 0 ||
+    (currentModifications?.opened_terrain_nodes.length ?? 0) > 0 ||
     (currentModifications?.robot_speed_edges?.length ?? 0) > 0;
   const isInfeasible = currentResult?.solver_status === "INFEASIBLE";
   const isCandidateSolution =
@@ -350,9 +357,9 @@ export function ResultsView({
       ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
     ),
   );
-  const isCellWaterModified = Boolean(
+  const isCellTerrainOpened = Boolean(
     hoveredCell &&
-    visibleModifications?.water_nodes?.some(
+    visibleModifications?.opened_terrain_nodes.some(
       ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
     ),
   );
@@ -373,8 +380,14 @@ export function ResultsView({
       ? (currentMapData.terrain[hoveredCell[0]]?.[hoveredCell[1]] ?? "-")
       : "-";
   const hoveredTerrainSpeed = currentMapData?.speeds?.[hoveredTerrain];
+  const isTerrainOpened = Boolean(
+    hoveredCell &&
+    currentMapData &&
+    hasTerrainOverride(currentMapData, hoveredCell),
+  );
   const hoveredTerrainBlocked =
-    !isCellWaterModified &&
+    !isTerrainOpened &&
+    !isCellTerrainOpened &&
     (hoveredTerrain === "WATER_RIVER" ||
       hoveredTerrainSpeed === undefined ||
       hoveredTerrainSpeed <= 0);
@@ -410,9 +423,9 @@ export function ResultsView({
           <strong className="cell-status cell-status-impassable">
             Impassable terrain
           </strong>
-        ) : isCellWaterModified ? (
+        ) : isCellTerrainOpened ? (
           <strong className="cell-status cell-status-free">
-            Traversable water at base-terrain speed
+            Traversable terrain at base-terrain speed
           </strong>
         ) : (
           <strong className="cell-status cell-status-free">Free</strong>
@@ -425,9 +438,12 @@ export function ResultsView({
             Cleared
           </strong>
         )}
-        {isCellWaterModified && (
-          <strong className="mod-badge water" style={{ marginLeft: "0.35rem" }}>
-            Water override
+        {isCellTerrainOpened && (
+          <strong
+            className="mod-badge opened-terrain"
+            style={{ marginLeft: "0.35rem" }}
+          >
+            Terrain override
           </strong>
         )}
         {isStart && (
@@ -552,11 +568,9 @@ export function ResultsView({
                 <button
                   type="button"
                   className="btn-zoom"
-                  onClick={() =>
-                    setZoomLevel((z) => Math.max(1.0, +(z - 0.25).toFixed(2)))
-                  }
+                  onClick={() => setZoomLevel((z) => Math.max(1.0, z / 2))}
                   disabled={zoomLevel <= 1.0}
-                  title="Zoom Out (-0.25x)"
+                  title="Zoom out"
                 >
                   &minus;
                 </button>
@@ -567,10 +581,10 @@ export function ResultsView({
                   type="button"
                   className="btn-zoom"
                   onClick={() =>
-                    setZoomLevel((z) => Math.min(3.0, +(z + 0.25).toFixed(2)))
+                    setZoomLevel((z) => Math.min(maxZoomLevel, z * 2))
                   }
-                  disabled={zoomLevel >= 3.0}
-                  title="Zoom In (+0.25x)"
+                  disabled={zoomLevel >= maxZoomLevel}
+                  title="Zoom in"
                 >
                   +
                 </button>
@@ -796,12 +810,9 @@ export function ResultsView({
               <span className="mod-badge slope">
                 Slopes: {currentResult.modifications?.slope ?? 0} leveled
               </span>
-              <span className="mod-badge water">
-                Water:{" "}
-                {currentResult.modifications?.water ??
-                  currentResult.modifications?.water_nodes?.length ??
-                  0}{" "}
-                opened
+              <span className="mod-badge opened-terrain">
+                Terrain opened:{" "}
+                {currentResult.modifications?.opened_terrain ?? 0}
               </span>
               <span className="mod-badge">
                 Robot speed:{" "}

@@ -10,8 +10,8 @@ class RunRequest(BaseModel):
 class GenerateMapRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    MAP_H: int = Field(default=64, ge=4, le=1024)
-    MAP_W: int = Field(default=128, ge=4, le=1024)
+    MAP_H: int = Field(default=64, ge=4, le=8192)
+    MAP_W: int = Field(default=128, ge=4, le=8192)
     CONNECTIVITY: int = Field(default=8)
     CELL_SIZE: float | None = Field(default=None, gt=0)
     DEFAULT_REDUCTION_METHOD: str = Field(default="NONE")
@@ -22,6 +22,7 @@ class GenerateMapRequest(BaseModel):
     MAP_ELEVATION_SCALE: float | None = Field(default=None, gt=0)
     MAP_ELEVATION_FREQ: float | None = Field(default=None, gt=0)
     MAP_ELEVATION_OCTAVES: int | None = Field(default=None, ge=1)
+    MAP_ELEVATION_PERSISTENCE: float | None = Field(default=None, gt=0, le=1)
     MAP_MOISTURE_FREQ: float | None = Field(default=None, gt=0)
     MAP_MOISTURE_OCTAVES: int | None = Field(default=None, ge=1)
     MAP_ROUGHNESS_FREQ: float | None = Field(default=None, gt=0)
@@ -44,15 +45,17 @@ class SolveISPRequest(BaseModel):
 
 
 class SemanticModificationsData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     terrain: int
     obstacle: int
     slope: int
-    water: int = 0
+    opened_terrain: int
     robot_speed: int = 0
     terrain_nodes: list[tuple[int, int]]
     obstacle_nodes: list[tuple[int, int]]
     slope_edges: list[tuple[tuple[int, int], tuple[int, int]]]
-    water_nodes: list[tuple[int, int]] = Field(default_factory=list)
+    opened_terrain_nodes: list[tuple[int, int]]
     terrain_assignments: list[tuple[tuple[int, int], str]] = Field(default_factory=list)
     robot_speed_edges: list[tuple[tuple[int, int], tuple[int, int]]] = Field(
         default_factory=list

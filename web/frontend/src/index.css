@@ -16,7 +16,7 @@
   --map-change-terrain: #ff3b8d;
   --map-change-obstacle: #c6ff00;
   --map-change-slope: #a855f7;
-  --map-change-water: #00c9c7;
+  --map-change-opened-terrain: #00c9c7;
   --surface-page: var(--bright-snow);
   --surface-raised: color-mix(
     in srgb,
@@ -963,6 +963,8 @@ kbd,
   border-color: var(--border-danger);
 }
 .zoom-controls-bar {
+  flex-wrap: wrap;
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -1141,6 +1143,8 @@ kbd,
   color: var(--azure-blue) !important;
 }
 .canvas-legend {
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
@@ -1149,6 +1153,9 @@ kbd,
   font-size: 0.74rem;
 }
 .legend-group {
+  flex: 1 1 15rem;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
@@ -1163,12 +1170,16 @@ kbd,
   text-transform: uppercase;
 }
 .legend-item {
+  max-width: 100%;
+  flex-shrink: 0;
+  overflow-wrap: normal;
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   color: var(--text-strong);
 }
 .legend-color {
+  flex: 0 0 0.7rem;
   width: 0.7rem;
   height: 0.7rem;
   border: 1px solid color-mix(in srgb, var(--shadow-grey) 25%, transparent);
@@ -1245,7 +1256,11 @@ kbd,
     var(--map-route-outline);
 }
 .legend-obstacle {
-  background: var(--map-obstacle);
+  background: repeating-linear-gradient(
+    45deg,
+    #777b80 0 3px,
+    var(--bright-snow) 3px 4px
+  );
 }
 .legend-change-cell {
   border: 1px solid var(--shadow-grey);
@@ -1292,8 +1307,8 @@ kbd,
 .legend-change-slope {
   background: var(--map-change-slope);
 }
-.legend-change-water {
-  background: var(--map-change-water);
+.legend-change-opened-terrain {
+  background: var(--map-change-opened-terrain);
 }
 .legend-speed-arrow {
   width: 1.1rem;
@@ -1863,6 +1878,7 @@ kbd,
 .spinner-tiny,
 .loading-spinner,
 .batch-pending-spinner {
+  flex-shrink: 0;
   width: 1.4rem;
   height: 1.4rem;
   border: 0.16rem solid color-mix(in srgb, var(--bright-snow) 22%, transparent);
@@ -2120,6 +2136,7 @@ kbd,
   transition: color var(--duration-fast) var(--ease-out);
 }
 .loading-overlay-card {
+  overflow: auto;
   display: flex;
   align-items: center;
   width: min(100%, 38rem);

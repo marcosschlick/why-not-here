@@ -1,4 +1,44 @@
+export interface MapProfile {
+  height: number;
+  width: number;
+  parameters: Partial<SystemConfig>;
+}
+
+export interface MapRelief {
+  azimuth: number;
+  altitude: number;
+  vertical_exaggeration: number;
+  strength: number;
+}
+
+export interface TerrainMotif {
+  strokes?: number[][][];
+  dots?: number[][];
+}
+
+export interface TerrainTexture extends TerrainMotif {
+  variants: TerrainMotif[];
+}
+
+export interface MapAppearance {
+  relief: MapRelief;
+  terrain_textures: Record<string, TerrainTexture>;
+  texture_overview: {
+    target_pixels: number;
+    opacity: number;
+    line_width: number;
+  };
+  texture_min_cell_pixels: number;
+  texture_color: string;
+  texture_opacity: number;
+  texture_line_width: number;
+  obstacle_shade: number;
+  obstacle_texture_color: string;
+  obstacle_texture_opacity: number;
+}
+
 export interface SystemConfig {
+  MAP_PROFILE_VERSION?: string;
   MAP_W: number;
   MAP_H: number;
   CELL_SIZE?: number;
@@ -16,6 +56,7 @@ export interface SystemConfig {
   MAP_ELEVATION_SCALE?: number;
   MAP_ELEVATION_FREQ?: number;
   MAP_ELEVATION_OCTAVES?: number;
+  MAP_ELEVATION_PERSISTENCE?: number;
   MAP_MOISTURE_FREQ?: number;
   MAP_MOISTURE_OCTAVES?: number;
   MAP_ROUGHNESS_FREQ?: number;
@@ -30,14 +71,14 @@ export interface GridLayersData {
   elevation: number[][];
   terrain: string[][];
   obstacle: number[][];
-  water_overrides?: [number, number][];
+  terrain_overrides: [number, number][];
+  generation_profile: Partial<SystemConfig> & { MAP_PROFILE_VERSION: string };
+  appearance: MapAppearance;
   steep_cells?: [number, number][];
-  cell_size?: number;
-  max_slope_deg?: number;
-  elevation_shade_min?: number;
-  elevation_shade_max?: number;
-  speeds?: Record<string, number>;
-  terrain_colors?: Record<string, string>;
+  cell_size: number;
+  max_slope_deg: number;
+  speeds: Record<string, number>;
+  terrain_colors: Record<string, string>;
 }
 
 export interface MapData extends GridLayersData {
@@ -64,12 +105,12 @@ export interface SemanticModificationsData {
   terrain: number;
   obstacle: number;
   slope: number;
-  water?: number;
+  opened_terrain: number;
+  opened_terrain_nodes: [number, number][];
   robot_speed?: number;
   terrain_nodes?: [number, number][];
   obstacle_nodes?: [number, number][];
   slope_edges?: [[number, number], [number, number]][];
-  water_nodes?: [number, number][];
   terrain_assignments?: [[number, number], string][];
   robot_speed_edges?: [[number, number], [number, number]][];
 }

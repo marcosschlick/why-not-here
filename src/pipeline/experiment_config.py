@@ -8,6 +8,7 @@ from typing import Any
 
 from src import config
 from src.incremental import ClosedLoopResult
+from src.map.profiles import resolve_map_profile
 from src.pipeline.generate_map import generate_map
 from src.pipeline.run_isp import run_isp
 
@@ -21,6 +22,7 @@ CONFIG_REGISTRY = {
     "MAP_ELEVATION_SCALE": "config_map.py",
     "MAP_ELEVATION_FREQ": "config_map.py",
     "MAP_ELEVATION_OCTAVES": "config_map.py",
+    "MAP_ELEVATION_PERSISTENCE": "config_map.py",
     "MAP_MOISTURE_FREQ": "config_map.py",
     "MAP_MOISTURE_OCTAVES": "config_map.py",
     "MAP_ROUGHNESS_FREQ": "config_map.py",
@@ -30,7 +32,6 @@ CONFIG_REGISTRY = {
     "MAP_MIN_MAIN_COMPONENT_RATIO": "config_map.py",
     "MAP_MAX_GENERATION_ATTEMPTS": "config_map.py",
     "DEFAULT_PLANNER": "config_planning.py",
-    "TARGET_TERRAIN": "config_isp.py",
     "BASE_TERRAIN": "config_terrain.py",
     "TERRAINS": "config_terrain.py",
     "TERRAIN_COLORS": "config_terrain.py",
@@ -49,7 +50,6 @@ FIXED_TERRAIN_CONFIG_KEYS = frozenset(
     {
         "DEFAULT_TERRAIN",
         "BASE_TERRAIN",
-        "TARGET_TERRAIN",
         "TERRAINS",
         "TERRAIN_COLORS",
         "MAX_SLOPE_DEG",
@@ -71,11 +71,13 @@ def get_all_configurations() -> dict[str, Any]:
 
 
 def get_experiment_configurations() -> dict[str, Any]:
-    return {
+    values = {
         key: copy.deepcopy(getattr(config, key))
         for key in EXPERIMENT_CONFIG_REGISTRY
         if hasattr(config, key)
     }
+    values.update(resolve_map_profile(values["MAP_H"], values["MAP_W"]))
+    return values
 
 
 DEFAULT_CONFIGURATIONS = get_all_configurations()
@@ -130,6 +132,11 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
         if not math.isfinite(value) or value <= 0.0:
             raise ValueError(f"{key} must be a finite number greater than zero.")
         candidate[key] = value
+
+    persistence = float(candidate["MAP_ELEVATION_PERSISTENCE"])
+    if not math.isfinite(persistence) or not 0.0 < persistence <= 1.0:
+        raise ValueError("MAP_ELEVATION_PERSISTENCE must be finite and within (0, 1].")
+    candidate["MAP_ELEVATION_PERSISTENCE"] = persistence
 
     for key in (
         "MAP_ELEVATION_OCTAVES",
@@ -208,18 +215,9 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
         colors[name] = color.upper()
 
     default_terrain = candidate.get("DEFAULT_TERRAIN")
-    target_terrain = candidate.get("TARGET_TERRAIN")
     base_terrain = candidate.get("BASE_TERRAIN")
     if default_terrain not in terrains:
         raise ValueError("DEFAULT_TERRAIN must exist in TERRAINS.")
-    if target_terrain not in traversable:
-        raise ValueError(
-            "TARGET_TERRAIN must exist and have a speed greater than zero."
-        )
-    if any(terrains[name] > terrains[target_terrain] for name in traversable):
-        raise ValueError(
-            "TARGET_TERRAIN speed must be at least the speed of every traversable terrain."
-        )
     if base_terrain not in traversable:
         raise ValueError("BASE_TERRAIN must exist and have a speed greater than zero.")
 
@@ -227,10 +225,12 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
         "MAP_TERRAIN_THRESHOLDS": {
             "LOWLAND_ELEVATION_MAX",
             "WATER_MOISTURE_MIN",
+            "WATER_MIN_COMPONENT_RATIO",
             "MUD_MOISTURE_MIN",
             "ROCKY_ELEVATION_MIN",
             "ROCKY_MOISTURE_MAX",
             "FOREST_MOISTURE_MIN",
+            "DENSE_FOREST_MOISTURE_MIN",
             "DRY_MOISTURE_MAX",
             "GRASSLAND_ELEVATION_MIN",
         },
@@ -270,6 +270,16 @@ def _build_configuration_candidate(
     updates: dict[str, Any],
     base: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if (
+        "MAP_PROFILE_VERSION" in updates
+        and updates["MAP_PROFILE_VERSION"] != config.MAP_PROFILE_VERSION
+    ):
+        raise ValueError(
+            f"Unsupported configuration profile. Use {config.MAP_PROFILE_VERSION}."
+        )
+    updates = {
+        key: value for key, value in updates.items() if key != "MAP_PROFILE_VERSION"
+    }
     unknown_keys = set(updates) - set(EXPERIMENT_CONFIG_REGISTRY)
     if unknown_keys:
         raise ValueError(
@@ -278,6 +288,7 @@ def _build_configuration_candidate(
     candidate = copy.deepcopy(base if base is not None else get_all_configurations())
     for key, raw_value in updates.items():
         candidate[key] = cast_parameter_value(candidate[key], raw_value)
+    candidate.update(resolve_map_profile(candidate["MAP_H"], candidate["MAP_W"]))
     return _validate_configuration(candidate)
 
 
@@ -344,6 +355,7 @@ def build_experiment_config(
         if key in current_system
     }
 
+    export_dict["MAP_PROFILE_VERSION"] = config.MAP_PROFILE_VERSION
     if raw_start is not None:
         export_dict["start"] = [int(raw_start[0]), int(raw_start[1])]
     if raw_goal is not None:
@@ -423,8 +435,13 @@ def validate_experiment_config(
 ) -> tuple[dict[str, Any], tuple[int, int], tuple[int, int], list[tuple[int, int]]]:
     if not isinstance(data, dict):
         raise TypeError("Configuration payload must be a JSON object dictionary.")
+    if data.get("MAP_PROFILE_VERSION") != config.MAP_PROFILE_VERSION:
+        raise ValueError(
+            f"Unsupported configuration profile. Export a new configuration using {config.MAP_PROFILE_VERSION}."
+        )
 
     allowed_keys = set(EXPERIMENT_CONFIG_REGISTRY) | {
+        "MAP_PROFILE_VERSION",
         "start",
         "goal",
         "p_user",
@@ -477,18 +494,14 @@ def validate_experiment_config(
         )
 
     supplied_config = {
-        key: value
-        for key, value in data.items()
-        if key in EXPERIMENT_CONFIG_REGISTRY
+        key: value for key, value in data.items() if key in EXPERIMENT_CONFIG_REGISTRY
     }
     candidate = _build_configuration_candidate(
         supplied_config,
         base=copy.deepcopy(DEFAULT_CONFIGURATIONS),
     )
     params = {
-        key: candidate[key]
-        for key in EXPERIMENT_CONFIG_REGISTRY
-        if key in candidate
+        key: candidate[key] for key in EXPERIMENT_CONFIG_REGISTRY if key in candidate
     }
 
     map_h = params["MAP_H"]

@@ -3,8 +3,9 @@ from itertools import pairwise
 import numpy as np
 
 from .. import config
-from ..config import BASE_TERRAIN, IMPASSABLE_TERRAINS, WATER_TERRAIN
+from ..config import BASE_TERRAIN, IMPASSABLE_TERRAINS
 from ..grid import Grid
+from ..resources import require_memory
 from .modifier import apply_semantic_modifications
 from .types import SemanticModifications
 
@@ -20,6 +21,18 @@ class ISPSemantics:
         | None = None,
         terrain_only: bool = False,
     ) -> None:
+        path_nodes = set(candidate_path)
+        node_count = (
+            len(active_nodes | path_nodes)
+            if active_nodes is not None
+            else grid.h * grid.w
+        )
+        edge_count = (
+            len(active_edges)
+            if active_edges is not None
+            else node_count * grid.connectivity
+        )
+        require_memory(node_count * 512 + edge_count * 2048, "ISP formulation")
         self.grid = grid
         self.candidate_path = candidate_path
         self.active_nodes = active_nodes
@@ -29,23 +42,17 @@ class ISPSemantics:
         )
         self.terrain_only = terrain_only
 
-        path_nodes = set(candidate_path)
         terrain_domain = path_nodes
 
-        self.nodes: list[tuple[int, int]] = []
-        self.node_to_idx: dict[tuple[int, int], int] = {}
-        for i in range(grid.h):
-            for j in range(grid.w):
-                u = (i, j)
-                if (
-                    active_nodes is not None
-                    and u not in active_nodes
-                    and u not in terrain_domain
-                ):
-                    continue
-                idx = len(self.nodes)
-                self.nodes.append(u)
-                self.node_to_idx[u] = idx
+        if active_nodes is None:
+            self.nodes = [(row, col) for row in range(grid.h) for col in range(grid.w)]
+        else:
+            self.nodes = sorted(
+                node
+                for node in active_nodes | terrain_domain
+                if 0 <= node[0] < grid.h and 0 <= node[1] < grid.w
+            )
+        self.node_to_idx = {node: index for index, node in enumerate(self.nodes)}
 
         unique_path_nodes = []
         seen_path_nodes = set()
@@ -82,17 +89,17 @@ class ISPSemantics:
                     self.obstacle_nodes.append(u)
                     self.obstacle_to_idx[u] = idx
 
-        self.water_nodes: list[tuple[int, int]] = []
-        self.water_to_idx: dict[tuple[int, int], int] = {}
+        self.opened_terrain_nodes: list[tuple[int, int]] = []
+        self.opened_terrain_to_idx: dict[tuple[int, int], int] = {}
         if not terrain_only:
             for u in unique_path_nodes:
                 if (
-                    grid.get_cell(u).terrain == WATER_TERRAIN
-                    and u not in grid.water_overrides
+                    grid.get_cell(u).terrain in IMPASSABLE_TERRAINS
+                    and u not in grid.terrain_overrides
                 ):
-                    idx = len(self.water_nodes)
-                    self.water_nodes.append(u)
-                    self.water_to_idx[u] = idx
+                    idx = len(self.opened_terrain_nodes)
+                    self.opened_terrain_nodes.append(u)
+                    self.opened_terrain_to_idx[u] = idx
 
         self.edges: list[tuple[tuple[int, int], tuple[int, int]]] = []
         self.edge_to_idx: dict[tuple[tuple[int, int], tuple[int, int]], int] = {}
@@ -179,13 +186,13 @@ class ISPSemantics:
         self.num_terrain_vars = len(self.terrain_nodes) * len(self.terrain_classes)
         self.num_obstacle_vars = len(self.obstacle_nodes)
         self.num_slope_vars = len(self.slope_edges)
-        self.num_water_vars = len(self.water_nodes)
+        self.num_opened_terrain_vars = len(self.opened_terrain_nodes)
         self.num_robot_speed_vars = len(self.robot_speed_edges)
         self.total_z_vars = (
             self.num_terrain_vars
             + self.num_obstacle_vars
             + self.num_slope_vars
-            + self.num_water_vars
+            + self.num_opened_terrain_vars
             + self.num_robot_speed_vars
         )
         self.big_m = self._compute_big_m()
@@ -197,17 +204,13 @@ class ISPSemantics:
         for u in self.nodes:
             cell = self.grid.get_cell(u)
             current_speed = self.grid.speeds.get(cell.terrain, 0.0)
-            possible_speeds = [
-                current_speed if current_speed > 0.0 else base_speed
-            ]
+            possible_speeds = [current_speed if current_speed > 0.0 else base_speed]
             if u in self.terrain_to_idx:
                 possible_speeds.extend(
                     self.grid.speeds[terrain] for terrain in self.terrain_classes
                 )
             positive_speeds = [
-                speed
-                for speed in possible_speeds
-                if np.isfinite(speed) and speed > 0.0
+                speed for speed in possible_speeds if np.isfinite(speed) and speed > 0.0
             ]
             node_min_speeds[u] = min(positive_speeds) if positive_speeds else None
 
@@ -246,7 +249,7 @@ class ISPSemantics:
         ]
         slope_end = self.num_terrain_vars + self.num_obstacle_vars + self.num_slope_vars
         z_slope = z[self.num_terrain_vars + self.num_obstacle_vars : slope_end]
-        z_water = z[slope_end : slope_end + self.num_water_vars]
+        z_opened_terrain = z[slope_end : slope_end + self.num_opened_terrain_vars]
 
         terrain_assignments = []
         class_count = len(self.terrain_classes)
@@ -265,10 +268,12 @@ class ISPSemantics:
         slope_edges = [
             edge for edge in self.slope_edges if z_slope[self.slope_to_idx[edge]] > 0.5
         ]
-        water_nodes = [
-            u for u in self.water_nodes if z_water[self.water_to_idx[u]] > 0.5
+        opened_terrain_nodes = [
+            u
+            for u in self.opened_terrain_nodes
+            if z_opened_terrain[self.opened_terrain_to_idx[u]] > 0.5
         ]
-        speed_start = slope_end + self.num_water_vars
+        speed_start = slope_end + self.num_opened_terrain_vars
         robot_speed_edges = [
             edge
             for edge in self.robot_speed_edges
@@ -279,7 +284,7 @@ class ISPSemantics:
             terrain_nodes=terrain_nodes,
             obstacle_nodes=obstacle_nodes,
             slope_edges=slope_edges,
-            water_nodes=water_nodes,
+            opened_terrain_nodes=opened_terrain_nodes,
             terrain_assignments=terrain_assignments,
             robot_speed_edges=robot_speed_edges,
         )

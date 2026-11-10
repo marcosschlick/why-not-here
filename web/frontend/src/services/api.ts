@@ -4,10 +4,17 @@ import type {
   ExportConfigPayload,
   ImportConfigResponse,
   MapData,
+  MapProfile,
   SaveConfigurationsPayload,
   SolveResponse,
   SystemConfig,
 } from "../types";
+
+export async function fetchMapProfiles(): Promise<MapProfile[]> {
+  const response = await fetch("/api/map-profiles");
+  if (!response.ok) throw new Error("Failed to load automatic map profiles.");
+  return response.json();
+}
 
 export async function fetchConfig(): Promise<SystemConfig> {
   const response = await fetch("/api/config");

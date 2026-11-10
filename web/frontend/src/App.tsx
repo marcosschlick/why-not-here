@@ -32,6 +32,7 @@ function isSameMap(a?: SystemConfig | null, b?: SystemConfig | null): boolean {
     "MAP_ELEVATION_SCALE",
     "MAP_ELEVATION_FREQ",
     "MAP_ELEVATION_OCTAVES",
+    "MAP_ELEVATION_PERSISTENCE",
     "MAP_MOISTURE_FREQ",
     "MAP_MOISTURE_OCTAVES",
     "MAP_ROUGHNESS_FREQ",
@@ -106,12 +107,12 @@ export function App() {
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!isSolvingISP) return;
+    if (!isSolvingISP && !isGeneratingMap) return;
     const timer = window.setInterval(() => {
       setElapsedTime((prev) => prev + 1);
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [isSolvingISP]);
+  }, [isSolvingISP, isGeneratingMap]);
 
   useEffect(() => {
     async function loadInitial() {
@@ -136,6 +137,7 @@ export function App() {
       destinationDir?: string,
     ) => {
       setIsBatchMode(false);
+      setElapsedTime(0);
       setIsGeneratingMap(true);
       setErrorMessage(null);
       setSuccessMessage(null);
@@ -170,6 +172,7 @@ export function App() {
       destinationDir?: string,
     ) => {
       setIsBatchMode(false);
+      setElapsedTime(0);
       setIsGeneratingMap(true);
       setErrorMessage(null);
       setPendingConfiguration(
@@ -197,6 +200,7 @@ export function App() {
   const handleImportBatchConfigs = useCallback(
     async (items: { name: string; data: Record<string, unknown> }[]) => {
       if (items.length === 0) return;
+      setElapsedTime(0);
       setIsGeneratingMap(true);
       setErrorMessage(null);
       setSuccessMessage(null);
@@ -311,6 +315,7 @@ export function App() {
     if (queue.length === 0) return;
     setIsBatchMode(true);
     setBatchReviewIndex(0);
+    setElapsedTime(0);
     setIsGeneratingMap(true);
     setErrorMessage(null);
 
@@ -375,6 +380,7 @@ export function App() {
           targetItem.mapData.auto_path || [targetItem.mapData.start],
       );
     } else {
+      setElapsedTime(0);
       setIsGeneratingMap(true);
       try {
         const newMap = await generateMap(
@@ -412,6 +418,7 @@ export function App() {
 
   async function handleSaveSingleConfiguration() {
     if (!mapData || !pendingConfiguration) return;
+    setElapsedTime(0);
     setIsGeneratingMap(true);
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -457,6 +464,7 @@ export function App() {
       return;
     }
 
+    setElapsedTime(0);
     setIsGeneratingMap(true);
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -1066,12 +1074,21 @@ export function App() {
         )}
       </main>
 
-      {isSolvingISP && !isBatchMode && (
+      {((isGeneratingMap && currentStep === "config") ||
+        (isSolvingISP && !isBatchMode)) && (
         <div className="loading-overlay-backdrop">
-          <div className="loading-overlay-card">
-            <div className="loading-spinner" />
-            <h3>Solving ISP Model...</h3>
+          <div
+            className="loading-overlay-card"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <div className="loading-spinner" aria-hidden="true" />
+            <h3>
+              {isGeneratingMap ? "Generating Map..." : "Solving ISP Model..."}
+            </h3>
             {(() => {
+              if (isGeneratingMap) return null;
               const activeConfig =
                 isBatchMode && queue[activeBatchResultIndex]
                   ? queue[activeBatchResultIndex].config
@@ -1113,11 +1130,9 @@ export function App() {
               );
             })()}
             <p className="loading-overlay-desc">
-              Solving ISP formulation via Mixed-Integer Linear Programming
-              (MILP). Because the inverse problem under discrete terrain
-              attributes is NP-hard, solving large grids or runs without graph
-              reduction explores a large combinatorial space and may take
-              several minutes depending on hardware. Please wait...
+              {isGeneratingMap
+                ? "Preparing terrain, elevation and routes. Larger maps may take longer."
+                : "Solving ISP formulation via Mixed-Integer Linear Programming (MILP). Because the inverse problem under discrete terrain attributes is NP-hard, solving large grids or runs without graph reduction explores a large combinatorial space and may take several minutes depending on hardware. Please wait..."}
             </p>
             <div className="loading-elapsed-timer">
               Elapsed time: <strong>{elapsedTime}s</strong>

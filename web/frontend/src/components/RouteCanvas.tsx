@@ -12,6 +12,7 @@ import {
   type GridPoint,
 } from "../utils/geometry";
 import { useMapCanvasFit } from "../utils/useMapCanvasFit";
+import { hasTerrainOverride } from "../utils/terrainAccess";
 import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
 
 interface RouteCanvasProps {
@@ -59,11 +60,14 @@ export function RouteCanvas({
   const { h, w, start, goal, connectivity, terrain, elevation, obstacle } =
     mapData;
   const cellSize = useMapCanvasFit(wrapper, h, w);
+  const maxZoomLevel = Math.max(3, 24 / cellSize);
 
   if (zoomMapData !== mapData) {
     setZoomMapData(mapData);
     setZoomLevel(1.0);
     setHoveredCell(null);
+  } else if (zoomLevel > maxZoomLevel) {
+    setZoomLevel(maxZoomLevel);
   }
 
   const isConnectedToGoal =
@@ -132,23 +136,29 @@ export function RouteCanvas({
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         if (e.deltaY < 0) {
-          setZoomLevel((z) => Math.min(3.0, +(z + 0.25).toFixed(2)));
+          setZoomLevel((z) => Math.min(maxZoomLevel, z * 2));
         } else if (e.deltaY > 0) {
-          setZoomLevel((z) => Math.max(1.0, +(z - 0.25).toFixed(2)));
+          setZoomLevel((z) => Math.max(1.0, z / 2));
         }
       }
     }
 
     wrapper.addEventListener("wheel", handleWheel, { passive: false });
     return () => wrapper.removeEventListener("wheel", handleWheel);
-  }, [wrapper]);
+  }, [wrapper, maxZoomLevel]);
 
   function getCellFromCoordinates(
     event: ReactPointerEvent<HTMLCanvasElement>,
   ): [number, number] | null {
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const x =
+      event.clientX -
+      rect.left +
+      Number(event.currentTarget.dataset.offsetX ?? 0);
+    const y =
+      event.clientY -
+      rect.top +
+      Number(event.currentTarget.dataset.offsetY ?? 0);
 
     const c = Math.floor(x / zoomLevel / cellSize);
     const r = Math.floor(y / zoomLevel / cellSize);
@@ -369,10 +379,12 @@ export function RouteCanvas({
     ? terrain[hoveredCell[0]]?.[hoveredCell[1]] || "-"
     : "-";
   const hoveredTerrainSpeed = mapData.speeds?.[hoveredTerrain];
+  const isTerrainOpened = Boolean(
+    hoveredCell && hasTerrainOverride(mapData, hoveredCell),
+  );
   const hoveredTerrainBlocked =
-    hoveredTerrain === "WATER_RIVER" ||
-    hoveredTerrainSpeed === undefined ||
-    hoveredTerrainSpeed <= 0;
+    !isTerrainOpened &&
+    (hoveredTerrainSpeed === undefined || hoveredTerrainSpeed <= 0);
 
   const hoveredInfo = hoveredCell ? (
     <span>
@@ -486,11 +498,9 @@ export function RouteCanvas({
               <button
                 type="button"
                 className="btn-zoom"
-                onClick={() =>
-                  setZoomLevel((z) => Math.max(1.0, +(z - 0.25).toFixed(2)))
-                }
+                onClick={() => setZoomLevel((z) => Math.max(1.0, z / 2))}
                 disabled={zoomLevel <= 1.0}
-                title="Zoom Out (-0.25x)"
+                title="Zoom out"
               >
                 &minus;
               </button>
@@ -499,10 +509,10 @@ export function RouteCanvas({
                 type="button"
                 className="btn-zoom"
                 onClick={() =>
-                  setZoomLevel((z) => Math.min(3.0, +(z + 0.25).toFixed(2)))
+                  setZoomLevel((z) => Math.min(maxZoomLevel, z * 2))
                 }
-                disabled={zoomLevel >= 3.0}
-                title="Zoom In (+0.25x)"
+                disabled={zoomLevel >= maxZoomLevel}
+                title="Zoom in"
               >
                 +
               </button>

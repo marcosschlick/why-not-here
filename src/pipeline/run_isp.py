@@ -36,7 +36,7 @@ def format_artifact_skip_note(result: ClosedLoopResult) -> str | None:
             modifications.terrain_nodes,
             modifications.obstacle_nodes,
             modifications.slope_edges,
-            modifications.water_nodes,
+            modifications.opened_terrain_nodes,
             modifications.robot_speed_edges,
         )
     )
@@ -258,7 +258,7 @@ def run_isp(
             modifications.terrain_nodes,
             modifications.obstacle_nodes,
             modifications.slope_edges,
-            modifications.water_nodes,
+            modifications.opened_terrain_nodes,
             modifications.robot_speed_edges,
         )
     )
@@ -318,7 +318,15 @@ def run_isp(
     n_terrain = len(mods.terrain_nodes) if mods else 0
     n_obs = len(mods.obstacle_nodes) if mods else 0
     n_slope = len(mods.slope_edges) if mods else 0
-    n_water = len(mods.water_nodes) if mods else 0
+    n_water = (
+        sum(
+            grid.get_cell(node).terrain == config.WATER_TERRAIN
+            for node in mods.opened_terrain_nodes
+        )
+        if mods
+        else 0
+    )
+    n_opened = len(mods.opened_terrain_nodes) if mods else 0
     n_robot_speed = len(mods.robot_speed_edges) if mods else 0
     artifact_skip_note = format_artifact_skip_note(isp_result)
 
@@ -387,8 +395,7 @@ def run_isp(
             for metric in isp_result.iteration_metrics
         )
         completed_iterations = sum(
-            bool(metric.get("completed"))
-            for metric in isp_result.iteration_metrics
+            bool(metric.get("completed")) for metric in isp_result.iteration_metrics
         )
         log_lines.append(
             f"Incremental diagnostics: {solver_attempts} solver attempts, "
@@ -430,7 +437,7 @@ def run_isp(
         f"Endpoints: Start = [{start[0]}, {start[1]}] | Goal = [{goal[0]}, {goal[1]}]"
     )
     log_lines.append(
-        f"Modifications: {n_terrain} terrain, {n_obs} obstacles, {n_slope} slopes, {n_water} water cells, {n_robot_speed} robot speed activations"
+        f"Modifications: {n_terrain} terrain, {n_obs} obstacles, {n_slope} slopes, {n_opened} opened terrain cells ({n_water} water), {n_robot_speed} robot speed activations"
     )
     log_lines.append(
         f"\nContrastive Explanation (Experimental Group):\n{isp_result.explanation_text}"
@@ -471,7 +478,7 @@ def run_isp(
             f"Endpoints: Start = [{start[0]}, {start[1]}] | Goal = [{goal[0]}, {goal[1]}]"
         )
         print(
-            f"Modifications: {n_terrain} terrain, {n_obs} obstacles, {n_slope} slopes, {n_water} water cells, {n_robot_speed} robot speed activations"
+            f"Modifications: {n_terrain} terrain, {n_obs} obstacles, {n_slope} slopes, {n_opened} opened terrain cells ({n_water} water), {n_robot_speed} robot speed activations"
         )
         print(
             f"\nContrastive Explanation (Experimental Group):\n{isp_result.explanation_text}"

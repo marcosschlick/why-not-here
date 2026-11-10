@@ -1,9 +1,13 @@
 import math
 
+import numpy as np
+
 from .. import config
 from ..grid import Grid
+from ..resources import require_memory
 from .elevation import generate_elevation_field
 from .obstacles import generate_obstacle_matrix, generate_roughness_field
+from .profiles import resolve_map_profile
 from .terrain import classify_terrain_matrix, generate_moisture_field
 from .validation import largest_traversable_component_ratio
 
@@ -14,8 +18,15 @@ def _derive_attempt_seed(seed: int, attempt: int) -> int:
     return (seed + attempt * 1_000_003) % (2**32)
 
 
-def _derive_field_seed(seed: int, field_offset: int) -> int:
-    return (seed + field_offset) % (2**32)
+def _derive_field_seed(seed: int, field_offset: int, height: int, width: int) -> int:
+    if max(height, width) <= 256:
+        return (seed + field_offset) % (2**32)
+    seed_value = seed if seed >= 0 else seed % (2**32)
+    return int(
+        np.random.SeedSequence(
+            [seed_value, field_offset, height, width]
+        ).generate_state(1)[0]
+    )
 
 
 def generate_map(
@@ -23,71 +34,37 @@ def generate_map(
     w: int | None = None,
     seed: int | None = None,
     *,
-    width: int | None = None,
-    height: int | None = None,
-    cell_size: float | None = None,
     connectivity: int | None = None,
     max_slope_deg: float | None = None,
-    elevation_scale: float | None = None,
-    elevation_freq: float | None = None,
-    elevation_octaves: int | None = None,
-    moisture_freq: float | None = None,
-    moisture_octaves: int | None = None,
-    roughness_freq: float | None = None,
-    roughness_octaves: int | None = None,
-    terrain_thresholds: dict[str, float] | None = None,
-    roughness_thresholds: dict[str, float] | None = None,
-    min_main_component_ratio: float | None = None,
-    max_generation_attempts: int | None = None,
 ) -> Grid:
-    rows = h if h is not None else (height if height is not None else config.MAP_H)
-    cols = w if w is not None else (width if width is not None else config.MAP_W)
-    seed_value = config.MAP_DEFAULT_SEED if seed is None else int(seed)
-    cell_size_value = config.CELL_SIZE if cell_size is None else cell_size
-    connectivity = config.CONNECTIVITY if connectivity is None else connectivity
-    max_slope_value = config.MAX_SLOPE_DEG if max_slope_deg is None else max_slope_deg
-    elevation_scale = (
-        config.MAP_ELEVATION_SCALE if elevation_scale is None else elevation_scale
-    )
-    elevation_freq = (
-        config.MAP_ELEVATION_FREQ if elevation_freq is None else elevation_freq
-    )
-    elevation_octaves = (
-        config.MAP_ELEVATION_OCTAVES if elevation_octaves is None else elevation_octaves
-    )
-    moisture_freq = config.MAP_MOISTURE_FREQ if moisture_freq is None else moisture_freq
-    moisture_octaves = (
-        config.MAP_MOISTURE_OCTAVES if moisture_octaves is None else moisture_octaves
-    )
-    roughness_freq = (
-        config.MAP_ROUGHNESS_FREQ if roughness_freq is None else roughness_freq
-    )
-    roughness_octaves = (
-        config.MAP_ROUGHNESS_OCTAVES if roughness_octaves is None else roughness_octaves
-    )
-    min_main_component_ratio = (
-        config.MAP_MIN_MAIN_COMPONENT_RATIO
-        if min_main_component_ratio is None
-        else min_main_component_ratio
-    )
-    max_generation_attempts = (
-        config.MAP_MAX_GENERATION_ATTEMPTS
-        if max_generation_attempts is None
-        else max_generation_attempts
-    )
-    terrain_threshold_values = (
-        config.MAP_TERRAIN_THRESHOLDS
-        if terrain_thresholds is None
-        else terrain_thresholds
-    )
-    roughness_threshold_values = (
-        config.MAP_ROUGHNESS_THRESHOLDS
-        if roughness_thresholds is None
-        else roughness_thresholds
-    )
-
+    rows = config.MAP_H if h is None else h
+    cols = config.MAP_W if w is None else w
     if not isinstance(rows, int) or not isinstance(cols, int) or rows < 1 or cols < 1:
         raise ValueError("Map height and width must be greater than zero.")
+    profile = resolve_map_profile(rows, cols)
+    seed_value = config.MAP_DEFAULT_SEED if seed is None else int(seed)
+    cell_size_value = profile["CELL_SIZE"]
+    connectivity = config.CONNECTIVITY if connectivity is None else connectivity
+    max_slope_value = config.MAX_SLOPE_DEG if max_slope_deg is None else max_slope_deg
+    elevation_scale = profile["MAP_ELEVATION_SCALE"]
+    elevation_freq = profile["MAP_ELEVATION_FREQ"]
+    elevation_octaves = profile["MAP_ELEVATION_OCTAVES"]
+    elevation_persistence = profile["MAP_ELEVATION_PERSISTENCE"]
+    moisture_freq = profile["MAP_MOISTURE_FREQ"]
+    moisture_octaves = profile["MAP_MOISTURE_OCTAVES"]
+    roughness_freq = profile["MAP_ROUGHNESS_FREQ"]
+    roughness_octaves = profile["MAP_ROUGHNESS_OCTAVES"]
+    min_main_component_ratio = profile["MAP_MIN_MAIN_COMPONENT_RATIO"]
+    max_generation_attempts = profile["MAP_MAX_GENERATION_ATTEMPTS"]
+    terrain_threshold_values = profile["MAP_TERRAIN_THRESHOLDS"]
+    roughness_threshold_values = profile["MAP_ROUGHNESS_THRESHOLDS"]
+
+    if (
+        not math.isfinite(elevation_persistence)
+        or not 0.0 < elevation_persistence <= 1.0
+    ):
+        raise ValueError("Elevation persistence must be finite and within (0, 1].")
+
     for name, value in (
         ("Cell size", cell_size_value),
         ("Elevation scale", elevation_scale),
@@ -117,21 +94,23 @@ def generate_map(
             "Minimum main component ratio must be greater than 0 and at most 1."
         )
 
+    require_memory(rows * cols * 1536, "map generation")
     best_ratio = 0.0
     for attempt in range(max_generation_attempts):
         effective_seed = _derive_attempt_seed(seed_value, attempt)
         elevation_normalized, elevation_meters = generate_elevation_field(
             height=rows,
             width=cols,
-            seed=_derive_field_seed(effective_seed, 0),
+            seed=_derive_field_seed(effective_seed, 0, rows, cols),
             frequency=elevation_freq,
             octaves=elevation_octaves,
             scale=elevation_scale,
+            persistence=elevation_persistence,
         )
         moisture_field = generate_moisture_field(
             height=rows,
             width=cols,
-            seed=_derive_field_seed(effective_seed, 101),
+            seed=_derive_field_seed(effective_seed, 101, rows, cols),
             frequency=moisture_freq,
             octaves=moisture_octaves,
         )
@@ -144,7 +123,7 @@ def generate_map(
         roughness_field = generate_roughness_field(
             height=rows,
             width=cols,
-            seed=_derive_field_seed(effective_seed, 202),
+            seed=_derive_field_seed(effective_seed, 202, rows, cols),
             frequency=roughness_freq,
             octaves=roughness_octaves,
         )
@@ -168,6 +147,7 @@ def generate_map(
         grid.base_seed = seed_value
         grid.effective_seed = effective_seed
         grid.generation_attempt = attempt
+        grid.generation_profile = profile
 
         component_ratio = largest_traversable_component_ratio(grid)
         best_ratio = max(best_ratio, component_ratio)

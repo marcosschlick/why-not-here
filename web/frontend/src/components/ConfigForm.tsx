@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  fetchMapProfiles,
   browseDirectory,
   browseFiles,
   checkOutputDir,
   cleanOutputDir,
 } from "../services/api";
-import type { QueueItem, SystemConfig } from "../types";
+import type { MapProfile, QueueItem, SystemConfig } from "../types";
 
 interface ConfigFormProps {
   initialConfig: SystemConfig | null;
@@ -40,23 +41,6 @@ interface ConfigFormProps {
   onConfigurationDestinationChange: (path: string) => void;
 }
 
-const MAP_SIZE_OPTIONS = [
-  { height: 16, width: 32 },
-  { height: 32, width: 64 },
-  { height: 64, width: 128 },
-  { height: 128, width: 256 },
-  { height: 256, width: 512 },
-  { height: 512, width: 1024 },
-] as const;
-
-function resolveMapSize(height?: number, width?: number) {
-  return (
-    MAP_SIZE_OPTIONS.find(
-      (option) => option.height === height && option.width === width,
-    ) ?? MAP_SIZE_OPTIONS[2]
-  );
-}
-
 export function ConfigForm({
   initialConfig,
   onGenerateMap,
@@ -75,17 +59,25 @@ export function ConfigForm({
   configurationDestination,
   onConfigurationDestinationChange,
 }: ConfigFormProps) {
-  const initialMapSize = resolveMapSize(
-    initialConfig?.MAP_H,
-    initialConfig?.MAP_W,
-  );
-  const [mapH, setMapH] = useState<number>(initialMapSize.height);
-  const [mapW, setMapW] = useState<number>(initialMapSize.width);
+  const [mapSizes, setMapSizes] = useState<MapProfile[]>([]);
+  const [profilesError, setProfilesError] = useState<string | null>(null);
+  const [mapH, setMapH] = useState<number>(initialConfig?.MAP_H ?? 64);
+  const [mapW, setMapW] = useState<number>(initialConfig?.MAP_W ?? 128);
+  useEffect(() => {
+    let active = true;
+    fetchMapProfiles()
+      .then((profiles) => {
+        if (active) setMapSizes(profiles);
+      })
+      .catch((error: Error) => {
+        if (active) setProfilesError(error.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const [connectivity, setConnectivity] = useState<number>(
     initialConfig?.CONNECTIVITY ?? 8,
-  );
-  const [cellSize, setCellSize] = useState<number>(
-    initialConfig?.CELL_SIZE ?? 1.0,
   );
   const [reductionMethod, setReductionMethod] = useState<string>(
     initialConfig?.DEFAULT_REDUCTION_METHOD ?? "NONE",
@@ -127,18 +119,6 @@ export function ConfigForm({
   const [mapSeed, setMapSeed] = useState<number>(
     initialConfig?.MAP_DEFAULT_SEED ?? 42,
   );
-  const [mapElevationScale, setMapElevationScale] = useState<number>(
-    initialConfig?.MAP_ELEVATION_SCALE ?? 4.0,
-  );
-  const [mapElevationFreq, setMapElevationFreq] = useState<number>(
-    initialConfig?.MAP_ELEVATION_FREQ ?? 0.06,
-  );
-  const [mapMoistureFreq, setMapMoistureFreq] = useState<number>(
-    initialConfig?.MAP_MOISTURE_FREQ ?? 0.03,
-  );
-  const [mapRoughnessFreq, setMapRoughnessFreq] = useState<number>(
-    initialConfig?.MAP_ROUGHNESS_FREQ ?? 0.05,
-  );
 
   const [cleaningDirInfo, setCleaningDirInfo] = useState<{
     dir: string;
@@ -149,8 +129,12 @@ export function ConfigForm({
   const [isCleaning, setIsCleaning] = useState<boolean>(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState<boolean>(false);
 
+  const selectedProfile = mapSizes.find(
+    (size) => size.height === mapH && size.width === mapW,
+  );
+
   function handleMapSizeChange(value: string) {
-    const selectedSize = MAP_SIZE_OPTIONS.find(
+    const selectedSize = mapSizes.find(
       (option) => `${option.height}x${option.width}` === value,
     );
     if (!selectedSize) return;
@@ -161,9 +145,10 @@ export function ConfigForm({
   function getCurrentConfig(): SystemConfig {
     return {
       ...(initialConfig || {}),
+      ...(selectedProfile?.parameters ?? {}),
       MAP_H: Number(mapH),
       MAP_W: Number(mapW),
-      CELL_SIZE: Number(cellSize),
+      CELL_SIZE: 1,
       CONNECTIVITY: Number(connectivity),
       DEFAULT_REDUCTION_METHOD: reductionMethod,
       USE_INCREMENTAL_SOLVER: useIncremental,
@@ -178,10 +163,6 @@ export function ConfigForm({
       CLOSED_LOOP_TIMEOUT_SEC: Number(closedLoopTimeout),
       MAX_ISP_ITERATIONS: Number(maxIspIterations),
       INCREMENTAL_ASTAR_SCOPE: incrementalAstarScope,
-      MAP_ELEVATION_SCALE: Number(mapElevationScale),
-      MAP_ELEVATION_FREQ: Number(mapElevationFreq),
-      MAP_MOISTURE_FREQ: Number(mapMoistureFreq),
-      MAP_ROUGHNESS_FREQ: Number(mapRoughnessFreq),
     };
   }
 
@@ -455,7 +436,14 @@ export function ConfigForm({
                 value={`${mapH}x${mapW}`}
                 onChange={(e) => handleMapSizeChange(e.target.value)}
               >
-                {MAP_SIZE_OPTIONS.map((option) => (
+                {!mapSizes.some(
+                  (size) => size.height === mapH && size.width === mapW,
+                ) && (
+                  <option value={`${mapH}x${mapW}`}>
+                    {mapH}×{mapW}
+                  </option>
+                )}
+                {mapSizes.map((option) => (
                   <option
                     key={`${option.height}x${option.width}`}
                     value={`${option.height}x${option.width}`}
@@ -464,6 +452,11 @@ export function ConfigForm({
                   </option>
                 ))}
               </select>
+              {profilesError && (
+                <span className="field-error-message" role="alert">
+                  {profilesError}
+                </span>
+              )}
             </div>
 
             <div className="form-group">
@@ -502,9 +495,7 @@ export function ConfigForm({
                   <option value="SPARSIFIED">
                     Sparsified (Chain Contraction)
                   </option>
-                  <option value="PATH_ONLY">
-                    Path Only (Path Edges)
-                  </option>
+                  <option value="PATH_ONLY">Path Only (Path Edges)</option>
                 </select>
               </div>
             </div>
@@ -700,12 +691,11 @@ export function ConfigForm({
                   Advanced Settings
                 </span>
                 <span className="advanced-summary-desc">
-                  Planners, solvers, objective weights, iterations &amp;
-                  procedural map heuristics
+                  Planner, solver limits and map seed
                 </span>
               </div>
             </div>
-            <span className="advanced-settings-badge">15 Parameters</span>
+            <span className="advanced-settings-badge">Automatic terrain</span>
           </button>
 
           <div
@@ -795,22 +785,6 @@ export function ConfigForm({
                   <h4 className="advanced-group-title">Map &amp; Grid</h4>
                   <div className="form-grid">
                     <div className="form-group">
-                      <label htmlFor="cellSize">
-                        <span>Cell Size</span>
-                        <span className="form-group-hint">Meters per cell</span>
-                      </label>
-                      <input
-                        id="cellSize"
-                        type="number"
-                        min={0.001}
-                        step={0.1}
-                        value={cellSize}
-                        onChange={(e) => setCellSize(Number(e.target.value))}
-                        required
-                      />
-                    </div>
-
-                    <div className="form-group">
                       <label htmlFor="mapSeed">
                         <span>Map Default Seed</span>
                         <span className="form-group-hint">Noise RNG seed</span>
@@ -823,87 +797,8 @@ export function ConfigForm({
                         required
                       />
                     </div>
-
-                    <div className="form-group">
-                      <label htmlFor="mapElevationScale">
-                        <span>Elevation Scale</span>
-                        <span className="form-group-hint">
-                          Height multiplier
-                        </span>
-                      </label>
-                      <input
-                        id="mapElevationScale"
-                        type="number"
-                        step={0.1}
-                        value={mapElevationScale}
-                        onChange={(e) =>
-                          setMapElevationScale(Number(e.target.value))
-                        }
-                        required
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="mapElevationFreq">
-                        <span>Elevation Frequency</span>
-                        <span className="form-group-hint">
-                          Perlin terrain frequency
-                        </span>
-                      </label>
-                      <input
-                        id="mapElevationFreq"
-                        type="number"
-                        step={0.01}
-                        value={mapElevationFreq}
-                        onChange={(e) =>
-                          setMapElevationFreq(Number(e.target.value))
-                        }
-                        required
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="mapMoistureFreq">
-                        <span>Moisture Frequency</span>
-                        <span className="form-group-hint">
-                          Spatial moisture distribution
-                        </span>
-                      </label>
-                      <input
-                        id="mapMoistureFreq"
-                        type="number"
-                        min={0.001}
-                        step={0.01}
-                        value={mapMoistureFreq}
-                        onChange={(e) =>
-                          setMapMoistureFreq(Number(e.target.value))
-                        }
-                        required
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="mapRoughnessFreq">
-                        <span>Roughness Frequency</span>
-                        <span className="form-group-hint">
-                          Contextual obstacle distribution
-                        </span>
-                      </label>
-                      <input
-                        id="mapRoughnessFreq"
-                        type="number"
-                        min={0.001}
-                        step={0.01}
-                        value={mapRoughnessFreq}
-                        onChange={(e) =>
-                          setMapRoughnessFreq(Number(e.target.value))
-                        }
-                        required
-                      />
-                    </div>
                   </div>
                 </div>
-
               </div>
             </div>
           </div>

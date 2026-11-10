@@ -25,6 +25,7 @@ from .style import (
     axis_ticks,
     compute_layout,
 )
+from .textures import draw_map_textures
 
 
 def render_tactical_map(
@@ -98,6 +99,8 @@ def render_tactical_map(
     user_path_outline_width = cell_width_points * USER_PATH_OUTLINE_WIDTH
     modification_edge_width = cell_width_points * MODIFICATION_EDGE_WIDTH
     endpoint_edge_width = cell_width_points * 0.035
+
+    draw_map_textures(ax, grid, cell_width_pixels)
 
     shared_cells = set(optimal_path or []) & set(user_path or [])
 

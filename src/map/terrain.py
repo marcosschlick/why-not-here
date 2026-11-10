@@ -1,8 +1,10 @@
 import numpy as np
 
 from .noise import perlin_noise_2d
+from .water import remove_small_water_regions
 
 GENERATED_TERRAINS = (
+    "DENSE_FOREST",
     "WATER_RIVER",
     "MUD",
     "SAND",
@@ -48,6 +50,8 @@ def _classify_terrain(
         and moisture < thresholds["ROCKY_MOISTURE_MAX"]
     ):
         return "ROCKY"
+    if moisture >= thresholds["DENSE_FOREST_MOISTURE_MIN"]:
+        return "DENSE_FOREST"
     if moisture >= thresholds["FOREST_MOISTURE_MIN"]:
         return "FOREST"
     if moisture < thresholds["DRY_MOISTURE_MAX"]:
@@ -81,4 +85,6 @@ def classify_terrain_matrix(
                 raise ValueError(f"Unknown generated terrain: {terrain}")
             terrain_row.append(terrain)
         terrain_matrix.append(terrain_row)
-    return terrain_matrix
+    return remove_small_water_regions(
+        terrain_matrix, thresholds["WATER_MIN_COMPONENT_RATIO"]
+    )

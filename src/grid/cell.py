@@ -2,6 +2,8 @@ from .. import config
 
 
 class Cell:
+    __slots__ = ("elevation", "obstacle", "terrain")
+
     def __init__(
         self,
         terrain: str | None = None,
@@ -9,7 +11,9 @@ class Cell:
         obstacle: int | None = None,
     ) -> None:
         self.terrain = terrain if terrain is not None else config.DEFAULT_TERRAIN
-        self.elevation = elevation if elevation is not None else config.DEFAULT_ELEVATION
+        self.elevation = (
+            elevation if elevation is not None else config.DEFAULT_ELEVATION
+        )
         self.obstacle = obstacle if obstacle is not None else config.DEFAULT_OBSTACLE
 
     @property

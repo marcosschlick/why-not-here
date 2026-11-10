@@ -23,9 +23,9 @@ def find_closest_traversable_cell(
     tj = max(0, min(grid.w - 1, target[1]))
     u_target = (ti, tj)
 
-    if (allowed_nodes is None or u_target in allowed_nodes) and not grid.get_cell(
-        u_target
-    ).is_blocked:
+    if (
+        allowed_nodes is None or u_target in allowed_nodes
+    ) and grid.is_cell_traversable(u_target):
         valid_nbrs = [
             v for v in grid.get_neighbors(u_target) if grid.is_traversable(u_target, v)
         ]
@@ -51,7 +51,7 @@ def find_closest_traversable_cell(
         for u in ring_cells:
             if allowed_nodes is not None and u not in allowed_nodes:
                 continue
-            if not grid.get_cell(u).is_blocked:
+            if grid.is_cell_traversable(u):
                 valid_nbrs = [
                     v for v in grid.get_neighbors(u) if grid.is_traversable(u, v)
                 ]
@@ -89,8 +89,8 @@ def prepare_endpoints(
         cell = grid.get_cell(node)
         if (
             cell.terrain in config.IMPASSABLE_TERRAINS
-            or grid.speeds.get(cell.terrain, 0.0) <= 0.0
-        ):
+            and node not in grid.terrain_overrides
+        ) or grid._get_effective_speed(node) <= 0.0:
             raise ValueError(f"Endpoint {node} is on impassable terrain.")
         cell.obstacle = 0
 

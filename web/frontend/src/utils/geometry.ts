@@ -8,10 +8,7 @@ export function connectPoints(
   let [r, c] = p1;
   const [rEnd, cEnd] = p2;
   const pts: GridPoint[] = [];
-  let safety = 0;
-
-  while ((r !== rEnd || c !== cEnd) && safety < 10000) {
-    safety++;
+  while (r !== rEnd || c !== cEnd) {
     pts.push([r, c]);
     const dr = rEnd > r ? 1 : rEnd < r ? -1 : 0;
     const dc = cEnd > c ? 1 : cEnd < c ? -1 : 0;

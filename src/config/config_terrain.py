@@ -13,6 +13,7 @@ TERRAINS = {
     "MUD": 0.4,
     "ROCKY": 0.3,
     "WATER_RIVER": 0.0,
+    "DENSE_FOREST": 0.0,
 }
 
 # Colors are stored as CSS-style hexadecimal values so the Web canvas and the
@@ -28,6 +29,7 @@ TERRAIN_COLORS = {
     "MUD": "#5C3829",
     "ROCKY": "#777B80",
     "WATER_RIVER": "#0585E6",
+    "DENSE_FOREST": "#234A32",
 }
 
 # Default base terrain for nominal traversability
@@ -35,9 +37,7 @@ BASE_TERRAIN = "GRASS"
 WATER_TERRAIN = "WATER_RIVER"
 
 # Water stays impassable even if a runtime terrain registry changes its speed.
-IMPASSABLE_TERRAINS = {
-    name for name, speed in TERRAINS.items() if speed <= 0.0
-} | {
+IMPASSABLE_TERRAINS = {name for name, speed in TERRAINS.items() if speed <= 0.0} | {
     WATER_TERRAIN
 }
 

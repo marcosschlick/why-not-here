@@ -9,7 +9,6 @@ from ..config import (
     IMPASSABLE_TERRAINS,
     MIP_GAP_TOLERANCE,
     SOLVER_TIMEOUT_SEC,
-    WATER_TERRAIN,
 )
 from ..grid import Grid
 from ..isp.base import BaseISPSolver
@@ -32,12 +31,12 @@ def external_edge_cost(
         cell = grid.get_cell(node)
         if cell.obstacle and node not in isp.obstacle_to_idx:
             return None
-        if cell.terrain in IMPASSABLE_TERRAINS:
-            water_open = cell.terrain == WATER_TERRAIN and (
-                node in grid.water_overrides or node in isp.water_to_idx
-            )
-            if not water_open:
-                return None
+        if (
+            cell.terrain in IMPASSABLE_TERRAINS
+            and node not in grid.terrain_overrides
+            and node not in isp.opened_terrain_to_idx
+        ):
+            return None
 
     distance = grid.get_distance(u, v)
     if edge in grid.robot_speed_edges:
@@ -145,10 +144,11 @@ class IncrementalISPSolver(BaseISPSolver):
                 else:
                     if costs and edge in costs:
                         c_ext += costs[edge]
-                    elif (
-                        reduced_graph is not None
-                        and reduced_graph.method_name in {"BBOX", "FLOODFILL", "PATH_ONLY"}
-                    ):
+                    elif reduced_graph is not None and reduced_graph.method_name in {
+                        "BBOX",
+                        "FLOODFILL",
+                        "PATH_ONLY",
+                    }:
                         edge_cost = external_edge_cost(grid, formulation, edge)
                         if edge_cost is None:
                             valid_q = False
@@ -167,9 +167,7 @@ class IncrementalISPSolver(BaseISPSolver):
                 )
 
         obj_expr = (
-            cp.sum(formulation.obj_terms)
-            if formulation.obj_terms
-            else cp.Constant(0.0)
+            cp.sum(formulation.obj_terms) if formulation.obj_terms else cp.Constant(0.0)
         )
         problem = cp.Problem(cp.Minimize(obj_expr), constraints)
         self.last_model_build_sec = time.perf_counter() - model_started

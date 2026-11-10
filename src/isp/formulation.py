@@ -5,7 +5,6 @@ from scipy.sparse import csr_matrix, lil_matrix
 from ..config import (
     BASE_TERRAIN,
     IMPASSABLE_TERRAINS,
-    WATER_TERRAIN,
 )
 from ..grid import Grid
 from .mccormick import linearize_binary_product, linearize_mccormick_terms
@@ -50,9 +49,9 @@ def compute_affine_edge_costs(
         else None
     )
     M_slope_blocked = M_slope.copy() if M_slope is not None else None
-    M_water = (
-        lil_matrix((num_edges, isp.num_water_vars), dtype=np.float64)
-        if isp.num_water_vars > 0
+    M_opened_terrain = (
+        lil_matrix((num_edges, isp.num_opened_terrain_vars), dtype=np.float64)
+        if isp.num_opened_terrain_vars > 0
         else None
     )
     cross_items: list[tuple[int, int, int, float]] = []
@@ -82,16 +81,14 @@ def compute_affine_edge_costs(
 
         o_u = 1.0 if cell_u.obstacle != 0 else 0.0
         o_v = 1.0 if cell_v.obstacle != 0 else 0.0
-        water_u = cell_u.terrain == WATER_TERRAIN and u not in grid.water_overrides
-        water_v = cell_v.terrain == WATER_TERRAIN and v not in grid.water_overrides
-        t_u = float(
-            cell_u.terrain in IMPASSABLE_TERRAINS
-            and (cell_u.terrain != WATER_TERRAIN or water_u)
+        opened_u = (
+            cell_u.terrain in IMPASSABLE_TERRAINS and u not in grid.terrain_overrides
         )
-        t_v = float(
-            cell_v.terrain in IMPASSABLE_TERRAINS
-            and (cell_v.terrain != WATER_TERRAIN or water_v)
+        opened_v = (
+            cell_v.terrain in IMPASSABLE_TERRAINS and v not in grid.terrain_overrides
         )
+        t_u = float(opened_u)
+        t_v = float(opened_v)
 
         s_viol = (
             1.0
@@ -126,11 +123,11 @@ def compute_affine_edge_costs(
             if v in isp.obstacle_to_idx:
                 M_obs[k, isp.obstacle_to_idx[v]] += isp.big_m * o_v
 
-        if M_water is not None:
-            if water_u and u in isp.water_to_idx:
-                M_water[k, isp.water_to_idx[u]] += isp.big_m
-            if water_v and v in isp.water_to_idx:
-                M_water[k, isp.water_to_idx[v]] += isp.big_m
+        if M_opened_terrain is not None:
+            if opened_u and u in isp.opened_terrain_to_idx:
+                M_opened_terrain[k, isp.opened_terrain_to_idx[u]] += isp.big_m
+            if opened_v and v in isp.opened_terrain_to_idx:
+                M_opened_terrain[k, isp.opened_terrain_to_idx[v]] += isp.big_m
 
         if M_slope is not None and (u, v) in isp.slope_to_idx:
             s_idx = isp.slope_to_idx[(u, v)]
@@ -152,7 +149,7 @@ def compute_affine_edge_costs(
         M_terrain.tocsr() if M_terrain is not None else None,
         M_obs.tocsr() if M_obs is not None else None,
         M_slope.tocsr() if M_slope is not None else None,
-        M_water.tocsr() if M_water is not None else None,
+        M_opened_terrain.tocsr() if M_opened_terrain is not None else None,
         M_slope_blocked.tocsr() if M_slope_blocked is not None else None,
         cross_items,
     )
@@ -199,9 +196,9 @@ def build_base_formulation(
         if isp.num_slope_vars > 0
         else None
     )
-    z_water = (
-        cp.Variable(isp.num_water_vars, boolean=True)
-        if isp.num_water_vars > 0
+    z_opened_terrain = (
+        cp.Variable(isp.num_opened_terrain_vars, boolean=True)
+        if isp.num_opened_terrain_vars > 0
         else None
     )
 
@@ -220,7 +217,7 @@ def build_base_formulation(
         M_terrain,
         M_obs,
         M_slope,
-        M_water,
+        M_opened_terrain,
         M_slope_blocked,
         cross_items,
     ) = compute_affine_edge_costs(
@@ -239,8 +236,8 @@ def build_base_formulation(
     if z_slope is not None and M_slope is not None:
         travel_time = travel_time - M_slope @ z_slope
         blocking_cost = blocking_cost - M_slope_blocked @ z_slope
-    if z_water is not None and M_water is not None:
-        blocking_cost = blocking_cost - M_water @ z_water
+    if z_opened_terrain is not None and M_opened_terrain is not None:
+        blocking_cost = blocking_cost - M_opened_terrain @ z_opened_terrain
 
     cross_term, extra_constraints = linearize_mccormick_terms(
         cross_items=cross_items,
@@ -289,8 +286,8 @@ def build_base_formulation(
                 if grid.speeds[terrain] < original_speed:
                     extra_constraints.append(z_terrain[i * class_count + j] == 0.0)
 
-    if z_water is not None:
-        extra_constraints.append(z_water == 1.0)
+    if z_opened_terrain is not None:
+        extra_constraints.append(z_opened_terrain == 1.0)
     if z_obstacle is not None:
         extra_constraints.append(z_obstacle == 1.0)
     if z_slope is not None:
@@ -300,7 +297,7 @@ def build_base_formulation(
 
     obj_terms = [
         cp.sum(variable)
-        for variable in (z_obstacle, z_slope, z_water, z_robot_speed)
+        for variable in (z_obstacle, z_slope, z_opened_terrain, z_robot_speed)
         if variable is not None
     ]
 
@@ -331,6 +328,6 @@ def build_base_formulation(
         z_terrain=z_terrain,
         z_obstacle=z_obstacle,
         z_slope=z_slope,
-        z_water=z_water,
+        z_opened_terrain=z_opened_terrain,
         z_robot_speed=z_robot_speed,
     )

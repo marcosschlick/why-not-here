@@ -2,10 +2,7 @@ from ..grid import Grid
 
 
 def traversable_component(grid: Grid, start: tuple[int, int]) -> set[tuple[int, int]]:
-    if (
-        grid.get_cell(start).is_blocked
-        or grid.speeds.get(grid.get_cell(start).terrain, 0.0) <= 0.0
-    ):
+    if not grid.is_cell_traversable(start):
         return set()
     component = {start}
     stack = [start]
@@ -23,8 +20,7 @@ def largest_traversable_component(grid: Grid) -> set[tuple[int, int]]:
         (row, col)
         for row in range(grid.h)
         for col in range(grid.w)
-        if not grid.get_cell((row, col)).is_blocked
-        and grid.speeds.get(grid.get_cell((row, col)).terrain, 0.0) > 0.0
+        if grid.is_cell_traversable((row, col))
     }
     if not remaining:
         return set()

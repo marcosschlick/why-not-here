@@ -11,10 +11,9 @@ from .style import (
     GOAL_EDGE_COLOR,
     MODIFICATION_EDGE_COLOR,
     MODIFICATION_OBSTACLE_COLOR,
+    MODIFICATION_OPENED_TERRAIN_COLOR,
     MODIFICATION_SLOPE_COLOR,
     MODIFICATION_TERRAIN_COLOR,
-    MODIFICATION_WATER_COLOR,
-    OBSTACLE_COLOR,
     OPTIMAL_PATH_COLOR,
     ROUTE_WIDTH,
     START_COLOR,
@@ -255,7 +254,14 @@ def build_tactical_legend(
         )
         for name, speed in grid.speeds.items()
     )
-    handles.append(mpatches.Patch(color=OBSTACLE_COLOR, label="Obstacle"))
+    handles.append(
+        mpatches.Patch(
+            facecolor="#777B80",
+            edgecolor="#282828",
+            hatch="xx",
+            label="Obstacle (terrain shade)",
+        )
+    )
 
     if modifications is not None:
         changes = (
@@ -275,9 +281,9 @@ def build_tactical_legend(
                 "Slope leveled",
             ),
             (
-                len(modifications.water_nodes),
-                MODIFICATION_WATER_COLOR,
-                "Water opened",
+                len(modifications.opened_terrain_nodes),
+                MODIFICATION_OPENED_TERRAIN_COLOR,
+                "Terrain opened",
             ),
         )
         if any(count > 0 for count, _, _ in changes):

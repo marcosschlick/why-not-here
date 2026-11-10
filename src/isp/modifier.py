@@ -1,4 +1,6 @@
-from ..config import WATER_TERRAIN
+import copy
+
+from ..config import IMPASSABLE_TERRAINS
 from ..grid import Grid
 from .types import SemanticModifications
 
@@ -28,12 +30,15 @@ def apply_semantic_modifications(
         | set(modifications.slope_edges)
         | {(v, u) for u, v in modifications.slope_edges}
     )
-    new_grid.water_overrides = {
-        u for u in grid.water_overrides if grid.get_cell(u).terrain == WATER_TERRAIN
+    new_grid.terrain_overrides = {
+        u
+        for u in grid.terrain_overrides
+        if grid.get_cell(u).terrain in IMPASSABLE_TERRAINS
     }
     new_grid.base_seed = grid.base_seed
     new_grid.effective_seed = grid.effective_seed
     new_grid.generation_attempt = grid.generation_attempt
+    new_grid.generation_profile = copy.deepcopy(grid.generation_profile)
 
     for u, terrain in modifications.terrain_assignments:
         new_grid.get_cell(u).terrain = terrain
@@ -43,8 +48,8 @@ def apply_semantic_modifications(
         if cell.obstacle != 0:
             cell.obstacle = 0
 
-    for u in modifications.water_nodes:
-        if new_grid.get_cell(u).terrain == WATER_TERRAIN:
-            new_grid.water_overrides.add(u)
+    for u in modifications.opened_terrain_nodes:
+        if new_grid.get_cell(u).terrain in IMPASSABLE_TERRAINS:
+            new_grid.terrain_overrides.add(u)
 
     return new_grid

@@ -4,23 +4,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Circle, Polygon
 
-from .. import config
 from ..grid import Grid
 from ..isp import SemanticModifications
+from .appearance import resolve_map_appearance
+from .relief import relief_intensity
 from .style import (
     GOAL_COLOR,
     GOAL_EDGE_COLOR,
     MODIFICATION_EDGE_COLOR,
     MODIFICATION_GROUP_WIDTH,
     MODIFICATION_OBSTACLE_COLOR,
+    MODIFICATION_OPENED_TERRAIN_COLOR,
     MODIFICATION_RADIUS,
-    MODIFICATION_SLOPE_MARKER_PATH_LENGTH,
-    MODIFICATION_SLOPE_MARKER_CROSS_LENGTH,
-    MODIFICATION_SLOPE_MARKER_WIDTH,
     MODIFICATION_SLOPE_COLOR,
+    MODIFICATION_SLOPE_MARKER_CROSS_LENGTH,
+    MODIFICATION_SLOPE_MARKER_PATH_LENGTH,
+    MODIFICATION_SLOPE_MARKER_WIDTH,
     MODIFICATION_TERRAIN_COLOR,
-    MODIFICATION_WATER_COLOR,
-    OBSTACLE_COLOR,
     START_COLOR,
     START_EDGE_COLOR,
     terrain_color_rgb,
@@ -31,33 +31,28 @@ _ModificationGroup = tuple[list[_ModificationPoint], list[_ModificationPoint]]
 
 
 def create_grid_rgb_matrix(grid: Grid) -> np.ndarray:
+    appearance = resolve_map_appearance(grid.h, grid.w)
     elev_matrix = np.array(grid.elevation, dtype=np.float64)
-    min_elev = float(np.min(elev_matrix))
-    max_elev = float(np.max(elev_matrix))
-    elev_range = max_elev - min_elev
-
     rgb = np.zeros((grid.h, grid.w, 3), dtype=np.float64)
+    water = np.zeros((grid.h, grid.w), dtype=bool)
     for i in range(grid.h):
         for j in range(grid.w):
             cell = grid.cells[i][j]
             if cell.terrain == "WATER_RIVER":
                 base = terrain_color_rgb(cell.terrain)
+                water[i, j] = True
             elif cell.obstacle != 0:
-                base = OBSTACLE_COLOR
+                base = terrain_color_rgb(cell.terrain) * appearance["obstacle_shade"]
             else:
                 base = terrain_color_rgb(cell.terrain)
 
-            if elev_range > 0.0:
-                elevation_ratio = (cell.elevation - min_elev) / elev_range
-                factor = (
-                    config.MAP_ELEVATION_SHADE_MIN
-                    + (config.MAP_ELEVATION_SHADE_MAX - config.MAP_ELEVATION_SHADE_MIN)
-                    * elevation_ratio
-                )
-            else:
-                factor = 1.0
-            rgb[i, j] = np.clip(base * factor, 0.0, 1.0)
-    return rgb
+            rgb[i, j] = base
+    intensity = relief_intensity(elev_matrix, grid.cell_size, appearance["relief"])[
+        :, :, None
+    ]
+    shaded = 2 * intensity * rgb + (1 - 2 * intensity) * rgb**2
+    shaded[water] = rgb[water]
+    return np.clip(shaded, 0.0, 1.0)
 
 
 def find_steep_cells(grid: Grid) -> set[tuple[int, int]]:
@@ -65,10 +60,10 @@ def find_steep_cells(grid: Grid) -> set[tuple[int, int]]:
     for i in range(grid.h):
         for j in range(grid.w):
             u = (i, j)
-            if grid.cells[i][j].is_blocked:
+            if not grid.is_cell_traversable(u):
                 continue
             for v in grid.get_neighbors(u, only_traversable=False):
-                if grid.get_cell(v).is_blocked:
+                if not grid.is_cell_traversable(v):
                     continue
                 if abs(grid.get_slope(u, v)) > grid.max_slope_deg:
                     steep_cells.add(u)
@@ -101,8 +96,8 @@ def draw_modifications(
     )
     _draw_modification_cells(
         ax,
-        modifications.water_nodes,
-        MODIFICATION_WATER_COLOR,
+        modifications.opened_terrain_nodes,
+        MODIFICATION_OPENED_TERRAIN_COLOR,
         edge_width,
         cell_width_points,
     )
@@ -121,7 +116,7 @@ def _validate_cell_modification_categories(
     for category, points in (
         ("terrain", modifications.terrain_nodes),
         ("obstacle", modifications.obstacle_nodes),
-        ("water", modifications.water_nodes),
+        ("opened terrain", modifications.opened_terrain_nodes),
     ):
         for point in points:
             previous_category = owners.get(point)
@@ -201,7 +196,9 @@ def _draw_modification_cells(
     )
 
 
-def _group_modification_points(points: list[_ModificationPoint]) -> list[_ModificationGroup]:
+def _group_modification_points(
+    points: list[_ModificationPoint],
+) -> list[_ModificationGroup]:
     neighbors: list[list[int]] = [[] for _ in points]
     buckets: dict[tuple[int, int], list[int]] = {}
 
@@ -212,10 +209,7 @@ def _group_modification_points(points: list[_ModificationPoint]) -> list[_Modifi
             for nearby_col in range(bucket_col - 1, bucket_col + 2):
                 for candidate_index in buckets.get((nearby_row, nearby_col), []):
                     candidate_row, candidate_col = points[candidate_index]
-                    if (
-                        abs(row - candidate_row) <= 1
-                        and abs(col - candidate_col) <= 1
-                    ):
+                    if abs(row - candidate_row) <= 1 and abs(col - candidate_col) <= 1:
                         neighbors[index].append(candidate_index)
                         neighbors[candidate_index].append(index)
 

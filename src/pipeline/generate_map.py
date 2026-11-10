@@ -17,20 +17,8 @@ def generate_map(verbose: bool = True, persist_artifacts: bool = True) -> Grid:
         h=config.MAP_H,
         w=config.MAP_W,
         seed=config.MAP_DEFAULT_SEED,
-        cell_size=config.CELL_SIZE,
         connectivity=config.CONNECTIVITY,
         max_slope_deg=config.MAX_SLOPE_DEG,
-        elevation_scale=config.MAP_ELEVATION_SCALE,
-        elevation_freq=config.MAP_ELEVATION_FREQ,
-        elevation_octaves=config.MAP_ELEVATION_OCTAVES,
-        moisture_freq=config.MAP_MOISTURE_FREQ,
-        moisture_octaves=config.MAP_MOISTURE_OCTAVES,
-        roughness_freq=config.MAP_ROUGHNESS_FREQ,
-        roughness_octaves=config.MAP_ROUGHNESS_OCTAVES,
-        terrain_thresholds=config.MAP_TERRAIN_THRESHOLDS,
-        roughness_thresholds=config.MAP_ROUGHNESS_THRESHOLDS,
-        min_main_component_ratio=config.MAP_MIN_MAIN_COMPONENT_RATIO,
-        max_generation_attempts=config.MAP_MAX_GENERATION_ATTEMPTS,
     )
 
     if verbose:
