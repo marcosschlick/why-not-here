@@ -217,7 +217,7 @@
   font: inherit;
 }
 .qa-app textarea {
-  resize: vertical;
+  resize: none;
 }
 .qa-fields {
   display: grid;

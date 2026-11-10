@@ -72,7 +72,6 @@ export function Topbar(props: TopbarProps) {
               title="Back to simulation"
               aria-label="Back to simulation"
             >
-              <span className="about-btn-icon">←</span>
               <span>Simulation</span>
             </button>
           </>

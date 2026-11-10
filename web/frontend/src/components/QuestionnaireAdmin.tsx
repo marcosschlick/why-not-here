@@ -688,6 +688,7 @@ export function QuestionnaireAdmin({
                   Title
                   <input
                     required
+                    maxLength={100}
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     disabled={busy || !editable}
@@ -697,6 +698,7 @@ export function QuestionnaireAdmin({
                   Description
                   <textarea
                     rows={2}
+                    maxLength={1000}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     disabled={busy || !editable}
