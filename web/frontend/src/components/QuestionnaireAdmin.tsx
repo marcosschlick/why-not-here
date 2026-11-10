@@ -510,30 +510,47 @@ export function QuestionnaireAdmin({
       <div className="qa-app">
         <div className="qa-layout">
         <aside className="qa-sidebar">
-          <div className="qa-side-heading">
-            <h2>Questionnaires</h2>
-            <button type="button" onClick={newDraft} disabled={busy}>
-              + New
-            </button>
-          </div>
-          <p className="qa-muted">Create and manage local drafts.</p>
-          {list.length === 0 && (
-            <p className="qa-muted">No questionnaires yet.</p>
-          )}
-          <nav aria-label="Questionnaires">
-            {list.map((item) => (
+          <div className="qa-side-header">
+            <div className="qa-side-heading">
+              <h2>Questionnaires</h2>
               <button
-                className={`qa-list-item ${selected?.id === item.id ? "is-active" : ""}`}
-                key={item.id}
-                onClick={() => select(item.id)}
-                disabled={busy}
                 type="button"
+                className="btn btn-primary btn-sm"
+                onClick={newDraft}
+                disabled={busy}
+                title="Create a new draft questionnaire"
               >
-                <strong>{item.title}</strong>
-                <span>{item.status}</span>
+                <span>+</span> New
               </button>
-            ))}
-          </nav>
+            </div>
+            <p className="qa-sidebar-subtitle">Create and manage local drafts.</p>
+          </div>
+          {list.length === 0 ? (
+            <div className="qa-sidebar-empty-card">
+              <span className="qa-empty-icon" aria-hidden="true">
+                📋
+              </span>
+              <p className="qa-empty-title">No questionnaires yet</p>
+              <p className="qa-empty-desc">
+                Click &ldquo;+ New&rdquo; above to start drafting your first study.
+              </p>
+            </div>
+          ) : (
+            <nav aria-label="Questionnaires" className="qa-nav-list">
+              {list.map((item) => (
+                <button
+                  className={`qa-list-item ${selected?.id === item.id ? "is-active" : ""}`}
+                  key={item.id}
+                  onClick={() => select(item.id)}
+                  disabled={busy}
+                  type="button"
+                >
+                  <strong>{item.title}</strong>
+                  <span>{item.status}</span>
+                </button>
+              ))}
+            </nav>
+          )}
         </aside>
         <main className="qa-content">
           {error && (

@@ -189,9 +189,11 @@ kbd,
   width: 15rem;
   max-width: 100%;
   margin: 0;
-  padding: 0.25rem 0.4rem;
-  background: var(--bright-snow);
+  padding: 0.25rem 0.5rem;
+  background: color-mix(in srgb, var(--bright-snow) 91%, var(--yale-blue));
+  border: 1px solid color-mix(in srgb, var(--bright-snow) 35%, transparent);
   border-radius: var(--radius-md);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-grey) 14%, transparent);
 }
 .brand-logo-img {
   display: block;
