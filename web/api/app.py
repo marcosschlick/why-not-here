@@ -1,4 +1,5 @@
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -13,9 +14,17 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from src.pipeline.utils import get_project_path
+from web.api.database import initialize_database
 from web.api.routes import router
 
-app = FastAPI(title="Trajectory Planning & ISP API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    initialize_database()
+    yield
+
+
+app = FastAPI(title="Trajectory Planning & ISP API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

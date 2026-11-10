@@ -47,6 +47,21 @@ cd web/frontend && npm install && cd ../..
 
 #### Running Web Platform
 
+The API requires a running PostgreSQL database. Set the database connection
+variables in the backend terminal before starting it:
+
+```bash
+export DB_HOST=127.0.0.1
+export DB_PORT=5432
+export DB_USER=your_database_user
+export DB_PASSWORD=your_database_password
+export DB_NAME=your_database_name
+```
+
+`DB_HOST` and `DB_PORT` default to `127.0.0.1` and `5432` when omitted. The
+database and user must already exist. The API creates its tables on startup
+and does not start if database initialization fails.
+
 ```bash
 # Terminal 1: Backend API (port 8000)
 ./venv/bin/python -B -m uvicorn web.api.app:app --host 127.0.0.1 --port 8000 --reload
@@ -59,7 +74,12 @@ cd web/frontend && npm run dev
 
 ### 2. Docker Compose
 
-Run the entire stack (backend API + frontend) with a single command:
+Set `DB_USER`, `DB_PASSWORD`, and `DB_NAME` in the shell or in an untracked
+`.env` file in the project root. Optionally set `DB_PORT` to change the host
+port published by PostgreSQL; it defaults to `5432`. The backend connects
+to the database service on its internal port, independently of `DB_PORT`.
+
+Run the entire stack (PostgreSQL + backend API + frontend) with:
 
 ```bash
 docker compose up --build
@@ -67,3 +87,8 @@ docker compose up --build
 
 - API: `http://localhost:8000`
 - Dashboard: `http://localhost:5173`
+
+PostgreSQL data is stored in the named `postgres_data` volume and persists
+across container restarts and recreation. The PostgreSQL image applies the
+database name and credentials only when initializing an empty volume; changing
+those variables later does not update an existing database or user.

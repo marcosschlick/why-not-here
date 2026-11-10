@@ -1,4 +1,22 @@
 services:
+  db:
+    image: postgres:18
+    container_name: tcc_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build: .
     container_name: tcc_backend
@@ -7,12 +25,20 @@ services:
     environment:
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:?DB_USER is required}
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
+      - DB_NAME=${DB_NAME:?DB_NAME is required}
     volumes:
       - ./src:/app/src
       - ./web/api:/app/web/api
       - ./maps:/app/maps
       - ./output:/app/output
       - ./results:/app/results
+    depends_on:
+      db:
+        condition: service_healthy
 
   frontend:
     build: ./web/frontend
@@ -26,3 +52,6 @@ services:
       - /app/node_modules
     depends_on:
       - backend
+
+volumes:
+  postgres_data:
