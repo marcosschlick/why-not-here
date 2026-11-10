@@ -20,6 +20,7 @@ type Questionnaire = {
   title: string;
   description: string | null;
   status: string;
+  access_token?: string | null;
   questions: Question[];
 };
 type Summary = Omit<Questionnaire, "questions">;
@@ -365,7 +366,9 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
             <div className="qa-heading">
               <div>
                 <span className="qa-overline">
-                  {selected ? `DRAFT / ${selected.id}` : "NEW QUESTIONNAIRE"}
+                  {selected
+                    ? `${selected.status.toUpperCase()} / ${selected.id}`
+                    : "NEW QUESTIONNAIRE"}
                 </span>
                 <h2>
                   {selected ? "Questionnaire details" : "Start a questionnaire"}
@@ -384,6 +387,40 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
                 </button>
               )}
             </div>
+            {selected?.status === "draft" && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Activate this questionnaire? It can no longer be edited.",
+                    )
+                  )
+                    return;
+                  void perform(async () => {
+                    await api(
+                      `/questionnaires/${selected.id}/activate`,
+                      "POST",
+                    );
+                    await loadList();
+                    await loadQuestionnaire(selected.id);
+                  });
+                }}
+              >
+                Activate questionnaire
+              </button>
+            )}
+            {selected?.status === "active" && selected.access_token && (
+              <label className="qa-form">
+                Participant link
+                <input
+                  readOnly
+                  value={`${window.location.origin}${window.location.pathname}#/participate/${selected.access_token}`}
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+              </label>
+            )}
             {!preview && (
               <form onSubmit={saveDraft} className="qa-form">
                 <label>

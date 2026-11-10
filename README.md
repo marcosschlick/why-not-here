@@ -75,6 +75,11 @@ Use **Questionnaires** in the application navigation to administer drafts and
 preview their saved questions and scenarios. The API saves question ordering via
 `PUT /api/questionnaires/{id}/questions/order`, with a `question_ids` array
 containing every question in the desired order.
+Activate a draft in the administration screen to lock it and obtain a
+participant link. Participants answer all questions without an account and
+submit their responses together; refreshing before submission resets the form.
+The API exposes `POST /api/questionnaires/{id}/activate`,
+`GET /api/participate/{token}`, and `POST /api/participate/{token}/submit`.
 
 ```bash
 # Terminal 1: Backend API (port 8000)

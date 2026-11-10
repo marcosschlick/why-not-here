@@ -26,6 +26,7 @@ interface RouteCanvasProps {
   busyButtonText?: string;
   onPrevMap?: () => void;
   batchStepper?: React.ReactNode;
+  participantMode?: boolean;
 }
 
 export function RouteCanvas({
@@ -39,6 +40,7 @@ export function RouteCanvas({
   busyButtonText,
   onPrevMap,
   batchStepper,
+  participantMode = false,
 }: RouteCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [wrapper, setWrapper] = useState<HTMLDivElement | null>(null);
@@ -436,14 +438,16 @@ export function RouteCanvas({
             role="group"
             aria-label="Route editing"
           >
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleAutoRoute}
-              disabled={isSolving}
-            >
-              Automatic Route
-            </button>
+            {!participantMode && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleAutoRoute}
+                disabled={isSolving}
+              >
+                Automatic Route
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-ghost"
@@ -475,23 +479,25 @@ export function RouteCanvas({
             role="group"
             aria-label="Map display"
           >
-            <button
-              type="button"
-              className={`btn ${showOptimalRoute ? "btn-secondary active" : "btn-ghost"}`}
-              onClick={() => setShowOptimalRoute((prev) => !prev)}
-              disabled={
-                isSolving ||
-                !mapData.optimal_path ||
-                mapData.optimal_path.length === 0
-              }
-              title={
-                showOptimalRoute
-                  ? "Hide initial optimal path (p*)"
-                  : "Show initial optimal path (p*)"
-              }
-            >
-              {showOptimalRoute ? "Hide Optimal Route" : "Show Optimal Route"}
-            </button>
+            {!participantMode && (
+              <button
+                type="button"
+                className={`btn ${showOptimalRoute ? "btn-secondary active" : "btn-ghost"}`}
+                onClick={() => setShowOptimalRoute((prev) => !prev)}
+                disabled={
+                  isSolving ||
+                  !mapData.optimal_path ||
+                  mapData.optimal_path.length === 0
+                }
+                title={
+                  showOptimalRoute
+                    ? "Hide initial optimal path (p*)"
+                    : "Show initial optimal path (p*)"
+                }
+              >
+                {showOptimalRoute ? "Hide Optimal Route" : "Show Optimal Route"}
+              </button>
+            )}
 
             <div className="zoom-controls-bar">
               <span className="zoom-label">Zoom</span>
@@ -582,16 +588,18 @@ export function RouteCanvas({
             </button>
           )}
 
-          <button
-            type="button"
-            className="btn btn-vibrant btn-large"
-            onClick={onSolve}
-            disabled={isSolving || !isConnectedToGoal}
-          >
-            {isSolving
-              ? busyButtonText || "Solving ISP..."
-              : solveButtonText || "Solve ISP"}
-          </button>
+          {!participantMode && (
+            <button
+              type="button"
+              className="btn btn-vibrant btn-large"
+              onClick={onSolve}
+              disabled={isSolving || !isConnectedToGoal}
+            >
+              {isSolving
+                ? busyButtonText || "Solving ISP..."
+                : solveButtonText || "Solve ISP"}
+            </button>
+          )}
         </div>
       </div>
 

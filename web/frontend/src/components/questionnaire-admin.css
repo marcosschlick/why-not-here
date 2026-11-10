@@ -283,3 +283,43 @@
     flex-wrap: wrap;
   }
 }
+.qa-participant {
+  margin: 0 auto;
+}
+.qa-participant-form {
+  display: grid;
+  gap: 1.2rem;
+}
+.qa-participant-form > button {
+  justify-self: start;
+}
+.qa-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.qa-fieldset legend {
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+.qa-option {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.5rem 0;
+}
+.qa-option input,
+.qa-route-option input {
+  width: auto;
+}
+.qa-route-option {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  font-weight: 650;
+}
+.qa-response-label {
+  display: grid;
+  gap: 0.4rem;
+}

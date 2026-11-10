@@ -59,6 +59,9 @@ def initialize_database() -> None:
         )
         """,
         "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'draft'",
+        "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS access_token TEXT UNIQUE",
+        "ALTER TABLE participations ADD COLUMN IF NOT EXISTS submission_key UUID",
+        "CREATE UNIQUE INDEX IF NOT EXISTS participations_submission_key_idx ON participations (questionnaire_id, submission_key) WHERE submission_key IS NOT NULL",
         "ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT '{}'::jsonb",
         "ALTER TABLE questions ADD COLUMN IF NOT EXISTS questionnaire_id BIGINT REFERENCES questionnaires(id)",
         "ALTER TABLE questions ALTER COLUMN scenario_id DROP NOT NULL",
