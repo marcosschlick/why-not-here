@@ -284,15 +284,19 @@ def update_question(questionnaire_id: int, question_id: int, payload: QuestionIn
     with connect_database() as connection:
         require_draft(connection, questionnaire_id)
         existing = connection.execute(
-            "SELECT id FROM questions WHERE id = %s AND questionnaire_id = %s",
+            "SELECT id FROM questions WHERE id = %s AND questionnaire_id = %s FOR UPDATE",
             (question_id, questionnaire_id),
         ).fetchone()
         if existing is None:
             raise HTTPException(status_code=404, detail="Question not found")
+        if connection.execute(
+            "SELECT 1 FROM answers WHERE question_id = %s LIMIT 1", (question_id,)
+        ).fetchone():
+            raise HTTPException(status_code=409, detail="Question has answers")
         scenario_id = validate_scenario(connection, questionnaire_id, payload)
         question = connection.execute(
             "UPDATE questions SET prompt = %s, type = %s, configuration = %s, "
-            "scenario_id = COALESCE(%s, scenario_id) "
+            "scenario_id = %s "
             "WHERE id = %s AND questionnaire_id = %s "
             "RETURNING id, prompt, type, configuration, scenario_id, position",
             (

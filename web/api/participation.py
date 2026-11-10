@@ -1,3 +1,4 @@
+import hashlib
 import math
 import secrets
 from itertools import pairwise
@@ -107,7 +108,14 @@ def active_questionnaire(connection, token, *, lock=False):
     return questionnaire
 
 
-def public_question(question):
+def route_order(submission_key: UUID, question_id: int) -> list[str]:
+    digest = hashlib.sha256(f"{submission_key}:{question_id}".encode()).digest()
+    if digest[0] & 1:
+        return ["alternative", "optimal"]
+    return ["optimal", "alternative"]
+
+
+def public_question(question, submission_key: UUID, saved_order=None):
     public = {key: question[key] for key in ("id", "prompt", "type", "configuration")}
     if question["type"] in {"route_choice", "route_drawing"}:
         data = question["data"]
@@ -122,22 +130,39 @@ def public_question(question):
             "appearance": resolve_map_appearance(grid["h"], grid["w"]),
         }
         if question["type"] == "route_choice":
-            public["scenario"]["routes"] = [
-                data["optimal_path"],
-                data["alternative_path"],
-            ]
+            paths = {
+                "optimal": data["optimal_path"],
+                "alternative": data["alternative_path"],
+            }
+            order = saved_order or route_order(submission_key, question["id"])
+            public["scenario"]["routes"] = [paths[name] for name in order]
     return public
 
 
 @router.get("/participate/{token}")
-def get_public_questionnaire(token: str):
+def get_public_questionnaire(token: str, submission_key: UUID):
     with connect_database() as connection:
         questionnaire = active_questionnaire(connection, token)
+        existing = connection.execute(
+            "SELECT id FROM participations WHERE questionnaire_id = %s AND submission_key = %s",
+            (questionnaire["id"], submission_key),
+        ).fetchone()
+        saved_orders = {}
+        if existing:
+            rows = connection.execute(
+                "SELECT question_id, route_order FROM answers WHERE participation_id = %s",
+                (existing["id"],),
+            ).fetchall()
+            saved_orders = {
+                row["question_id"]: row["route_order"] or ["optimal", "alternative"]
+                for row in rows
+            }
         return {
             "title": questionnaire["title"],
             "description": questionnaire["description"],
+            "submission_completed": existing is not None,
             "questions": [
-                public_question(q)
+                public_question(q, submission_key, saved_orders.get(q["id"]))
                 for q in read_questions(connection, questionnaire["id"])
             ],
         }
@@ -191,6 +216,16 @@ def validate_answer(question, value):
     return False
 
 
+def same_value(first, second):
+    if isinstance(first, list) and isinstance(second, list):
+        return len(first) == len(second) and all(
+            same_value(a, b) for a, b in zip(first, second, strict=True)
+        )
+    if type(first) in (int, float) and type(second) in (int, float):
+        return first == second
+    return type(first) is type(second) and first == second
+
+
 @router.post("/participate/{token}/submit", status_code=status.HTTP_201_CREATED)
 def submit_answers(token: str, payload: SubmissionInput):
     with connect_database() as connection:
@@ -199,10 +234,24 @@ def submit_answers(token: str, payload: SubmissionInput):
             "SELECT id FROM participations WHERE questionnaire_id = %s AND submission_key = %s",
             (questionnaire["id"], payload.submission_key),
         ).fetchone()
-        if existing:
-            return {"status": "completed", "participation_id": existing["id"]}
         questions = read_questions(connection, questionnaire["id"])
         answers = {answer.question_id: answer.value for answer in payload.answers}
+        if existing:
+            rows = connection.execute(
+                "SELECT question_id, value FROM answers WHERE participation_id = %s",
+                (existing["id"],),
+            ).fetchall()
+            saved = {row["question_id"]: row["value"] for row in rows}
+            if (
+                len(answers) != len(payload.answers)
+                or saved.keys() != answers.keys()
+                or not all(same_value(saved[key], answers[key]) for key in saved)
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="This submission was already completed with different answers",
+                )
+            return {"status": "completed", "participation_id": existing["id"]}
         if len(answers) != len(payload.answers) or set(answers) != {
             q["id"] for q in questions
         }:
@@ -221,7 +270,14 @@ def submit_answers(token: str, payload: SubmissionInput):
         ).fetchone()
         for question in questions:
             connection.execute(
-                "INSERT INTO answers (participation_id, question_id, value) VALUES (%s, %s, %s)",
-                (participation["id"], question["id"], Jsonb(answers[question["id"]])),
+                "INSERT INTO answers (participation_id, question_id, value, route_order) VALUES (%s, %s, %s, %s)",
+                (
+                    participation["id"],
+                    question["id"],
+                    Jsonb(answers[question["id"]]),
+                    Jsonb(route_order(payload.submission_key, question["id"]))
+                    if question["type"] == "route_choice"
+                    else None,
+                ),
             )
         return {"status": "completed", "participation_id": participation["id"]}

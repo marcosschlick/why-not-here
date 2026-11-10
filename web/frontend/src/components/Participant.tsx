@@ -25,6 +25,7 @@ type Question = {
 type Questionnaire = {
   title: string;
   description: string | null;
+  submission_completed: boolean;
   questions: Question[];
 };
 type Answer = string | number | Point[];
@@ -144,6 +145,7 @@ export function Participant({ token }: { token: string }) {
   );
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
   const [error, setError] = useState("");
+  const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [submissionKey] = useState(() => {
@@ -162,7 +164,9 @@ export function Participant({ token }: { token: string }) {
     return value;
   });
   useEffect(() => {
-    fetch(`/api/participate/${encodeURIComponent(token)}`)
+    fetch(
+      `/api/participate/${encodeURIComponent(token)}?submission_key=${encodeURIComponent(submissionKey)}`,
+    )
       .then(async (response) => {
         if (!response.ok)
           throw new Error("This questionnaire link is unavailable.");
@@ -170,7 +174,7 @@ export function Participant({ token }: { token: string }) {
       })
       .then(setQuestionnaire)
       .catch((reason: Error) => setError(reason.message));
-  }, [token]);
+  }, [token, submissionKey]);
   function update(id: number, value: Answer) {
     setAnswers((current) => ({ ...current, [id]: value }));
   }
@@ -199,6 +203,7 @@ export function Participant({ token }: { token: string }) {
     }
     setBusy(true);
     setError("");
+    setConflict(false);
     try {
       const response = await fetch(
         `/api/participate/${encodeURIComponent(token)}/submit`,
@@ -212,12 +217,16 @@ export function Participant({ token }: { token: string }) {
         },
       );
       if (!response.ok) {
+        if (response.status === 409) setConflict(true);
         const body = await response.json().catch(() => null);
         throw new Error(
           typeof body?.detail === "string"
             ? body.detail
             : "Unable to submit answers.",
         );
+      }
+      if (sessionStorage.getItem(`participation:${token}`) === submissionKey) {
+        sessionStorage.removeItem(`participation:${token}`);
       }
       setCompleted(true);
     } catch (reason) {
@@ -242,10 +251,32 @@ export function Participant({ token }: { token: string }) {
             {error}
           </div>
         )}
+        {(conflict || questionnaire?.submission_completed) && !completed && (
+          <div className="qa-notice">
+            <p>
+              {conflict
+                ? "This submission was already completed with different answers."
+                : "This browser has an already completed submission for this questionnaire."}{" "}
+              Starting again creates a separate participation.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                sessionStorage.removeItem(`participation:${token}`);
+                window.location.reload();
+              }}
+            >
+              Start a new participation
+            </button>
+          </div>
+        )}
         {completed ? (
           <section className="qa-panel">
             <h2>Thank you for participating</h2>
             <p>Your answers have been submitted.</p>
+            <button type="button" onClick={() => window.location.reload()}>
+              Start a new participation
+            </button>
           </section>
         ) : !questionnaire ? (
           !error && <p role="status">Loading questionnaire…</p>

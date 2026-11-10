@@ -80,6 +80,11 @@ participant link. Participants answer all questions without an account and
 submit their responses together; refreshing before submission resets the form.
 The API exposes `POST /api/questionnaires/{id}/activate`,
 `GET /api/participate/{token}`, and `POST /api/participate/{token}/submit`.
+The participant GET requires the `submission_key` UUID query parameter. It
+determines a stable randomized route order for each question and attempt. New
+route-choice answers store their displayed order in `answers.route_order`;
+older answers have a null order and used optimal followed by alternative.
+Repeating a completed submission with different answers returns a conflict.
 
 ```bash
 # Terminal 1: Backend API (port 8000)
