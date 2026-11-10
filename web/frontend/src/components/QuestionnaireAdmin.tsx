@@ -149,6 +149,7 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
   const [seed, setSeed] = useState("");
   const [reduction, setReduction] = useState("PATH_ONLY");
   const [timeout, setTimeoutValue] = useState("60");
+  const [exportKey, setExportKey] = useState("");
 
   const loadList = useCallback(
     async () => setList(await api<Summary[]>("/questionnaires")),
@@ -191,6 +192,7 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
     }
   }
   function select(id: number) {
+    setExportKey("");
     void perform(async () => {
       await loadQuestionnaire(id);
       setEditing(null);
@@ -199,6 +201,7 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
     });
   }
   function newDraft() {
+    setExportKey("");
     setSelected(null);
     setTitle("");
     setDescription("");
@@ -218,6 +221,35 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
       );
       await loadList();
       await loadQuestionnaire(item.id);
+    });
+  }
+  function exportResults(event: FormEvent) {
+    event.preventDefault();
+    if (!selected) return;
+    void perform(async () => {
+      const response = await fetch(
+        `/api/questionnaires/${selected.id}/export`,
+        {
+          headers: { "X-Export-Key": exportKey },
+        },
+      );
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(
+          typeof body?.detail === "string"
+            ? body.detail
+            : "Unable to export results.",
+        );
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `questionnaire-${selected.id}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setExportKey("");
     });
   }
   function editQuestion(question: Question) {
@@ -420,6 +452,24 @@ export function QuestionnaireAdmin({ onBack }: { onBack: () => void }) {
                   onFocus={(event) => event.currentTarget.select()}
                 />
               </label>
+            )}
+            {selected && (
+              <form onSubmit={exportResults} className="qa-form">
+                <label>
+                  Export key
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    required
+                    value={exportKey}
+                    onChange={(event) => setExportKey(event.target.value)}
+                    disabled={busy}
+                  />
+                </label>
+                <button type="submit" className="qa-secondary" disabled={busy}>
+                  Download results (JSON)
+                </button>
+              </form>
             )}
             {!preview && (
               <form onSubmit={saveDraft} className="qa-form">

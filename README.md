@@ -56,6 +56,7 @@ export DB_PORT=5432
 export DB_USER=your_database_user
 export DB_PASSWORD=your_database_password
 export DB_NAME=your_database_name
+export ADMIN_EXPORT_KEY=your_export_key
 ```
 
 `DB_HOST` and `DB_PORT` default to `127.0.0.1` and `5432` when omitted. The
@@ -86,6 +87,18 @@ route-choice answers store their displayed order in `answers.route_order`;
 older answers have a null order and used optimal followed by alternative.
 Repeating a completed submission with different answers returns a conflict.
 
+Each new participation is assigned to either the control group (cost baseline)
+or experimental group (contrastive explanation). The assignment remains stable
+for the same attempt and is saved on submission. Older participations have no
+group. Each scenario referenced by a question must contain both justifications.
+
+Set `ADMIN_EXPORT_KEY` to enable results export, and enter the same key in the
+administration screen to download the questionnaire results as JSON. The API
+also supports `GET /api/questionnaires/{id}/export` with the `X-Export-Key`
+header. Exports include completed participations, questions, scenarios, answers,
+groups, and route ordering; they exclude access tokens and submission keys.
+The export key does not protect other administrative routes.
+
 ```bash
 # Terminal 1: Backend API (port 8000)
 ./venv/bin/python -B -m uvicorn web.api.app:app --host 127.0.0.1 --port 8000 --reload
@@ -102,6 +115,7 @@ Set `DB_USER`, `DB_PASSWORD`, and `DB_NAME` in the shell or in an untracked
 `.env` file in the project root. Optionally set `DB_PORT` to change the host
 port published by PostgreSQL; it defaults to `5432`. The backend connects
 to the database service on its internal port, independently of `DB_PORT`.
+Set `ADMIN_EXPORT_KEY` in the shell or `.env` to enable protected JSON export.
 
 Run the entire stack (PostgreSQL + backend API + frontend) with:
 

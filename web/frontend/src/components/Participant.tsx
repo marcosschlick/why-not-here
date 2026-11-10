@@ -21,6 +21,7 @@ type Question = {
     "text" | "choice" | "likert" | "numeric" | "route_choice" | "route_drawing";
   configuration: { options?: string[]; min?: number; max?: number };
   scenario?: Scenario;
+  justification?: string;
 };
 type Questionnaire = {
   title: string;
@@ -168,8 +169,14 @@ export function Participant({ token }: { token: string }) {
       `/api/participate/${encodeURIComponent(token)}?submission_key=${encodeURIComponent(submissionKey)}`,
     )
       .then(async (response) => {
-        if (!response.ok)
-          throw new Error("This questionnaire link is unavailable.");
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          throw new Error(
+            typeof body?.detail === "string"
+              ? body.detail
+              : "This questionnaire link is unavailable.",
+          );
+        }
         return response.json();
       })
       .then(setQuestionnaire)
@@ -301,6 +308,12 @@ export function Participant({ token }: { token: string }) {
                       <br />
                       <strong>{q.prompt}</strong>
                     </legend>
+                    {q.justification && (
+                      <div className="qa-justification">
+                        <strong>Justification</strong>
+                        <p>{q.justification}</p>
+                      </div>
+                    )}
                     {q.type === "text" && (
                       <textarea
                         aria-label={q.prompt}

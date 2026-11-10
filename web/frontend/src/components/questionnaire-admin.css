@@ -286,6 +286,17 @@
 .qa-participant {
   margin: 0 auto;
 }
+.qa-justification {
+  margin: 0 0 1rem;
+  padding: 1rem;
+  border-left: 3px solid var(--azure-blue);
+  background: var(--surface-info);
+  color: var(--text-strong);
+}
+.qa-justification p {
+  margin: 0.5rem 0 0;
+  white-space: pre-wrap;
+}
 .qa-participant-form {
   display: grid;
   gap: 1.2rem;

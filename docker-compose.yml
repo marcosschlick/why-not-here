@@ -30,6 +30,7 @@ services:
       - DB_USER=${DB_USER:?DB_USER is required}
       - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
       - DB_NAME=${DB_NAME:?DB_NAME is required}
+      - ADMIN_EXPORT_KEY=${ADMIN_EXPORT_KEY:-}
     volumes:
       - ./src:/app/src
       - ./web/api:/app/web/api

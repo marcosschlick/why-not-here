@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import math
 import secrets
 from itertools import pairwise
@@ -59,6 +60,7 @@ def check_question(connection, questionnaire_id, question):
             status_code=422,
             detail="Questionnaire contains an invalid question or scenario",
         ) from error
+    check_justifications(question, 422)
     if question["type"] in {
         "route_choice",
         "route_drawing",
@@ -89,14 +91,14 @@ def activate_questionnaire(questionnaire_id: int):
             check_question(connection, questionnaire_id, question)
         token = secrets.token_urlsafe(32)
         connection.execute(
-            "UPDATE questionnaires SET status = 'active', access_token = %s WHERE id = %s",
-            (token, questionnaire_id),
+            "UPDATE questionnaires SET status = 'active', access_token = %s, group_secret = %s WHERE id = %s",
+            (token, secrets.token_hex(32), questionnaire_id),
         )
         return {"status": "active", "access_token": token}
 
 
 def active_questionnaire(connection, token, *, lock=False):
-    query = "SELECT id, title, description FROM questionnaires WHERE access_token = %s AND status = 'active'"
+    query = "SELECT id, title, description, group_secret FROM questionnaires WHERE access_token = %s AND status = 'active'"
     if lock:
         query += " FOR UPDATE"
     questionnaire = connection.execute(
@@ -108,6 +110,34 @@ def active_questionnaire(connection, token, *, lock=False):
     return questionnaire
 
 
+def check_justifications(question, status_code):
+    if question["scenario_id"] is None:
+        return
+    data = question["data"]
+    if not isinstance(data, dict) or any(
+        not isinstance(data.get(key), str) or not data[key].strip()
+        for key in ("cost_baseline_text", "explanation_text")
+    ):
+        raise HTTPException(
+            status_code=status_code,
+            detail="Scenario is missing a required justification; generate a new scenario",
+        )
+
+
+def assigned_group(connection, questionnaire, submission_key):
+    secret = questionnaire["group_secret"]
+    if not secret:
+        secret = secrets.token_hex(32)
+        connection.execute(
+            "UPDATE questionnaires SET group_secret = %s WHERE id = %s",
+            (secret, questionnaire["id"]),
+        )
+    digest = hmac.new(
+        secret.encode(), str(submission_key).encode(), hashlib.sha256
+    ).digest()
+    return "experimental" if digest[0] & 1 else "control"
+
+
 def route_order(submission_key: UUID, question_id: int) -> list[str]:
     digest = hashlib.sha256(f"{submission_key}:{question_id}".encode()).digest()
     if digest[0] & 1:
@@ -115,8 +145,11 @@ def route_order(submission_key: UUID, question_id: int) -> list[str]:
     return ["optimal", "alternative"]
 
 
-def public_question(question, submission_key: UUID, saved_order=None):
+def public_question(question, submission_key: UUID, saved_order=None, study_group=None):
     public = {key: question[key] for key in ("id", "prompt", "type", "configuration")}
+    if question["scenario_id"] is not None and study_group is not None:
+        field = "cost_baseline_text" if study_group == "control" else "explanation_text"
+        public["justification"] = question["data"][field]
     if question["type"] in {"route_choice", "route_drawing"}:
         data = question["data"]
         grid = data["map"]
@@ -142,12 +175,20 @@ def public_question(question, submission_key: UUID, saved_order=None):
 @router.get("/participate/{token}")
 def get_public_questionnaire(token: str, submission_key: UUID):
     with connect_database() as connection:
-        questionnaire = active_questionnaire(connection, token)
+        questionnaire = active_questionnaire(connection, token, lock=True)
         existing = connection.execute(
-            "SELECT id FROM participations WHERE questionnaire_id = %s AND submission_key = %s",
+            "SELECT id, study_group FROM participations WHERE questionnaire_id = %s AND submission_key = %s",
             (questionnaire["id"], submission_key),
         ).fetchone()
         saved_orders = {}
+        questions = read_questions(connection, questionnaire["id"])
+        for question in questions:
+            check_justifications(question, 409)
+        study_group = (
+            existing["study_group"]
+            if existing
+            else assigned_group(connection, questionnaire, submission_key)
+        )
         if existing:
             rows = connection.execute(
                 "SELECT question_id, route_order FROM answers WHERE participation_id = %s",
@@ -162,8 +203,10 @@ def get_public_questionnaire(token: str, submission_key: UUID):
             "description": questionnaire["description"],
             "submission_completed": existing is not None,
             "questions": [
-                public_question(q, submission_key, saved_orders.get(q["id"]))
-                for q in read_questions(connection, questionnaire["id"])
+                public_question(
+                    q, submission_key, saved_orders.get(q["id"]), study_group
+                )
+                for q in questions
             ],
         }
 
@@ -259,14 +302,19 @@ def submit_answers(token: str, payload: SubmissionInput):
                 status_code=422, detail="Every question must have exactly one answer"
             )
         for question in questions:
+            check_justifications(question, 409)
             if not validate_answer(question, answers[question["id"]]):
                 raise HTTPException(
                     status_code=422,
                     detail=f"Invalid answer for question {question['id']}",
                 )
         participation = connection.execute(
-            "INSERT INTO participations (questionnaire_id, submission_key, completed_at) VALUES (%s, %s, CURRENT_TIMESTAMP) RETURNING id",
-            (questionnaire["id"], payload.submission_key),
+            "INSERT INTO participations (questionnaire_id, submission_key, completed_at, study_group) VALUES (%s, %s, CURRENT_TIMESTAMP, %s) RETURNING id",
+            (
+                questionnaire["id"],
+                payload.submission_key,
+                assigned_group(connection, questionnaire, payload.submission_key),
+            ),
         ).fetchone()
         for question in questions:
             connection.execute(
