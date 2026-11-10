@@ -338,6 +338,24 @@ export function Participant({
         setError("Please answer every question before submitting.");
         return;
       }
+      if (question.type === "text") {
+        const text = (value as string).trim();
+        if (text.length > 1000) {
+          setError(
+            `Question ${questionnaire.questions.indexOf(question) + 1}: Response exceeds the 1000-character limit.`,
+          );
+          return;
+        }
+      }
+      if (question.type === "numeric") {
+        const num = value as number;
+        if (typeof num !== "number" || !Number.isFinite(num) || num < 0 || num > 100) {
+          setError(
+            `Question ${questionnaire.questions.indexOf(question) + 1}: Please enter a number between 0 and 100.`,
+          );
+          return;
+        }
+      }
       if (
         question.type === "route_choice" &&
         question.confirmed_choice !== value
@@ -509,12 +527,18 @@ export function Participant({
                       </div>
                     )}
                     {q.type === "text" && (
-                      <textarea
-                        aria-label={q.prompt}
-                        required
-                        value={(answers[q.id] as string) || ""}
-                        onChange={(e) => update(q.id, e.target.value)}
-                      />
+                      <div className="qa-text-response">
+                        <textarea
+                          aria-label={q.prompt}
+                          required
+                          maxLength={1000}
+                          value={(answers[q.id] as string) || ""}
+                          onChange={(e) => update(q.id, e.target.value)}
+                        />
+                        <span className="qa-text-counter">
+                          {((answers[q.id] as string) || "").length} / 1000
+                        </span>
+                      </div>
                     )}
                     {q.type === "choice" &&
                       q.configuration.options?.map((option, i) => (
@@ -554,12 +578,12 @@ export function Participant({
                     )}
                     {q.type === "numeric" && (
                       <label className="qa-response-label">
-                        Number
+                        Choose a value (0–100)
                         <input
                           type="number"
                           step="any"
-                          min={q.configuration.min}
-                          max={q.configuration.max}
+                          min="0"
+                          max="100"
                           required
                           value={(answers[q.id] as number | undefined) ?? ""}
                           onChange={(e) =>

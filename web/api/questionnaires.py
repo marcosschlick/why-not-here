@@ -29,12 +29,6 @@ class EmptyConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class ChoiceConfiguration(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    options: list[NonEmptyText] = Field(min_length=2)
-
-
 class LikertConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -51,13 +45,25 @@ class LikertConfiguration(BaseModel):
 class NumericConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
-    min: float | None = None
-    max: float | None = None
+    min: float = 0.0
+    max: float = 100.0
 
     @model_validator(mode="after")
     def validate_bounds(self):
-        if self.min is not None and self.max is not None and self.min > self.max:
-            raise ValueError("Minimum must not exceed maximum")
+        if self.min != 0.0 or self.max != 100.0:
+            raise ValueError("Numeric question range is fixed from 0 to 100")
+        return self
+
+
+class TextConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_length: int = 1000
+
+    @model_validator(mode="after")
+    def validate_length(self):
+        if self.max_length != 1000:
+            raise ValueError("Text question character limit is fixed at 1000")
         return self
 
 
@@ -69,12 +75,7 @@ class QuestionBase(BaseModel):
 
 class TextQuestion(QuestionBase):
     type: Literal["text"]
-    configuration: EmptyConfiguration = Field(default_factory=EmptyConfiguration)
-
-
-class ChoiceQuestion(QuestionBase):
-    type: Literal["choice"]
-    configuration: ChoiceConfiguration
+    configuration: TextConfiguration = Field(default_factory=TextConfiguration)
 
 
 class LikertQuestion(QuestionBase):
@@ -101,7 +102,6 @@ class RouteDrawingQuestion(QuestionBase):
 
 QuestionInput = Annotated[
     TextQuestion
-    | ChoiceQuestion
     | LikertQuestion
     | NumericQuestion
     | RouteChoiceQuestion

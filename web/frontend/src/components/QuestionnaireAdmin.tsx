@@ -9,13 +9,17 @@ import "./questionnaire-admin.css";
 
 type Point = [number, number];
 type QuestionType =
-  "text" | "choice" | "likert" | "numeric" | "route_choice" | "route_drawing";
+  | "route_choice"
+  | "numeric"
+  | "text"
+  | "likert"
+  | "route_drawing";
 type Question = {
   id: number;
   prompt: string;
-  type: QuestionType;
+  type: QuestionType | "choice";
   scenario_id: number | null;
-  configuration: { options?: string[]; min?: number; max?: number };
+  configuration: { options?: string[]; min?: number; max?: number; max_length?: number };
   position: number;
 };
 type Questionnaire = {
@@ -47,25 +51,26 @@ type Form = {
   prompt: string;
   type: QuestionType;
   scenarioId: string;
-  options: string;
   min: string;
   max: string;
 };
 const emptyForm: Form = {
   prompt: "",
-  type: "text",
+  type: "route_choice",
   scenarioId: "",
-  options: "",
-  min: "",
-  max: "",
+  min: "1",
+  max: "5",
 };
 const labels: Record<QuestionType, string> = {
-  text: "Free text",
-  choice: "Multiple choice",
-  likert: "Likert scale",
-  numeric: "Number",
   route_choice: "Choose a route",
+  numeric: "Number",
+  text: "Free text",
+  likert: "Likert scale",
   route_drawing: "Draw a route",
+};
+const displayLabels: Record<string, string> = {
+  ...labels,
+  choice: "Multiple choice (legacy)",
 };
 
 function participantLink(token: string): string | null {
@@ -401,11 +406,10 @@ export function QuestionnaireAdmin({
     setEditing(question.id);
     const nextForm: Form = {
       prompt: question.prompt,
-      type: question.type,
+      type: question.type === "choice" ? "text" : question.type,
       scenarioId: question.scenario_id?.toString() || "",
-      options: question.configuration.options?.join("\n") || "",
-      min: question.configuration.min?.toString() ?? "",
-      max: question.configuration.max?.toString() ?? "",
+      min: question.configuration.min?.toString() ?? (question.type === "likert" ? "1" : ""),
+      max: question.configuration.max?.toString() ?? (question.type === "likert" ? "5" : ""),
     };
     setForm(nextForm);
     setInitialForm(nextForm);
@@ -414,14 +418,14 @@ export function QuestionnaireAdmin({
     event.preventDefault();
     if (!selected) return;
     void perform(async () => {
-      const configuration: { options?: string[]; min?: number; max?: number } =
+      const configuration: { min?: number; max?: number; max_length?: number } =
         {};
-      if (form.type === "choice")
-        configuration.options = form.options
-          .split("\n")
-          .map((option) => option.trim())
-          .filter(Boolean);
-      if (form.type === "likert" || form.type === "numeric") {
+      if (form.type === "numeric") {
+        configuration.min = 0;
+        configuration.max = 100;
+      } else if (form.type === "text") {
+        configuration.max_length = 1000;
+      } else if (form.type === "likert") {
         if (form.min !== "") configuration.min = Number(form.min);
         if (form.max !== "") configuration.max = Number(form.max);
       }
@@ -753,7 +757,7 @@ export function QuestionnaireAdmin({
                         </span>
                         <strong>{q.prompt}</strong>
                         <small>
-                          {labels[q.type]}
+                          {displayLabels[q.type] || q.type}
                           {q.scenario_id ? ` · Scenario ${q.scenario_id}` : ""}
                         </small>
                       </div>
@@ -831,31 +835,24 @@ export function QuestionnaireAdmin({
                       disabled={busy || !editable}
                     />
                   </label>
-                  {form.type === "choice" && (
-                    <label>
-                      Options{" "}
-                      <span className="qa-muted">
-                        one per line, at least two
-                      </span>
-                      <textarea
-                        required
-                        rows={3}
-                        value={form.options}
-                        onChange={(e) =>
-                          setForm({ ...form, options: e.target.value })
-                        }
-                        disabled={busy || !editable}
-                      />
-                    </label>
+                  {form.type === "text" && (
+                    <p className="qa-muted">
+                      Open response with a limit of 1000 characters.
+                    </p>
                   )}
-                  {(form.type === "likert" || form.type === "numeric") && (
+                  {form.type === "numeric" && (
+                    <p className="qa-muted">
+                      Fixed bounds: 0 to 100.
+                    </p>
+                  )}
+                  {form.type === "likert" && (
                     <div className="qa-fields">
                       <label>
                         Minimum
                         <input
                           type="number"
-                          step={form.type === "likert" ? "1" : "any"}
-                          required={form.type === "likert"}
+                          step="1"
+                          required
                           value={form.min}
                           onChange={(e) =>
                             setForm({ ...form, min: e.target.value })
@@ -867,8 +864,8 @@ export function QuestionnaireAdmin({
                         Maximum
                         <input
                           type="number"
-                          step={form.type === "likert" ? "1" : "any"}
-                          required={form.type === "likert"}
+                          step="1"
+                          required
                           value={form.max}
                           onChange={(e) =>
                             setForm({ ...form, max: e.target.value })

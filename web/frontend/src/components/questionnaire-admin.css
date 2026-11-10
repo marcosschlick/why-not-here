@@ -403,3 +403,14 @@
   min-width: 44px;
   min-height: 44px;
 }
+
+.qa-text-response {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.qa-text-counter {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  justify-self: end;
+}

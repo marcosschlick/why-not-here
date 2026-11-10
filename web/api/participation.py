@@ -354,17 +354,16 @@ def validate_route(value, data):
 def validate_answer(question, value):
     kind, config = question["type"], question["configuration"]
     if kind == "text":
-        return isinstance(value, str) and bool(value.strip())
+        return isinstance(value, str) and bool(value.strip()) and len(value.strip()) <= 1000
     if kind == "choice":
-        return type(value) is int and 0 <= value < len(config["options"])
+        return type(value) is int and 0 <= value < len(config.get("options", []))
     if kind == "likert":
         return type(value) is int and config["min"] <= value <= config["max"]
     if kind == "numeric":
         return (
             type(value) in (float, int)
             and math.isfinite(value)
-            and ("min" not in config or value >= config["min"])
-            and ("max" not in config or value <= config["max"])
+            and 0 <= value <= 100
         )
     if kind == "route_choice":
         return type(value) is int and value in (0, 1)
