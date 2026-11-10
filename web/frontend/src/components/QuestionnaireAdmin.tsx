@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { ConfirmModal } from "./ConfirmModal";
 import { Participant } from "./Participant";
 import type { ParticipantQuestionnaire } from "./Participant";
 import { TacticalMapCanvas } from "./TacticalMapCanvas";
@@ -537,9 +538,6 @@ export function QuestionnaireAdmin({
           </div>
           {list.length === 0 ? (
             <div className="qa-sidebar-empty-card">
-              <span className="qa-empty-icon" aria-hidden="true">
-                📋
-              </span>
               <p className="qa-empty-title">No questionnaires yet</p>
               <p className="qa-empty-desc">
                 Click &ldquo;+ New&rdquo; above to start drafting your first study.
@@ -1072,31 +1070,12 @@ export function QuestionnaireAdmin({
           )}
         </main>
       </div>
+    </div>
       {confirmDelete && selected && (
-        <div
-          className="modal-backdrop is-visible"
-          onClick={() => !busy && setConfirmDelete(false)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div
-            className="confirm-modal-card"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="confirm-modal-header">
-              <h3>Delete Questionnaire</h3>
-              <button
-                type="button"
-                className="btn-modal-close"
-                onClick={() => !busy && setConfirmDelete(false)}
-                aria-label="Close dialog"
-                disabled={busy}
-              >
-                &times;
-              </button>
-            </div>
-
-            <p className="confirm-modal-desc">
+        <ConfirmModal
+          title="Delete Questionnaire"
+          description={
+            <>
               The questionnaire <strong>&quot;{selected.title}&quot;</strong>{" "}
               currently contains{" "}
               <strong>{selected.questions.length} question(s)</strong>
@@ -1106,38 +1085,15 @@ export function QuestionnaireAdmin({
                 </>
               )}
               .
-            </p>
-
-            <div className="confirm-modal-warning">
-              Continuing will permanently delete this questionnaire along with all
-              its configured questions, scenarios, and generated routes.
-            </div>
-
-            <div className="confirm-modal-actions">
-              <button
-                type="button"
-                className="btn btn-ghost qa-secondary"
-                onClick={() => setConfirmDelete(false)}
-                disabled={busy}
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                className="btn qa-danger"
-                onClick={handleConfirmDelete}
-                disabled={busy}
-              >
-                {busy
-                  ? "Deleting Questionnaire..."
-                  : "Continue & Delete Questionnaire"}
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          warning="Continuing will permanently delete this questionnaire along with all its configured questions, scenarios, and generated routes."
+          confirmLabel={busy ? "Deleting Questionnaire..." : "Continue & Delete"}
+          busy={busy}
+          onClose={() => setConfirmDelete(false)}
+          onConfirm={handleConfirmDelete}
+        />
       )}
-    </div>
   </>
 );
 }

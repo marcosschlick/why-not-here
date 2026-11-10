@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ConfirmModal } from "./ConfirmModal";
 import {
   fetchMapProfiles,
   browseDirectory,
@@ -871,72 +872,29 @@ export function ConfigForm({
       )}
 
       {cleaningDirInfo && (
-        <div
-          className="modal-backdrop is-visible"
-          onClick={() => !isCleaning && setCleaningDirInfo(null)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div
-            className="confirm-modal-card"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="confirm-modal-header">
-              <h3>Existing Files in Output Directory</h3>
-              <button
-                type="button"
-                className="btn-modal-close"
-                onClick={() => !isCleaning && setCleaningDirInfo(null)}
-                aria-label="Close dialog"
-                disabled={isCleaning}
-              >
-                &times;
-              </button>
-            </div>
-
-            <p className="confirm-modal-desc">
+        <ConfirmModal
+          title="Existing Files in Output Directory"
+          description={
+            <>
               The directory <strong>&quot;{cleaningDirInfo.dir}&quot;</strong>{" "}
               currently contains{" "}
               <strong>{cleaningDirInfo.fileCount} file(s)</strong>
               {cleaningDirInfo.files.length > 0 && (
                 <>
-                  {" "}
-                  (such as:{" "}
+                  {" "}(such as:{" "}
                   <code>{cleaningDirInfo.files.slice(0, 3).join(", ")}</code>
                   {cleaningDirInfo.files.length > 3 ? ", ..." : ""})
                 </>
               )}
               .
-            </p>
-
-            <div className="confirm-modal-warning">
-              Continuing will delete these previous files to ensure stale
-              artifacts from earlier runs do not appear in results.
-            </div>
-
-            <div className="confirm-modal-actions">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setCleaningDirInfo(null)}
-                disabled={isCleaning}
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                className="btn btn-vibrant"
-                onClick={handleConfirmClean}
-                disabled={isCleaning}
-              >
-                {isCleaning
-                  ? "Deleting Previous Files..."
-                  : "Continue & Delete Files"}
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          warning="Continuing will delete these previous files to ensure stale artifacts from earlier runs do not appear in results."
+          confirmLabel={isCleaning ? "Deleting Previous Files..." : "Continue & Delete Files"}
+          busy={isCleaning}
+          onClose={() => setCleaningDirInfo(null)}
+          onConfirm={handleConfirmClean}
+        />
       )}
     </div>
   );

@@ -80,10 +80,6 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-xs);
 }
-.qa-empty-icon {
-  font-size: 1.4rem;
-  line-height: 1;
-}
 .qa-empty-title {
   margin: 0;
   font-size: 0.85rem;
