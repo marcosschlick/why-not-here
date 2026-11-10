@@ -64,6 +64,17 @@ def initialize_database() -> None:
         "ALTER TABLE questions ALTER COLUMN scenario_id DROP NOT NULL",
         "ALTER TABLE questions ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'text'",
         "ALTER TABLE questions ADD COLUMN IF NOT EXISTS configuration JSONB NOT NULL DEFAULT '{}'::jsonb",
+        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS position INTEGER",
+        """
+        WITH ordered AS (
+            SELECT id, COALESCE((SELECT MAX(q.position) FROM questions q
+                WHERE q.questionnaire_id = questions.questionnaire_id), 0)
+                + ROW_NUMBER() OVER (PARTITION BY questionnaire_id ORDER BY id) AS new_position
+            FROM questions WHERE position IS NULL
+        )
+        UPDATE questions SET position = ordered.new_position FROM ordered WHERE questions.id = ordered.id
+        """,
+        "ALTER TABLE questions ALTER COLUMN position SET NOT NULL",
         """
         UPDATE questions SET questionnaire_id = scenarios.questionnaire_id
         FROM scenarios

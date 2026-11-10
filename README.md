@@ -71,6 +71,10 @@ Draft scenarios can be generated synchronously with
 `POST /api/questionnaires/{id}/scenarios` and retrieved through the scenario
 list and detail endpoints. Generation can take as long as the configured solver
 limits; only successful results are saved.
+Use **Questionnaires** in the application navigation to administer drafts and
+preview their saved questions and scenarios. The API saves question ordering via
+`PUT /api/questionnaires/{id}/questions/order`, with a `question_ids` array
+containing every question in the desired order.
 
 ```bash
 # Terminal 1: Backend API (port 8000)

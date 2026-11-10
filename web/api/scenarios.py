@@ -13,6 +13,7 @@ from src.pipeline.experiment_config import (
     EXPERIMENT_CONFIG_REGISTRY,
     get_all_configurations,
 )
+from src.visual.appearance import resolve_map_appearance
 from web.api.database import connect_database
 from web.api.questionnaires import NonEmptyText, get_questionnaire, require_draft
 
@@ -43,6 +44,22 @@ class ScenarioDetails(ScenarioSummary):
     data: dict[str, Any] = Field(
         description="Saved maps, endpoints, paths, costs, explanations, modifications, and solver status"
     )
+    appearance: dict[str, Any] | None = None
+
+
+def add_appearance(scenario):
+    grid = scenario["data"].get("map")
+    if (
+        isinstance(grid, dict)
+        and type(grid.get("h")) is int
+        and type(grid.get("w")) is int
+        and grid["h"] > 0
+        and grid["w"] > 0
+    ):
+        scenario["appearance"] = resolve_map_appearance(grid["h"], grid["w"])
+    else:
+        scenario["appearance"] = None
+    return scenario
 
 
 @router.post(
@@ -102,7 +119,7 @@ def create_scenario(questionnaire_id: int, payload: ScenarioInput):
         )
     with connect_database() as connection:
         require_draft(connection, questionnaire_id)
-        return connection.execute(
+        scenario = connection.execute(
             "INSERT INTO scenarios (questionnaire_id, title, configuration, data) "
             "VALUES (%s, %s, %s, %s) RETURNING id, questionnaire_id, title, configuration, data",
             (
@@ -112,6 +129,7 @@ def create_scenario(questionnaire_id: int, payload: ScenarioInput):
                 Jsonb(result["data"]),
             ),
         ).fetchone()
+        return add_appearance(scenario)
 
 
 @router.get("/{questionnaire_id}/scenarios", response_model=list[ScenarioSummary])
@@ -137,4 +155,4 @@ def read_scenario(questionnaire_id: int, scenario_id: int):
         ).fetchone()
         if scenario is None:
             raise HTTPException(status_code=404, detail="Scenario not found")
-        return scenario
+        return add_appearance(scenario)

@@ -1,0 +1,285 @@
+.qa-app {
+  min-height: 100vh;
+  background: var(--surface-page);
+  color: var(--text-strong);
+}
+.qa-header {
+  background: var(--surface-structure);
+  color: var(--text-inverse);
+  padding: 1.3rem clamp(1rem, 4vw, 3rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.qa-header h1 {
+  margin: 0.3rem 0 0;
+  font-size: clamp(1.25rem, 2vw, 1.8rem);
+  color: inherit;
+}
+.qa-header .qa-overline {
+  color: var(--bright-snow);
+  opacity: 0.75;
+}
+.qa-overline {
+  color: var(--text-structural);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+}
+.qa-layout {
+  display: grid;
+  grid-template-columns: minmax(14rem, 19rem) minmax(0, 1fr);
+  max-width: 100rem;
+  margin: auto;
+  min-height: calc(100vh - 5rem);
+}
+.qa-sidebar {
+  padding: 2rem 1.2rem;
+  background: var(--surface-subtle);
+  border-right: 1px solid var(--border-subtle);
+}
+.qa-side-heading,
+.qa-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.qa-side-heading h2,
+.qa-heading h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+.qa-sidebar nav {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.qa-app button {
+  border: 0;
+  background: var(--azure-blue);
+  color: var(--bright-snow);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.9rem;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+}
+.qa-app button:hover:not(:disabled) {
+  background: var(--state-primary-hover);
+}
+.qa-app button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.qa-app button:focus-visible,
+.qa-app input:focus-visible,
+.qa-app textarea:focus-visible,
+.qa-app select:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.qa-app .qa-ghost {
+  border: 1px solid var(--bright-snow);
+  background: transparent;
+  white-space: nowrap;
+}
+.qa-app .qa-secondary {
+  background: var(--surface-subtle);
+  color: var(--text-structural);
+}
+.qa-app .qa-secondary:hover:not(:disabled) {
+  color: var(--bright-snow);
+}
+.qa-app .qa-list-item {
+  text-align: left;
+  display: grid;
+  gap: 0.3rem;
+  background: transparent;
+  color: var(--text-strong);
+  border: 1px solid transparent;
+}
+.qa-list-item span {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.qa-app .qa-list-item.is-active {
+  background: var(--surface-raised);
+  border-color: var(--azure-blue);
+}
+.qa-app .qa-list-item:hover:not(:disabled) {
+  background: var(--surface-selected);
+  color: var(--text-strong);
+}
+.qa-content {
+  width: 100%;
+  max-width: 68rem;
+  padding: clamp(1rem, 3vw, 2.5rem);
+  display: grid;
+  gap: 1.2rem;
+  align-content: start;
+}
+.qa-panel {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: clamp(1rem, 2.5vw, 2rem);
+  box-shadow: var(--shadow-xs);
+}
+.qa-panel h2 {
+  margin-top: 0.35rem;
+}
+.qa-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.qa-muted {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+.qa-count {
+  color: var(--azure-blue);
+}
+.qa-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  justify-items: start;
+}
+.qa-form label,
+.qa-scenario-view label {
+  width: 100%;
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--text-structural);
+}
+.qa-app input,
+.qa-app textarea,
+.qa-app select {
+  width: 100%;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.75rem;
+  background: var(--bright-snow);
+  color: var(--text-strong);
+  font: inherit;
+}
+.qa-app textarea {
+  resize: vertical;
+}
+.qa-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.8rem;
+  width: 100%;
+}
+.qa-questions {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+.qa-questions li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.8rem;
+}
+.qa-questions li > div:first-child {
+  min-width: 0;
+}
+.qa-questions strong {
+  overflow-wrap: anywhere;
+}
+.qa-questions small {
+  display: block;
+  padding-left: 2.3rem;
+  color: var(--text-muted);
+}
+.qa-question-number {
+  display: inline-block;
+  width: 2.3rem;
+  color: var(--azure-blue);
+  font-weight: 700;
+}
+.qa-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.qa-actions button {
+  padding: 0.45rem 0.65rem;
+  font-size: 0.8rem;
+}
+.qa-question-form {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 1.2rem;
+}
+.qa-empty,
+.qa-notice {
+  background: var(--surface-info);
+  padding: 0.8rem;
+  border-radius: var(--radius-sm);
+}
+.qa-error {
+  background: var(--surface-danger);
+  color: var(--text-danger);
+  padding: 0.9rem;
+  border-radius: var(--radius-sm);
+}
+.qa-scenario-view {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+.qa-map {
+  width: 100%;
+  max-height: 35rem;
+  overflow: auto;
+  background: var(--surface-canvas);
+  border-radius: var(--radius-sm);
+}
+.qa-preview-question {
+  padding: 1.4rem 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.qa-preview-question h3 {
+  margin: 0.6rem 0;
+}
+@media (max-width: 760px) {
+  .qa-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .qa-layout {
+    grid-template-columns: 1fr;
+  }
+  .qa-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 1rem;
+  }
+  .qa-sidebar nav {
+    display: flex;
+    overflow-x: auto;
+  }
+  .qa-list-item {
+    min-width: 10rem;
+  }
+  .qa-questions li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .qa-heading {
+    flex-wrap: wrap;
+  }
+}

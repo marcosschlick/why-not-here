@@ -8,6 +8,7 @@ interface TopbarProps {
   activeReductionMethod?: string;
   isIncrementalActive?: boolean;
   onOpenAbout: () => void;
+  onOpenAdmin: () => void;
 }
 
 export function Topbar({
@@ -18,6 +19,7 @@ export function Topbar({
   activeReductionMethod,
   isIncrementalActive,
   onOpenAbout,
+  onOpenAdmin,
 }: TopbarProps) {
   const isStep1Done = hasMapData;
   const isStep2Done = hasResults;
@@ -99,6 +101,9 @@ export function Topbar({
           </button>
         </nav>
 
+        <button type="button" className="btn-about" onClick={onOpenAdmin}>
+          Questionnaires
+        </button>
         <button
           type="button"
           className="btn-about"

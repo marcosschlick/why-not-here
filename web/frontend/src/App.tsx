@@ -6,6 +6,7 @@ import { ResultsView } from "./components/ResultsView";
 import { RouteCanvas } from "./components/RouteCanvas";
 import { formatReductionMethod } from "./utils/formatters";
 import { Topbar } from "./components/Topbar";
+import { QuestionnaireAdmin } from "./components/QuestionnaireAdmin";
 import {
   fetchConfig,
   generateMap,
@@ -57,6 +58,7 @@ function arePathsEqual(
 }
 
 export function App() {
+  const [showAdmin, setShowAdmin] = useState(false);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<"individual" | "queue">(
     "individual",
@@ -673,6 +675,8 @@ export function App() {
     }
   }
 
+  if (showAdmin) return <QuestionnaireAdmin onBack={() => setShowAdmin(false)} />;
+
   return (
     <div className="app-layout">
       <Topbar
@@ -693,6 +697,7 @@ export function App() {
               config?.USE_INCREMENTAL_SOLVER
         }
         onOpenAbout={() => setIsAboutOpen(true)}
+        onOpenAdmin={() => setShowAdmin(true)}
       />
 
       <main className="main-content-wrapper">

@@ -19,6 +19,12 @@ class QuestionnaireInput(BaseModel):
     description: str | None = None
 
 
+class QuestionOrder(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question_ids: list[int]
+
+
 class EmptyConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -210,8 +216,8 @@ def read_questionnaire(questionnaire_id: int):
     with connect_database() as connection:
         questionnaire = get_questionnaire(connection, questionnaire_id)
         questionnaire["questions"] = connection.execute(
-            "SELECT id, prompt, type, configuration, scenario_id FROM questions "
-            "WHERE questionnaire_id = %s ORDER BY id",
+            "SELECT id, prompt, type, configuration, scenario_id, position FROM questions "
+            "WHERE questionnaire_id = %s ORDER BY position, id",
             (questionnaire_id,),
         ).fetchall()
         return questionnaire
@@ -234,16 +240,43 @@ def create_question(questionnaire_id: int, payload: QuestionInput):
         require_draft(connection, questionnaire_id)
         scenario_id = validate_scenario(connection, questionnaire_id, payload)
         return connection.execute(
-            "INSERT INTO questions (questionnaire_id, prompt, type, configuration, scenario_id) "
-            "VALUES (%s, %s, %s, %s, %s) RETURNING id, prompt, type, configuration, scenario_id",
+            "INSERT INTO questions (questionnaire_id, prompt, type, configuration, scenario_id, position) "
+            "VALUES (%s, %s, %s, %s, %s, "
+            "(SELECT COALESCE(MAX(position), 0) + 1 FROM questions WHERE questionnaire_id = %s)) "
+            "RETURNING id, prompt, type, configuration, scenario_id, position",
             (
                 questionnaire_id,
                 payload.prompt,
                 payload.type,
                 Jsonb(payload.configuration.model_dump(exclude_none=True)),
                 scenario_id,
+                questionnaire_id,
             ),
         ).fetchone()
+
+
+@router.put("/{questionnaire_id}/questions/order", status_code=204)
+def reorder_questions(questionnaire_id: int, payload: QuestionOrder):
+    with connect_database() as connection:
+        require_draft(connection, questionnaire_id)
+        rows = connection.execute(
+            "SELECT id FROM questions WHERE questionnaire_id = %s", (questionnaire_id,)
+        ).fetchall()
+        current = {row["id"] for row in rows}
+        if (
+            len(payload.question_ids) != len(current)
+            or set(payload.question_ids) != current
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Question order must contain every question exactly once",
+            )
+        for position, question_id in enumerate(payload.question_ids, start=1):
+            connection.execute(
+                "UPDATE questions SET position = %s WHERE id = %s AND questionnaire_id = %s",
+                (position, question_id, questionnaire_id),
+            )
+    return Response(status_code=204)
 
 
 @router.put("/{questionnaire_id}/questions/{question_id}")
@@ -261,7 +294,7 @@ def update_question(questionnaire_id: int, question_id: int, payload: QuestionIn
             "UPDATE questions SET prompt = %s, type = %s, configuration = %s, "
             "scenario_id = COALESCE(%s, scenario_id) "
             "WHERE id = %s AND questionnaire_id = %s "
-            "RETURNING id, prompt, type, configuration, scenario_id",
+            "RETURNING id, prompt, type, configuration, scenario_id, position",
             (
                 payload.prompt,
                 payload.type,
