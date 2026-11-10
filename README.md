@@ -64,6 +64,9 @@ and does not start if database initialization fails.
 
 Questionnaire draft and question endpoints, including their request formats,
 are available in the API documentation at `http://localhost:8000/docs`.
+Questions of type `route_choice` or `route_drawing` require a `scenario_id`
+belonging to the same questionnaire. Route choice uses the scenario's optimal
+and alternative paths; route drawing uses its map and endpoints.
 Draft scenarios can be generated synchronously with
 `POST /api/questionnaires/{id}/scenarios` and retrieved through the scenario
 list and detail endpoints. Generation can take as long as the configured solver
