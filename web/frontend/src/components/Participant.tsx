@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { RouteCanvas } from "./RouteCanvas";
-import { TacticalMapCanvas } from "./TacticalMapCanvas";
+import { ScenarioMapView } from "./ScenarioMapView";
 import type { MapAppearance, MapData } from "../types";
 import { validateDrawingRoute } from "../utils/validateRoute";
 import "./questionnaire-admin.css";
@@ -66,15 +66,7 @@ function RouteOption({
   path: Point[];
 }) {
   const map = useMemo(() => toMap(scenario), [scenario]);
-  return (
-    <div className="qa-map canvas-wrapper">
-      <TacticalMapCanvas
-        mapData={map}
-        userPath={path}
-        cellSize={Math.max(1, Math.min(12, 560 / Math.max(map.h, map.w)))}
-      />
-    </div>
-  );
+  return <ScenarioMapView mapData={map} userPath={path} alternativePathLabel="Route" />;
 }
 
 function DrawingAnswer({
@@ -640,8 +632,8 @@ export function Participant({
                     )}
                     {q.type === "route_choice" &&
                       q.scenario?.routes?.map((path, i) => (
-                        <label className="qa-route-option" key={i}>
-                          <span>
+                        <div className="qa-route-option" key={i}>
+                          <label>
                             <input
                               type="radio"
                               name={`q-${q.id}`}
@@ -651,9 +643,9 @@ export function Participant({
                               required
                             />{" "}
                             Route {i === 0 ? "A" : "B"}
-                          </span>
+                          </label>
                           <RouteOption scenario={q.scenario!} path={path} />
-                        </label>
+                        </div>
                       ))}
                     {q.type === "route_choice" && (
                       <>

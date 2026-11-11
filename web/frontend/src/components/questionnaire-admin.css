@@ -324,12 +324,26 @@
   display: grid;
   gap: 1rem;
 }
-.qa-map {
-  width: 100%;
-  max-height: 35rem;
-  overflow: auto;
-  background: var(--surface-canvas);
-  border-radius: var(--radius-sm);
+.scenario-map-view {
+  min-width: 0;
+}
+.scenario-map-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}
+.qa-app .scenario-map-view .btn-zoom {
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.4rem;
+  color: var(--text-structural);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  font-size: 0.74rem;
+}
+.qa-app .scenario-map-view .btn-zoom:hover:not(:disabled) {
+  background: var(--surface-selected);
 }
 .qa-preview-question {
   padding: 1.4rem 0;

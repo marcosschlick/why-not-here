@@ -73,7 +73,7 @@ The results screen saves successful calculations through
 `POST /api/questionnaires/{id}/scenarios`; scenario list and detail endpoints
 return the saved map, routes and results.
 Use **Questionnaires** in the application navigation to administer drafts and
-preview their saved questions and scenarios for either group without saving answers. The scenario view shows the requested and effective seeds. The API saves question ordering via
+preview their saved questions and scenarios for either group without saving answers. The API saves question ordering via
 `PUT /api/questionnaires/{id}/questions/order`, with a `question_ids` array
 containing every question in the desired order.
 Activate a draft in the administration screen to lock it and obtain a

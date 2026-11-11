@@ -3,9 +3,9 @@ import type { FormEvent } from "react";
 import { ConfirmModal } from "./ConfirmModal";
 import { Participant } from "./Participant";
 import type { ParticipantQuestionnaire } from "./Participant";
-import { TacticalMapCanvas } from "./TacticalMapCanvas";
+import { ScenarioMapView } from "./ScenarioMapView";
 import { Topbar } from "./Topbar";
-import type { MapAppearance, MapData } from "../types";
+import type { MapAppearance, MapData, SemanticModificationsData } from "../types";
 import "./questionnaire-admin.css";
 
 type Point = [number, number];
@@ -37,9 +37,10 @@ type Scenario = {
   title: string;
   configuration: Record<string, unknown>;
   appearance: MapAppearance | null;
+  terrain_colors: Record<string, string>;
   data: {
-    map?: Partial<MapData> & { base_seed?: number; effective_seed?: number };
-    requested_seed?: number | string | null;
+    map?: Partial<MapData>;
+    modifications?: SemanticModificationsData | null;
     cost_baseline_text?: string;
     explanation_text?: string;
     start?: Point;
@@ -114,10 +115,8 @@ async function api<T>(
 
 function ScenarioMap({
   scenario,
-  showRoutes = true,
 }: {
   scenario: Scenario;
-  showRoutes?: boolean;
 }) {
   const { map, start, goal, optimal_path, alternative_path } = scenario.data;
   if (
@@ -138,24 +137,19 @@ function ScenarioMap({
     start,
     goal,
     appearance: scenario.appearance,
-    terrain_colors: scenario.configuration.TERRAIN_COLORS || {},
+    terrain_colors: scenario.terrain_colors,
     optimal_path: optimal_path || [],
     auto_path: alternative_path || [],
     config: scenario.configuration,
     map_image_url: "",
   } as unknown as MapData;
   return (
-    <div
-      className="qa-map canvas-wrapper"
-      aria-label={`Map for ${scenario.title}`}
-    >
-      <TacticalMapCanvas
-        mapData={mapData}
-        optimalPath={showRoutes ? optimal_path : []}
-        userPath={showRoutes ? alternative_path : []}
-        cellSize={Math.max(1, Math.min(12, 560 / Math.max(map.h, map.w)))}
-      />
-    </div>
+    <ScenarioMapView
+      mapData={mapData}
+      optimalPath={optimal_path}
+      userPath={alternative_path}
+      modifications={scenario.data.modifications}
+    />
   );
 }
 
@@ -186,8 +180,7 @@ function buildPreview(
               start: data.start,
               goal: data.goal,
               appearance: saved.appearance,
-              terrain_colors: (saved.configuration.TERRAIN_COLORS ||
-                {}) as Record<string, string>,
+              terrain_colors: saved.terrain_colors,
               routes:
                 data.optimal_path && data.alternative_path
                   ? [data.optimal_path, data.alternative_path]
@@ -915,31 +908,7 @@ export function QuestionnaireAdmin({
                       </select>
                     </label>
                     {currentScenario && (
-                      <>
-                        <p className="qa-muted">
-                          Requested seed:{" "}
-                          {currentScenario.data.requested_seed === null
-                            ? "Automatic"
-                            : String(
-                                currentScenario.data.requested_seed ??
-                                  currentScenario.data.map?.base_seed ??
-                                  currentScenario.configuration
-                                    .MAP_DEFAULT_SEED ??
-                                  "Unavailable",
-                              )}{" "}
-                          · Generation seed:{" "}
-                          {String(
-                            currentScenario.data.map?.base_seed ??
-                              "Unavailable",
-                          )}{" "}
-                          · Effective seed:{" "}
-                          {String(
-                            currentScenario.data.map?.effective_seed ??
-                              "Unavailable",
-                          )}
-                        </p>
-                        <ScenarioMap scenario={currentScenario} />
-                      </>
+                      <ScenarioMap key={currentScenario.id} scenario={currentScenario} />
                     )}
                   </div>
                 )}

@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, status
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
+from src import config
 from src.visual.appearance import resolve_map_appearance
 from web.api.database import connect_database
 from web.api.questionnaires import (
@@ -41,6 +42,10 @@ class RouteConfirmationInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     submission_key: UUID
     choice: int = Field(strict=True, ge=0, le=1)
+
+
+def resolve_scenario_terrain_colors(configuration):
+    return configuration.get("TERRAIN_COLORS") or config.TERRAIN_COLORS
 
 
 def read_questions(connection, questionnaire_id):
@@ -199,8 +204,8 @@ def public_question(
             "map": grid,
             "start": data["start"],
             "goal": data["goal"],
-            "terrain_colors": question["scenario_configuration"].get(
-                "TERRAIN_COLORS", {}
+            "terrain_colors": resolve_scenario_terrain_colors(
+                question["scenario_configuration"]
             ),
             "appearance": resolve_map_appearance(grid["h"], grid["w"]),
         }

@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.grid import Grid
 from src.visual.appearance import resolve_map_appearance
 from web.api.database import connect_database
-from web.api.participation import validate_route
+from web.api.participation import resolve_scenario_terrain_colors, validate_route
 from web.api.questionnaires import (
     NonEmptyText,
     get_questionnaire,
@@ -40,9 +40,11 @@ class ScenarioDetails(ScenarioSummary):
         description="Saved maps, endpoints, paths, costs, explanations, modifications, and solver status"
     )
     appearance: dict[str, Any] | None = None
+    terrain_colors: dict[str, str]
 
 
 def add_appearance(scenario):
+    scenario["terrain_colors"] = resolve_scenario_terrain_colors(scenario["configuration"])
     grid = scenario["data"].get("map")
     if (
         isinstance(grid, dict)

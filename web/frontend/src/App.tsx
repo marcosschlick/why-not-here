@@ -198,7 +198,10 @@ export function App() {
     setSavingScenario(true);
     setErrorMessage(null);
     try {
-      const configuration: Record<string, unknown> = { ...mapData.config };
+      const configuration: Record<string, unknown> = {
+        ...mapData.config,
+        TERRAIN_COLORS: mapData.terrain_colors,
+      };
       delete configuration.OUTPUT_DIR;
       const response = await fetch(
         `/api/questionnaires/${scenarioQuestionnaire}/scenarios`,

@@ -956,11 +956,13 @@ export function TacticalMapLegend({
   modifications,
   showOptimalPath,
   showAlternativePath = true,
+  alternativePathLabel = "p′ · Alternative",
 }: {
   mapData: MapData;
   modifications?: SemanticModificationsData | null;
   showOptimalPath?: boolean;
   showAlternativePath?: boolean;
+  alternativePathLabel?: string;
 }) {
   const terrainCount =
     modifications?.terrain ?? modifications?.terrain_nodes?.length ?? 0;
@@ -993,7 +995,7 @@ export function TacticalMapLegend({
           {showAlternativePath && (
             <span className="legend-item">
               <span className="legend-color legend-route" />
-              p′ · Alternative
+              {alternativePathLabel}
             </span>
           )}
           {showOptimalPath && showAlternativePath && (
