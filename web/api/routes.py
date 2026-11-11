@@ -220,6 +220,7 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
             **_grid_layers(grid),
             "config": get_experiment_configurations(),
             "generation": _generation_metadata(grid),
+            "grid": grid.to_dict(),
             "user_path": [list(pt) for pt in p_user],
         }
         return sanitize_floats(response_data)
@@ -291,6 +292,7 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
             **_grid_layers(grid),
             "config": get_experiment_configurations(),
             "generation": _generation_metadata(grid),
+            "grid": grid.to_dict(),
         }
         return sanitize_floats(response_data)
     except (TypeError, ValueError) as exc:
@@ -337,6 +339,9 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
         runner.state["status"] = "solving"
 
     try:
+        if payload.map is not None:
+            grid = Grid.from_dict(payload.map)
+            grid.save(get_project_path(config.OUTPUT_DIR) / "map" / "map.json")
         result = run_isp(verbose=False, user_path=p_user, start=start, goal=goal)
         if not result:
             raise HTTPException(
@@ -384,6 +389,15 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
 
         last_result = {
             "success": result.success,
+            "original_optimal_path": result.original_optimal_path,
+            "original_alternative_cost": (
+                ISPValidator.compute_path_cost(
+                    Grid.load(get_project_path(config.OUTPUT_DIR) / "map" / "map.json"),
+                    p_user,
+                )
+                if p_user
+                else None
+            ),
             "solver_status": result.solver_status,
             "runtime_sec": runtime,
             "iterations": result.iterations,

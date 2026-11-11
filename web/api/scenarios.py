@@ -1,35 +1,29 @@
-import json
-import secrets
-import subprocess
-import sys
-import tempfile
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.pipeline.experiment_config import (
-    EXPERIMENT_CONFIG_REGISTRY,
-    get_all_configurations,
-)
+from src.grid import Grid
 from src.visual.appearance import resolve_map_appearance
 from web.api.database import connect_database
-from web.api.questionnaires import NonEmptyText, get_questionnaire, require_draft
+from web.api.participation import validate_route
+from web.api.questionnaires import (
+    NonEmptyText,
+    get_questionnaire,
+    require_draft,
+    valid_drawing_scenario,
+)
 
 router = APIRouter(prefix="/api/questionnaires", tags=["scenarios"])
-ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
 class ScenarioInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: NonEmptyText
-    config: dict[str, Any] = Field(default_factory=dict)
-    start: tuple[int, int] | None = None
-    goal: tuple[int, int] | None = None
-    alternative_path: list[tuple[int, int]] | None = Field(default=None, min_length=1)
+    configuration: dict[str, Any]
+    data: dict[str, Any]
 
 
 class ScenarioSummary(BaseModel):
@@ -69,61 +63,27 @@ def add_appearance(scenario):
     response_model=ScenarioDetails,
 )
 def create_scenario(questionnaire_id: int, payload: ScenarioInput):
-    with connect_database() as connection:
-        require_draft(connection, questionnaire_id)
-    if "OUTPUT_DIR" in payload.config:
+    data = payload.data
+    try:
+        Grid.from_dict(data["map"])
+        valid = (
+            valid_drawing_scenario(data)
+            and all(
+                validate_route(data[key], data)
+                for key in ("optimal_path", "alternative_path")
+            )
+            and data.get("success") is True
+            and all(
+                isinstance(data.get(key), str) and data[key].strip()
+                for key in ("solver_status", "explanation_text", "cost_baseline_text")
+            )
+        )
+    except (KeyError, TypeError, ValueError, IndexError):
+        valid = False
+    if not valid:
         raise HTTPException(
-            status_code=422, detail="OUTPUT_DIR cannot be set for scenario generation"
+            status_code=422, detail="Scenario data is invalid or incomplete"
         )
-    current = get_all_configurations()
-    configuration = {
-        key: current[key] for key in EXPERIMENT_CONFIG_REGISTRY if key in current
-    }
-    overrides = dict(payload.config)
-    seed = overrides.get("MAP_DEFAULT_SEED")
-    automatic_seed = seed is None or (isinstance(seed, str) and not seed.strip())
-    if automatic_seed:
-        overrides["MAP_DEFAULT_SEED"] = secrets.randbits(32)
-    request = {
-        "configuration": configuration,
-        "overrides": overrides,
-        "start": payload.start,
-        "goal": payload.goal,
-        "alternative_path": payload.alternative_path,
-    }
-    with tempfile.TemporaryDirectory(prefix="tcc-scenario-") as directory:
-        request_path = Path(directory) / "request.json"
-        result_path = Path(directory) / "result.json"
-        request_path.write_text(json.dumps(request), encoding="utf-8")
-        process = subprocess.run(
-            [
-                sys.executable,
-                "-B",
-                "-m",
-                "web.api.scenario_worker",
-                str(request_path),
-                str(result_path),
-            ],
-            cwd=ROOT_DIR,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
-        if process.returncode != 0 or not result_path.exists():
-            raise HTTPException(status_code=500, detail="Scenario generation failed")
-        result = json.loads(result_path.read_text(encoding="utf-8"))
-    if "error" in result:
-        status_code = (
-            422
-            if result["status"] in {"INVALID_INPUT", "INVALID_ALTERNATIVE_PATH"}
-            else 409
-        )
-        raise HTTPException(
-            status_code=status_code,
-            detail={"status": result["status"], "message": result["error"]},
-        )
-    result["data"]["requested_seed"] = None if automatic_seed else seed
     with connect_database() as connection:
         require_draft(connection, questionnaire_id)
         scenario = connection.execute(
@@ -132,8 +92,8 @@ def create_scenario(questionnaire_id: int, payload: ScenarioInput):
             (
                 questionnaire_id,
                 payload.title,
-                Jsonb(result["configuration"]),
-                Jsonb(result["data"]),
+                Jsonb(payload.configuration),
+                Jsonb(data),
             ),
         ).fetchone()
         return add_appearance(scenario)

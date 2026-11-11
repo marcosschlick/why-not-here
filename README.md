@@ -68,12 +68,12 @@ are available in the API documentation at `http://localhost:8000/docs`.
 Questions of type `route_choice` or `route_drawing` require a `scenario_id`
 belonging to the same questionnaire. Route choice uses the scenario's optimal
 and alternative paths; route drawing uses its map and endpoints.
-Draft scenarios can be generated synchronously with
-`POST /api/questionnaires/{id}/scenarios` and retrieved through the scenario
-list and detail endpoints. Generation can take as long as the configured solver
-limits; only successful results are saved.
+Create draft scenarios using the simulation configuration, route and results screens.
+The results screen saves successful calculations through
+`POST /api/questionnaires/{id}/scenarios`; scenario list and detail endpoints
+return the saved map, routes and results.
 Use **Questionnaires** in the application navigation to administer drafts and
-preview their saved questions and scenarios for either group without saving answers. The scenario view shows the requested and effective seeds; leaving the seed blank generates a new one. The API saves question ordering via
+preview their saved questions and scenarios for either group without saving answers. The scenario view shows the requested and effective seeds. The API saves question ordering via
 `PUT /api/questionnaires/{id}/questions/order`, with a `question_ids` array
 containing every question in the desired order.
 Activate a draft in the administration screen to lock it and obtain a

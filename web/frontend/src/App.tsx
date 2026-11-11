@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { AboutModal } from "./components/AboutModal";
 import { ConfigForm } from "./components/ConfigForm";
 import { QueuePanel } from "./components/QueuePanel";
@@ -59,6 +60,26 @@ function arePathsEqual(
 
 export function App() {
   const [showAdmin, setShowAdmin] = useState(false);
+  const [scenarioQuestionnaire, setScenarioQuestionnaire] = useState<
+    number | null
+  >(null);
+  const [adminQuestionnaire, setAdminQuestionnaire] = useState<number | null>(
+    null,
+  );
+  const [adminScenario, setAdminScenario] = useState<number | null>(null);
+  const [scenarioTitle, setScenarioTitle] = useState("");
+  const [savingScenario, setSavingScenario] = useState(false);
+  const [scenarioConfigDirty, setScenarioConfigDirty] = useState(false);
+  const [simulationSnapshot, setSimulationSnapshot] = useState<{
+    map: MapData | null;
+    path: [number, number][];
+    result: LastResult | null;
+    step: "config" | "route_canvas" | "results";
+    artifacts: string[];
+    workflow: "run" | "create";
+    mode: "individual" | "queue";
+    batch: boolean;
+  } | null>(null);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<"individual" | "queue">(
     "individual",
@@ -109,6 +130,117 @@ export function App() {
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
 
   useEffect(() => {
+    if (scenarioQuestionnaire === null) return;
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [scenarioQuestionnaire]);
+
+  function startScenario(id: number) {
+    setSimulationSnapshot({
+      map: mapData,
+      path: userPath,
+      result: lastResult,
+      step: currentStep,
+      artifacts,
+      workflow: workflowMode,
+      mode: activeTabMode,
+      batch: isBatchMode,
+    });
+    setScenarioQuestionnaire(id);
+    setAdminQuestionnaire(id);
+    setAdminScenario(null);
+    setScenarioTitle("");
+    setScenarioConfigDirty(false);
+    setMapData(null);
+    setUserPath([]);
+    setLastResult(null);
+    setArtifacts([]);
+    setWorkflowMode("run");
+    setActiveTabMode("individual");
+    setIsBatchMode(false);
+    setCurrentStep("config");
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setShowAdmin(false);
+  }
+
+  function returnToAdmin(scenarioId: number | null = null) {
+    if (simulationSnapshot) {
+      setMapData(simulationSnapshot.map);
+      setUserPath(simulationSnapshot.path);
+      setLastResult(simulationSnapshot.result);
+      setCurrentStep(simulationSnapshot.step);
+      setArtifacts(simulationSnapshot.artifacts);
+      setWorkflowMode(simulationSnapshot.workflow);
+      setActiveTabMode(simulationSnapshot.mode);
+      setIsBatchMode(simulationSnapshot.batch);
+    }
+    setAdminScenario(scenarioId);
+    setScenarioQuestionnaire(null);
+    setSimulationSnapshot(null);
+    setErrorMessage(null);
+    setShowAdmin(true);
+  }
+
+  async function saveScenario(event: FormEvent) {
+    event.preventDefault();
+    if (
+      !scenarioQuestionnaire ||
+      !mapData ||
+      !lastResult?.success ||
+      !scenarioTitle.trim()
+    )
+      return;
+    setSavingScenario(true);
+    setErrorMessage(null);
+    try {
+      const configuration: Record<string, unknown> = { ...mapData.config };
+      delete configuration.OUTPUT_DIR;
+      const response = await fetch(
+        `/api/questionnaires/${scenarioQuestionnaire}/scenarios`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: scenarioTitle.trim(),
+            configuration,
+            data: {
+              ...lastResult,
+              map: mapData.grid,
+              modified_map: lastResult.modified_grid ?? null,
+              start: mapData.start,
+              goal: mapData.goal,
+              optimal_path: lastResult.original_optimal_path,
+              alternative_path: userPath,
+              requested_seed: mapData.config.MAP_DEFAULT_SEED ?? null,
+            },
+          }),
+        },
+      );
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(
+          typeof error?.detail === "string"
+            ? error.detail
+            : "Failed to save scenario.",
+        );
+      }
+      const saved = await response.json();
+      returnToAdmin(saved.id);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to save scenario.",
+      );
+    } finally {
+      setSavingScenario(false);
+    }
+  }
+
+  useEffect(() => {
     if (!isSolvingISP && !isGeneratingMap) return;
     const timer = window.setInterval(() => {
       setElapsedTime((prev) => prev + 1);
@@ -153,6 +285,8 @@ export function App() {
           targetConfig,
           workflowMode === "run",
         );
+        setLastResult(null);
+        setScenarioConfigDirty(false);
         setMapData(generated);
         setUserPath(generated.auto_path || [generated.start]);
         setCurrentStep("route_canvas");
@@ -184,6 +318,7 @@ export function App() {
       );
       try {
         const imported = await importConfig(parsedJson, workflowMode === "run");
+        setLastResult(null);
         setMapData(imported);
         setUserPath(imported.user_path);
         setConfig(imported.config);
@@ -258,21 +393,31 @@ export function App() {
     setErrorMessage(null);
 
     try {
-      await importConfig(
-        {
-          ...mapData.config,
-          start: mapData.start,
-          goal: mapData.goal,
-          p_user: userPath,
-        },
-        true,
-      );
+      if (scenarioQuestionnaire === null)
+        await importConfig(
+          {
+            ...mapData.config,
+            start: mapData.start,
+            goal: mapData.goal,
+            p_user: userPath,
+          },
+          true,
+        );
       const response = await solveISP(
         userPath,
         mapData.config,
         mapData.start,
         mapData.goal,
+        scenarioQuestionnaire !== null ? mapData.grid : undefined,
       );
+      if (
+        scenarioQuestionnaire !== null &&
+        response.result.original_optimal_path
+      )
+        setMapData({
+          ...mapData,
+          optimal_path: response.result.original_optimal_path,
+        });
       setLastResult(response.result);
       setArtifacts(response.artifacts);
       setCacheKey(Date.now());
@@ -284,7 +429,7 @@ export function App() {
     } finally {
       setIsSolvingISP(false);
     }
-  }, [mapData, userPath]);
+  }, [mapData, userPath, scenarioQuestionnaire]);
 
   function handleAddToQueue(
     newConfig: SystemConfig,
@@ -679,10 +824,20 @@ export function App() {
     return (
       <>
         <QuestionnaireAdmin
-          onBack={() => setShowAdmin(false)}
+          initialQuestionnaireId={adminQuestionnaire}
+          initialScenarioId={adminScenario}
+          onCreateScenario={startScenario}
+          onBack={() => {
+            setAdminQuestionnaire(null);
+            setAdminScenario(null);
+            setShowAdmin(false);
+          }}
           onOpenAbout={() => setIsAboutOpen(true)}
         />
-        <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
+        <AboutModal
+          isOpen={isAboutOpen}
+          onClose={() => setIsAboutOpen(false)}
+        />
       </>
     );
   }
@@ -691,7 +846,19 @@ export function App() {
     <div className="app-layout">
       <Topbar
         currentStep={currentStep}
-        onSelectStep={setCurrentStep}
+        onSelectStep={(step) => {
+          if (
+            scenarioQuestionnaire !== null &&
+            currentStep === "config" &&
+            step !== "config" &&
+            scenarioConfigDirty
+          ) {
+            if (!window.confirm("Discard changes to the configuration?"))
+              return;
+            setScenarioConfigDirty(false);
+          }
+          setCurrentStep(step);
+        }}
         hasMapData={Boolean(mapData)}
         hasResults={Boolean(lastResult || (isBatchMode && queue.length > 0))}
         activeReductionMethod={
@@ -707,10 +874,25 @@ export function App() {
               config?.USE_INCREMENTAL_SOLVER
         }
         onOpenAbout={() => setIsAboutOpen(true)}
-        onOpenAdmin={() => setShowAdmin(true)}
+        onOpenAdmin={() => {
+          if (scenarioQuestionnaire !== null) {
+            if (
+              !window.confirm(
+                "Discard the unfinished scenario and return to questionnaires?",
+              )
+            )
+              return;
+            returnToAdmin();
+          } else setShowAdmin(true);
+        }}
       />
 
       <main className="main-content-wrapper">
+        {scenarioQuestionnaire !== null && (
+          <div className="queue-banner" role="status">
+            Creating a scenario for questionnaire #{scenarioQuestionnaire}
+          </div>
+        )}
         {errorMessage && (
           <div className="alert-banner">
             <span className="alert-icon">&times;</span>
@@ -741,8 +923,25 @@ export function App() {
         {currentStep === "config" && (
           <div key="step-config" className="step-container config-step">
             <ConfigForm
+              scenarioMode={scenarioQuestionnaire !== null}
+              onConfigChange={
+                scenarioQuestionnaire !== null
+                  ? () => setScenarioConfigDirty(true)
+                  : undefined
+              }
+              onBeforeGenerate={() =>
+                scenarioQuestionnaire === null ||
+                !mapData ||
+                window.confirm(
+                  "Discard the current scenario and generate a new map?",
+                )
+              }
               key={config ? "server-config" : "fallback-config"}
-              initialConfig={config}
+              initialConfig={
+                scenarioQuestionnaire !== null
+                  ? mapData?.config || config
+                  : config
+              }
               onGenerateMap={handleGenerateMap}
               onAddToQueue={handleAddToQueue}
               onImportConfig={handleImportConfig}
@@ -788,7 +987,14 @@ export function App() {
             <RouteCanvas
               mapData={mapData}
               userPath={userPath}
-              onPathChange={setUserPath}
+              onPathChange={(path) => {
+                if (
+                  scenarioQuestionnaire !== null &&
+                  !arePathsEqual(path, userPath)
+                )
+                  setLastResult(null);
+                setUserPath(path);
+              }}
               onSolve={
                 workflowMode === "create"
                   ? isBatchMode
@@ -1054,6 +1260,19 @@ export function App() {
                   : mapData?.map_image_url
               }
               onNewRun={() => {
+                if (
+                  scenarioQuestionnaire !== null &&
+                  !window.confirm(
+                    "Discard the current scenario and start again?",
+                  )
+                )
+                  return;
+                if (scenarioQuestionnaire !== null) {
+                  setMapData(null);
+                  setUserPath([]);
+                  setLastResult(null);
+                  setScenarioTitle("");
+                }
                 setIsBatchMode(false);
                 setCurrentStep("config");
               }}
@@ -1069,22 +1288,46 @@ export function App() {
               elapsedTime={elapsedTime}
             />
 
-            {queue.length > 0 && !isBatchMode && (
-              <div className="queue-results-summary">
-                <QueuePanel
-                  queue={queue}
-                  workflowMode={workflowMode}
-                  currentIndex={batchReviewIndex}
-                  isProcessing={isSolvingISP}
-                  interactiveMode={interactiveQueueMode}
-                  onToggleInteractiveMode={setInteractiveQueueMode}
-                  onRemoveItem={handleRemoveQueueItem}
-                  onClearQueue={handleClearQueue}
-                  onStartQueue={handleStartBatchReview}
-                  onSelectItem={handleSelectQueueItem}
-                />
-              </div>
+            {scenarioQuestionnaire !== null && lastResult?.success && (
+              <form className="qa-panel qa-form" onSubmit={saveScenario}>
+                <label>
+                  Scenario name
+                  <input
+                    required
+                    value={scenarioTitle}
+                    onChange={(event) => setScenarioTitle(event.target.value)}
+                    disabled={savingScenario}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={savingScenario || !scenarioTitle.trim()}
+                >
+                  {savingScenario
+                    ? "Saving scenario..."
+                    : "Save scenario to questionnaire"}
+                </button>
+              </form>
             )}
+
+            {scenarioQuestionnaire === null &&
+              queue.length > 0 &&
+              !isBatchMode && (
+                <div className="queue-results-summary">
+                  <QueuePanel
+                    queue={queue}
+                    workflowMode={workflowMode}
+                    currentIndex={batchReviewIndex}
+                    isProcessing={isSolvingISP}
+                    interactiveMode={interactiveQueueMode}
+                    onToggleInteractiveMode={setInteractiveQueueMode}
+                    onRemoveItem={handleRemoveQueueItem}
+                    onClearQueue={handleClearQueue}
+                    onStartQueue={handleStartBatchReview}
+                    onSelectItem={handleSelectQueueItem}
+                  />
+                </div>
+              )}
           </div>
         )}
       </main>

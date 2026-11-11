@@ -82,6 +82,7 @@ export interface GridLayersData {
 }
 
 export interface MapData extends GridLayersData {
+  grid: Record<string, unknown>;
   h: number;
   w: number;
   connectivity: number;
@@ -117,6 +118,8 @@ export interface SemanticModificationsData {
 
 export interface LastResult {
   success: boolean;
+  original_optimal_path?: [number, number][];
+  original_alternative_cost?: number | null;
   solver_status: string;
   runtime_sec: number;
   iterations: number;

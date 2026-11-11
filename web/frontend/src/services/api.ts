@@ -64,6 +64,7 @@ export async function solveISP(
   config?: Partial<SystemConfig>,
   start?: [number, number],
   goal?: [number, number],
+  map?: Record<string, unknown>,
 ): Promise<SolveResponse> {
   const response = await fetch("/api/isp/solve", {
     method: "POST",
@@ -72,6 +73,7 @@ export async function solveISP(
     },
     body: JSON.stringify({
       user_path: userPath,
+      map,
       config: config || null,
       start,
       goal,

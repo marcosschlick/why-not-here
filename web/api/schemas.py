@@ -39,6 +39,7 @@ class SolveISPRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     user_path: list[tuple[int, int]] | None = None
+    map: dict[str, Any] | None = None
     config: dict[str, Any] | None = None
     start: tuple[int, int] | None = None
     goal: tuple[int, int] | None = None

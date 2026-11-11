@@ -213,7 +213,13 @@ function buildPreview(
 export function QuestionnaireAdmin({
   onBack,
   onOpenAbout,
+  onCreateScenario,
+  initialQuestionnaireId,
+  initialScenarioId,
 }: {
+  onCreateScenario: (id: number) => void;
+  initialQuestionnaireId: number | null;
+  initialScenarioId: number | null;
   onBack: () => void;
   onOpenAbout: () => void;
 }) {
@@ -233,27 +239,15 @@ export function QuestionnaireAdmin({
   const [busy, setBusy] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [error, setError] = useState("");
-  const [scenarioTitle, setScenarioTitle] = useState("");
-  const [height, setHeight] = useState("16");
-  const [width, setWidth] = useState("16");
-  const [seed, setSeed] = useState("");
-  const [reduction, setReduction] = useState("PATH_ONLY");
-  const [timeout, setTimeoutValue] = useState("60");
   const [exportKey, setExportKey] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [scenarioBaseline, setScenarioBaseline] = useState(
-    JSON.stringify(["", "16", "16", "", "PATH_ONLY", "60"]),
-  );
   const [activity, setActivity] = useState("");
   const errorRef = useRef<HTMLDivElement>(null);
   const detailsDirty =
     title !== (selected?.title ?? "") ||
     description !== (selected?.description ?? "");
   const questionDirty = JSON.stringify(form) !== JSON.stringify(initialForm);
-  const scenarioDirty =
-    JSON.stringify([scenarioTitle, height, width, seed, reduction, timeout]) !==
-    scenarioBaseline;
-  const hasUnsavedChanges = detailsDirty || questionDirty || scenarioDirty;
+  const hasUnsavedChanges = detailsDirty || questionDirty;
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -270,17 +264,6 @@ export function QuestionnaireAdmin({
 
   function confirmDiscard(dirty = hasUnsavedChanges) {
     return !dirty || window.confirm("Discard unsaved changes?");
-  }
-  function resetScenario() {
-    setScenarioTitle("");
-    setHeight("16");
-    setWidth("16");
-    setSeed("");
-    setReduction("PATH_ONLY");
-    setTimeoutValue("60");
-    setScenarioBaseline(
-      JSON.stringify(["", "16", "16", "", "PATH_ONLY", "60"]),
-    );
   }
   function resetQuestion() {
     setEditing(null);
@@ -322,6 +305,15 @@ export function QuestionnaireAdmin({
       .then(setList)
       .catch((reason: Error) => setError(reason.message));
   }, []);
+  useEffect(() => {
+    if (initialQuestionnaireId === null) return;
+    Promise.resolve()
+      .then(() => loadQuestionnaire(initialQuestionnaireId, true))
+      .then(() => {
+        if (initialScenarioId !== null) setSelectedScenario(initialScenarioId);
+      })
+      .catch((reason: Error) => setError(reason.message));
+  }, [initialQuestionnaireId, initialScenarioId, loadQuestionnaire]);
   async function perform(action: () => Promise<void>, message = "Working…") {
     setActivity(message);
     setBusy(true);
@@ -344,7 +336,6 @@ export function QuestionnaireAdmin({
       setExportKey("");
       setConfirmDelete(false);
       resetQuestion();
-      resetScenario();
       setPreview(false);
     }).finally(() => setSelecting(false));
   }
@@ -358,7 +349,6 @@ export function QuestionnaireAdmin({
     setDescription("");
     setScenarios([]);
     resetQuestion();
-    resetScenario();
     setPreview(false);
     setError("");
   }
@@ -483,30 +473,6 @@ export function QuestionnaireAdmin({
       await loadQuestionnaire(selected.id);
     });
   }
-  function generateScenario(event: FormEvent) {
-    event.preventDefault();
-    if (!selected) return;
-    void perform(async () => {
-      const config = {
-        MAP_H: Number(height),
-        MAP_W: Number(width),
-        ...(seed === "" ? {} : { MAP_DEFAULT_SEED: Number(seed) }),
-        DEFAULT_REDUCTION_METHOD: reduction,
-        SOLVER_TIMEOUT_SEC: Number(timeout),
-      };
-      const item = await api<Scenario>(
-        `/questionnaires/${selected.id}/scenarios`,
-        "POST",
-        { title: scenarioTitle, config },
-      );
-      await loadQuestionnaire(selected.id);
-      setSelectedScenario(item.id);
-      setScenarioTitle("");
-      setScenarioBaseline(
-        JSON.stringify(["", height, width, seed, reduction, timeout]),
-      );
-    }, "Generating scenario… This may take several minutes.");
-  }
   const currentScenario = scenarios.find(
     (item) => item.id === selectedScenario,
   );
@@ -575,7 +541,7 @@ export function QuestionnaireAdmin({
               {error}
             </div>
           )}
-          {busy && !selecting && !activity.startsWith("Generating scenario") && (
+          {busy && !selecting && (
             <p role="status" className="qa-notice">
               {activity}
             </p>
@@ -620,7 +586,6 @@ export function QuestionnaireAdmin({
                   setTitle(selected.title);
                   setDescription(selected.description || "");
                   resetQuestion();
-                  resetScenario();
                   void perform(async () => {
                     await api(
                       `/questionnaires/${selected.id}/activate`,
@@ -927,90 +892,11 @@ export function QuestionnaireAdmin({
                     </p>
                   </div>
                 </div>
-                <form className="qa-form" onSubmit={generateScenario}>
-                  <label>
-                    Scenario name
-                    <input
-                      required
-                      value={scenarioTitle}
-                      onChange={(e) => setScenarioTitle(e.target.value)}
-                      disabled={panelBusy || !editable}
-                    />
-                  </label>
-                  <div className="qa-fields">
-                    <label>
-                      Height
-                      <input
-                        type="number"
-                        min="4"
-                        max="8192"
-                        required
-                        value={height}
-                        onChange={(e) => setHeight(e.target.value)}
-                        disabled={panelBusy || !editable}
-                      />
-                    </label>
-                    <label>
-                      Width
-                      <input
-                        type="number"
-                        min="4"
-                        max="8192"
-                        required
-                        value={width}
-                        onChange={(e) => setWidth(e.target.value)}
-                        disabled={panelBusy || !editable}
-                      />
-                    </label>
-                    <label>
-                      Seed <span className="qa-muted">optional</span>
-                      <input
-                        type="number"
-                        step="1"
-                        value={seed}
-                        onChange={(e) => setSeed(e.target.value)}
-                        disabled={panelBusy || !editable}
-                      />
-                    </label>
-                    <label>
-                      Solver timeout (seconds)
-                      <input
-                        type="number"
-                        min="1"
-                        required
-                        value={timeout}
-                        onChange={(e) => setTimeoutValue(e.target.value)}
-                        disabled={panelBusy || !editable}
-                      />
-                    </label>
-                    <label>
-                      Graph reduction
-                      <select
-                        value={reduction}
-                        onChange={(e) => setReduction(e.target.value)}
-                        disabled={panelBusy || !editable}
-                      >
-                        {[
-                          "NONE",
-                          "BBOX",
-                          "FLOODFILL",
-                          "SPARSIFIED",
-                          "PATH_ONLY",
-                        ].map((v) => (
-                          <option key={v}>{v}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  {busy && activity.startsWith("Generating scenario") && (
-                    <p role="status" className="qa-notice">
-                      {activity}
-                    </p>
-                  )}
-                  <button type="submit" disabled={panelBusy || !editable}>
-                    Generate scenario
-                  </button>
-                </form>
+                <button type="button" disabled={panelBusy || !editable} onClick={() => {
+                  if (selected && confirmDiscard()) onCreateScenario(selected.id);
+                }}>
+                  Create scenario
+                </button>
                 {scenarios.length > 0 && (
                   <div className="qa-scenario-view">
                     <label>

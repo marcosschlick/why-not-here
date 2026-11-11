@@ -10,6 +10,9 @@ import {
 import type { MapProfile, QueueItem, SystemConfig } from "../types";
 
 interface ConfigFormProps {
+  scenarioMode?: boolean;
+  onBeforeGenerate?: () => boolean;
+  onConfigChange?: () => void;
   initialConfig: SystemConfig | null;
   onGenerateMap: (
     config: SystemConfig,
@@ -43,6 +46,9 @@ interface ConfigFormProps {
 }
 
 export function ConfigForm({
+  scenarioMode = false,
+  onBeforeGenerate,
+  onConfigChange,
   initialConfig,
   onGenerateMap,
   onAddToQueue,
@@ -212,6 +218,7 @@ export function ConfigForm({
       return;
     }
 
+    if (onBeforeGenerate && !onBeforeGenerate()) return;
     setOutputDirError(null);
     const current = getCurrentConfig();
     if (workflowMode === "create") {
@@ -279,6 +286,7 @@ export function ConfigForm({
       const selected = await browseDirectory();
       if (selected && selected.trim()) {
         const cleanPath = selected.trim();
+        onConfigChange?.();
         if (workflowMode === "create") {
           onConfigurationDestinationChange(cleanPath);
         } else {
@@ -378,49 +386,53 @@ export function ConfigForm({
     workflowMode === "create" && activeMode === "queue" && queueCount > 0;
 
   return (
-    <div className="config-card">
-      <div className="mode-tabs" role="tablist" aria-label="Operational Mode">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={workflowMode === "run"}
-          className={`mode-tab ${workflowMode === "run" ? "active" : ""}`}
-          onClick={() => onSwitchWorkflowMode("run")}
-        >
-          Run Experiment
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={workflowMode === "create"}
-          className={`mode-tab ${workflowMode === "create" ? "active" : ""}`}
-          onClick={() => onSwitchWorkflowMode("create")}
-        >
-          Create Configuration
-        </button>
-      </div>
+    <div className="config-card" onChangeCapture={onConfigChange}>
+      {!scenarioMode && (
+        <div className="mode-tabs" role="tablist" aria-label="Operational Mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={workflowMode === "run"}
+            className={`mode-tab ${workflowMode === "run" ? "active" : ""}`}
+            onClick={() => onSwitchWorkflowMode("run")}
+          >
+            Run Experiment
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={workflowMode === "create"}
+            className={`mode-tab ${workflowMode === "create" ? "active" : ""}`}
+            onClick={() => onSwitchWorkflowMode("create")}
+          >
+            Create Configuration
+          </button>
+        </div>
+      )}
 
-      <div className="mode-tabs" role="tablist" aria-label="Execution Mode">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeMode === "individual"}
-          className={`mode-tab ${activeMode === "individual" ? "active" : ""}`}
-          onClick={() => onSwitchMode("individual")}
-        >
-          Single Run
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeMode === "queue"}
-          className={`mode-tab ${activeMode === "queue" ? "active" : ""}`}
-          onClick={() => onSwitchMode("queue")}
-        >
-          <span>Batch Queue</span>
-          {queueCount > 0 && <span className="tab-badge">{queueCount}</span>}
-        </button>
-      </div>
+      {!scenarioMode && (
+        <div className="mode-tabs" role="tablist" aria-label="Execution Mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeMode === "individual"}
+            className={`mode-tab ${activeMode === "individual" ? "active" : ""}`}
+            onClick={() => onSwitchMode("individual")}
+          >
+            Single Run
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeMode === "queue"}
+            className={`mode-tab ${activeMode === "queue" ? "active" : ""}`}
+            onClick={() => onSwitchMode("queue")}
+          >
+            <span>Batch Queue</span>
+            {queueCount > 0 && <span className="tab-badge">{queueCount}</span>}
+          </button>
+        </div>
+      )}
 
       <fieldset className="config-fieldset">
         <legend>Pipeline Configuration</legend>
@@ -831,7 +843,7 @@ export function ConfigForm({
               </button>
             )}
 
-            {workflowMode !== "create" && (
+            {workflowMode !== "create" && !scenarioMode && (
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -881,7 +893,8 @@ export function ConfigForm({
               <strong>{cleaningDirInfo.fileCount} file(s)</strong>
               {cleaningDirInfo.files.length > 0 && (
                 <>
-                  {" "}(such as:{" "}
+                  {" "}
+                  (such as:{" "}
                   <code>{cleaningDirInfo.files.slice(0, 3).join(", ")}</code>
                   {cleaningDirInfo.files.length > 3 ? ", ..." : ""})
                 </>
@@ -890,7 +903,11 @@ export function ConfigForm({
             </>
           }
           warning="Continuing will delete these previous files to ensure stale artifacts from earlier runs do not appear in results."
-          confirmLabel={isCleaning ? "Deleting Previous Files..." : "Continue & Delete Files"}
+          confirmLabel={
+            isCleaning
+              ? "Deleting Previous Files..."
+              : "Continue & Delete Files"
+          }
           busy={isCleaning}
           onClose={() => setCleaningDirInfo(null)}
           onConfirm={handleConfirmClean}
