@@ -158,6 +158,8 @@ export interface QueueItem {
   id: string;
   config: SystemConfig;
   configurationName?: string;
+  scenarioTitle?: string;
+  scenarioId?: number;
   status:
     | "pending"
     | "generating_map"

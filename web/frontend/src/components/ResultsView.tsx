@@ -293,7 +293,8 @@ export function ResultsView({
   }
 
   const isOptimal = currentResult?.solver_status === "OPTIMAL";
-  const isFailed = currentResult?.success === false;
+  const isFailed =
+    currentResult?.success === false || currentStatus === "failed";
   const currentModifications = currentResult?.modifications ?? null;
   const currentModificationCount = currentModifications
     ? currentModifications.terrain +
@@ -478,7 +479,8 @@ export function ResultsView({
           >
             {batchQueue.map((item, idx) => {
               const isSelected = idx === currentBatchIdx;
-              const isDone = item.status === "completed";
+              const isDone =
+                item.status === "completed" || item.status === "saved";
               const isRunning = item.status === "solving";
               const isItemFailed = item.status === "failed";
               return (
@@ -495,7 +497,9 @@ export function ResultsView({
                   </span>
                   <span className={`batch-tab-badge status-${item.status}`}>
                     {isDone
-                      ? "Ready"
+                      ? item.status === "saved"
+                        ? "Saved"
+                        : "Ready"
                       : isRunning
                         ? "Solving"
                         : isItemFailed
@@ -532,7 +536,9 @@ export function ResultsView({
               ? "OPTIMIZING..."
               : isPending
                 ? "QUEUED"
-                : currentResult?.solver_status || "COMPLETED"}
+                : currentStatus === "failed"
+                  ? "FAILED"
+                  : currentResult?.solver_status || "COMPLETED"}
           </span>
         </div>
 
@@ -547,7 +553,7 @@ export function ResultsView({
         )}
       </div>
 
-      {currentResult && currentMapData && (
+      {currentMapData && (currentResult || currentStatus === "failed") && (
         <section className="results-map-card">
           <div className="results-map-header">
             <div>
@@ -610,7 +616,7 @@ export function ResultsView({
                   : "No valid semantic modifications were returned; the alternative route is shown."}
             </p>
           )}
-          {currentResult.solver_status === "OPTIMAL_INACCURATE" &&
+          {currentResult?.solver_status === "OPTIMAL_INACCURATE" &&
             currentResult.success && (
               <p className="solver-guarantee-notice">
                 Global path validation passed, but OPTIMAL_INACCURATE does not
@@ -649,7 +655,7 @@ export function ResultsView({
         </section>
       )}
 
-      {isBatch && !currentResult && (
+      {isBatch && !currentResult && currentStatus !== "failed" && (
         <div className="batch-pending-card">
           <div className="batch-pending-spinner" />
           <h3>

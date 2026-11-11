@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConfirmModal } from "./ConfirmModal";
 import {
   fetchMapProfiles,
@@ -13,6 +13,7 @@ interface ConfigFormProps {
   scenarioMode?: boolean;
   onBeforeGenerate?: () => boolean;
   onConfigChange?: () => void;
+  onDraftChange: (config: SystemConfig) => void;
   initialConfig: SystemConfig | null;
   onGenerateMap: (
     config: SystemConfig,
@@ -24,6 +25,7 @@ interface ConfigFormProps {
     configurationName?: string,
     destinationDir?: string,
   ) => void;
+  onAddBatch: (config: SystemConfig, count: number) => void;
   onImportConfig?: (
     data: Record<string, unknown>,
     configurationName?: string,
@@ -49,9 +51,11 @@ export function ConfigForm({
   scenarioMode = false,
   onBeforeGenerate,
   onConfigChange,
+  onDraftChange,
   initialConfig,
   onGenerateMap,
   onAddToQueue,
+  onAddBatch,
   onImportConfig,
   onImportBatchConfigs,
   isGenerating,
@@ -66,6 +70,7 @@ export function ConfigForm({
   configurationDestination,
   onConfigurationDestinationChange,
 }: ConfigFormProps) {
+  const [batchCount, setBatchCount] = useState(2);
   const [mapSizes, setMapSizes] = useState<MapProfile[]>([]);
   const [profilesError, setProfilesError] = useState<string | null>(null);
   const [mapH, setMapH] = useState<number>(initialConfig?.MAP_H ?? 64);
@@ -173,6 +178,17 @@ export function ConfigForm({
     };
   }
 
+  const draftRef = useRef<SystemConfig | null>(null);
+  useEffect(() => {
+    draftRef.current = getCurrentConfig();
+  });
+  useEffect(
+    () => () => {
+      if (draftRef.current) onDraftChange(draftRef.current);
+    },
+    [onDraftChange],
+  );
+
   async function ensureCleanDirectoryAndExecute(
     targetDir: string,
     action: () => void,
@@ -225,9 +241,11 @@ export function ConfigForm({
       onGenerateMap(current, configurationName.trim(), trimmed);
       return;
     }
-    await ensureCleanDirectoryAndExecute(current.OUTPUT_DIR, () => {
-      onGenerateMap(current);
-    });
+    if (scenarioMode) onGenerateMap(current);
+    else
+      await ensureCleanDirectoryAndExecute(current.OUTPUT_DIR, () => {
+        onGenerateMap(current);
+      });
   }
 
   async function handleAddQueue() {
@@ -410,7 +428,7 @@ export function ConfigForm({
         </div>
       )}
 
-      {!scenarioMode && (
+      {(workflowMode === "run" || !scenarioMode) && (
         <div className="mode-tabs" role="tablist" aria-label="Execution Mode">
           <button
             type="button"
@@ -830,7 +848,48 @@ export function ConfigForm({
               </button>
             )}
 
-            {activeMode === "queue" && (
+            {activeMode === "queue" && workflowMode === "run" && (
+              <>
+                <label className="batch-count-label" htmlFor="batch-count">
+                  Number of maps
+                  <input
+                    id="batch-count"
+                    type="number"
+                    min={2}
+                    max={100}
+                    value={batchCount}
+                    onChange={(event) =>
+                      setBatchCount(Number(event.target.value))
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-vibrant"
+                  disabled={
+                    isGenerating ||
+                    !Number.isInteger(batchCount) ||
+                    batchCount < 2 ||
+                    batchCount > 100
+                  }
+                  onClick={() => {
+                    const current = getCurrentConfig();
+                    if (!current.OUTPUT_DIR.trim()) {
+                      setOutputDirError(
+                        "Select an output directory to continue.",
+                      );
+                      return;
+                    }
+                    if (onBeforeGenerate && !onBeforeGenerate()) return;
+                    setOutputDirError(null);
+                    onAddBatch(current, batchCount);
+                  }}
+                >
+                  Generate Batch
+                </button>
+              </>
+            )}
+            {activeMode === "queue" && !scenarioMode && (
               <button
                 type="button"
                 className="btn btn-secondary"

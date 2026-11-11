@@ -210,7 +210,7 @@ export function QuestionnaireAdmin({
   initialQuestionnaireId,
   initialScenarioId,
 }: {
-  onCreateScenario: (id: number) => void;
+  onCreateScenario: (id: number, title: string) => void;
   initialQuestionnaireId: number | null;
   initialScenarioId: number | null;
   onBack: () => void;
@@ -886,7 +886,7 @@ export function QuestionnaireAdmin({
                   </div>
                 </div>
                 <button type="button" disabled={panelBusy || !editable} onClick={() => {
-                  if (selected && confirmDiscard()) onCreateScenario(selected.id);
+                  if (selected && confirmDiscard()) onCreateScenario(selected.id, selected.title);
                 }}>
                   Create scenario
                 </button>

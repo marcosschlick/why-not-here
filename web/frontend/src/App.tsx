@@ -5,6 +5,7 @@ import { ConfigForm } from "./components/ConfigForm";
 import { QueuePanel } from "./components/QueuePanel";
 import { ResultsView } from "./components/ResultsView";
 import { RouteCanvas } from "./components/RouteCanvas";
+import { validateDrawingRoute } from "./utils/validateRoute";
 import { formatReductionMethod } from "./utils/formatters";
 import { Topbar } from "./components/Topbar";
 import { QuestionnaireAdmin } from "./components/QuestionnaireAdmin";
@@ -67,6 +68,7 @@ export function App() {
     null,
   );
   const [adminScenario, setAdminScenario] = useState<number | null>(null);
+  const [questionnaireTitle, setQuestionnaireTitle] = useState("");
   const [scenarioTitle, setScenarioTitle] = useState("");
   const [savingScenario, setSavingScenario] = useState(false);
   const [scenarioConfigDirty, setScenarioConfigDirty] = useState(false);
@@ -79,6 +81,9 @@ export function App() {
     workflow: "run" | "create";
     mode: "individual" | "queue";
     batch: boolean;
+    reviewIndex: number;
+    resultIndex: number;
+    config: SystemConfig | null;
   } | null>(null);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<"individual" | "queue">(
@@ -112,13 +117,23 @@ export function App() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [runQueue, setRunQueue] = useState<QueueItem[]>([]);
+  const [scenarioQueue, setScenarioQueue] = useState<QueueItem[]>([]);
   const [configurationQueue, setConfigurationQueue] = useState<QueueItem[]>([]);
-  const queue = workflowMode === "create" ? configurationQueue : runQueue;
+  const queue =
+    scenarioQuestionnaire !== null
+      ? scenarioQueue
+      : workflowMode === "create"
+        ? configurationQueue
+        : runQueue;
   function setQueue(
     update: QueueItem[] | ((previous: QueueItem[]) => QueueItem[]),
   ) {
     const updateQueue =
-      workflowMode === "create" ? setConfigurationQueue : setRunQueue;
+      scenarioQuestionnaire !== null
+        ? setScenarioQueue
+        : workflowMode === "create"
+          ? setConfigurationQueue
+          : setRunQueue;
     updateQueue(update);
   }
   const [isBatchMode, setIsBatchMode] = useState<boolean>(false);
@@ -130,16 +145,16 @@ export function App() {
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    if (scenarioQuestionnaire === null) return;
+    if (!mapData && queue.length === 0 && !scenarioConfigDirty) return;
     function warnBeforeUnload(event: BeforeUnloadEvent) {
       event.preventDefault();
       event.returnValue = "";
     }
     window.addEventListener("beforeunload", warnBeforeUnload);
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
-  }, [scenarioQuestionnaire]);
+  }, [mapData, queue.length, scenarioConfigDirty]);
 
-  function startScenario(id: number) {
+  function startScenario(id: number, title: string) {
     setSimulationSnapshot({
       map: mapData,
       path: userPath,
@@ -149,8 +164,13 @@ export function App() {
       workflow: workflowMode,
       mode: activeTabMode,
       batch: isBatchMode,
+      reviewIndex: batchReviewIndex,
+      resultIndex: activeBatchResultIndex,
+      config,
     });
     setScenarioQuestionnaire(id);
+    setQuestionnaireTitle(title);
+    setScenarioQueue([]);
     setAdminQuestionnaire(id);
     setAdminScenario(null);
     setScenarioTitle("");
@@ -178,6 +198,9 @@ export function App() {
       setWorkflowMode(simulationSnapshot.workflow);
       setActiveTabMode(simulationSnapshot.mode);
       setIsBatchMode(simulationSnapshot.batch);
+      setBatchReviewIndex(simulationSnapshot.reviewIndex);
+      setActiveBatchResultIndex(simulationSnapshot.resultIndex);
+      setConfig(simulationSnapshot.config);
     }
     setAdminScenario(scenarioId);
     setScenarioQuestionnaire(null);
@@ -188,58 +211,111 @@ export function App() {
 
   async function saveScenario(event: FormEvent) {
     event.preventDefault();
-    if (
-      !scenarioQuestionnaire ||
-      !mapData ||
-      !lastResult?.success ||
-      !scenarioTitle.trim()
-    )
+    if (!scenarioQuestionnaire || savingScenario) return;
+    const items: QueueItem[] = isBatchMode
+      ? queue
+      : mapData && lastResult
+        ? [
+            {
+              id: "single",
+              config: mapData.config,
+              mapData,
+              userPath,
+              result: lastResult,
+              scenarioTitle,
+              status: "completed",
+            },
+          ]
+        : [];
+    const candidates = items.filter(
+      (item) => item.result?.success && !item.scenarioId,
+    );
+    if (!candidates.length) return;
+    if (candidates.some((item) => !item.scenarioTitle?.trim())) {
+      setErrorMessage(
+        "Enter a name for each successful scenario before saving.",
+      );
       return;
+    }
     setSavingScenario(true);
     setErrorMessage(null);
-    try {
+    let lastSavedId: number | null = null;
+    let failed = false;
+    for (const item of candidates) {
+      const map = item.mapData;
+      const result = item.result;
+      if (!map || !result || !item.userPath) {
+        failed = true;
+        break;
+      }
       const configuration: Record<string, unknown> = {
-        ...mapData.config,
-        TERRAIN_COLORS: mapData.terrain_colors,
+        ...map.config,
+        TERRAIN_COLORS: map.terrain_colors,
       };
       delete configuration.OUTPUT_DIR;
-      const response = await fetch(
-        `/api/questionnaires/${scenarioQuestionnaire}/scenarios`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: scenarioTitle.trim(),
-            configuration,
-            data: {
-              ...lastResult,
-              map: mapData.grid,
-              modified_map: lastResult.modified_grid ?? null,
-              start: mapData.start,
-              goal: mapData.goal,
-              optimal_path: lastResult.original_optimal_path,
-              alternative_path: userPath,
-              requested_seed: mapData.config.MAP_DEFAULT_SEED ?? null,
-            },
-          }),
-        },
-      );
-      if (!response.ok) {
-        const error = await response.json().catch(() => null);
-        throw new Error(
-          typeof error?.detail === "string"
-            ? error.detail
-            : "Failed to save scenario.",
+      try {
+        const response = await fetch(
+          `/api/questionnaires/${scenarioQuestionnaire}/scenarios`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: item.scenarioTitle!.trim(),
+              configuration,
+              data: {
+                ...result,
+                map: map.grid,
+                modified_map: result.modified_grid ?? null,
+                start: map.start,
+                goal: map.goal,
+                optimal_path: result.original_optimal_path,
+                alternative_path: item.userPath,
+                requested_seed: map.config.MAP_DEFAULT_SEED ?? null,
+              },
+            }),
+          },
         );
+        if (!response.ok) {
+          const error = await response.json().catch(() => null);
+          throw new Error(
+            typeof error?.detail === "string"
+              ? error.detail
+              : "Failed to save scenario.",
+          );
+        }
+        const saved = await response.json();
+        lastSavedId = saved.id;
+        if (isBatchMode)
+          setScenarioQueue((previous) =>
+            previous.map((entry) =>
+              entry.id === item.id
+                ? { ...entry, scenarioId: saved.id, status: "saved" }
+                : entry,
+            ),
+          );
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error ? error.message : "Failed to save scenario.",
+        );
+        failed = true;
+        break;
       }
-      const saved = await response.json();
-      returnToAdmin(saved.id);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to save scenario.",
+    }
+    setSavingScenario(false);
+    if (
+      !failed &&
+      (!isBatchMode ||
+        items.every(
+          (item) =>
+            item.scenarioId ||
+            candidates.some((candidate) => candidate.id === item.id),
+        ))
+    ) {
+      returnToAdmin(lastSavedId);
+    } else if (!failed) {
+      setSuccessMessage(
+        "Successful scenarios saved. Review or retry the remaining items.",
       );
-    } finally {
-      setSavingScenario(false);
     }
   }
 
@@ -286,7 +362,7 @@ export function App() {
       try {
         const generated = await generateMap(
           targetConfig,
-          workflowMode === "run",
+          workflowMode === "run" && scenarioQuestionnaire === null,
         );
         setLastResult(null);
         setScenarioConfigDirty(false);
@@ -301,7 +377,7 @@ export function App() {
         setIsGeneratingMap(false);
       }
     },
-    [workflowMode],
+    [workflowMode, scenarioQuestionnaire],
   );
 
   const handleImportConfig = useCallback(
@@ -391,27 +467,29 @@ export function App() {
 
   const handleSingleSolve = useCallback(async () => {
     if (!mapData) return;
+    const routeError = validateDrawingRoute(
+      userPath,
+      mapData.start,
+      mapData.goal,
+      mapData.h,
+      mapData.w,
+      mapData.connectivity,
+    );
+    if (routeError) {
+      setErrorMessage(routeError);
+      return;
+    }
     setElapsedTime(0);
     setIsSolvingISP(true);
     setErrorMessage(null);
 
     try {
-      if (scenarioQuestionnaire === null)
-        await importConfig(
-          {
-            ...mapData.config,
-            start: mapData.start,
-            goal: mapData.goal,
-            p_user: userPath,
-          },
-          true,
-        );
       const response = await solveISP(
         userPath,
         mapData.config,
         mapData.start,
         mapData.goal,
-        scenarioQuestionnaire !== null ? mapData.grid : undefined,
+        mapData.grid,
       );
       if (
         scenarioQuestionnaire !== null &&
@@ -451,18 +529,50 @@ export function App() {
     setQueue((prev) => [...prev, newItem]);
   }
 
+  function handleAddBatch(base: SystemConfig, count: number) {
+    const seed = Number.isSafeInteger(base.MAP_DEFAULT_SEED)
+      ? base.MAP_DEFAULT_SEED
+      : 42;
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const items: QueueItem[] = Array.from({ length: count }, (_, index) => ({
+      id: `${id}-${index}`,
+      config: {
+        ...base,
+        MAP_DEFAULT_SEED: seed + index,
+        OUTPUT_DIR: `${base.OUTPUT_DIR.replace(/[\\/]+$/, "")}/batch-${id}-${index + 1}`,
+      },
+      status: "pending",
+      scenarioTitle: `Scenario ${index + 1}`,
+    }));
+    setQueue(items);
+    setScenarioConfigDirty(false);
+    void handleStartBatchReview(items);
+  }
+
   function handleRemoveQueueItem(id: string) {
-    setQueue((prev) => prev.filter((item) => item.id !== id));
+    const item = queue.find((entry) => entry.id === id);
+    if (
+      item?.mapData &&
+      !item.scenarioId &&
+      !window.confirm("Discard this prepared item?")
+    )
+      return;
+    setQueue((prev) => prev.filter((entry) => entry.id !== id));
   }
 
   function handleClearQueue() {
+    if (
+      queue.some((item) => item.mapData && !item.scenarioId) &&
+      !window.confirm("Discard the prepared items?")
+    )
+      return;
     setQueue([]);
     setIsBatchMode(false);
     setBatchReviewIndex(0);
   }
 
-  async function handleStartBatchReview() {
-    if (queue.length === 0) return;
+  async function handleStartBatchReview(items = queue) {
+    if (items.length === 0) return;
     setIsBatchMode(true);
     setBatchReviewIndex(0);
     setElapsedTime(0);
@@ -470,12 +580,15 @@ export function App() {
     setErrorMessage(null);
 
     try {
-      const firstItem = queue[0];
+      const firstItem = items[0];
       let firstMap = firstItem.mapData;
       let initialPath = firstItem.userPath;
 
       if (!firstMap) {
-        firstMap = await generateMap(firstItem.config, workflowMode === "run");
+        firstMap = await generateMap(
+          firstItem.config,
+          workflowMode === "run" && scenarioQuestionnaire === null,
+        );
         initialPath = initialPath || firstMap.auto_path || [firstMap.start];
         setQueue((prev) =>
           prev.map((it, idx) =>
@@ -520,10 +633,11 @@ export function App() {
     );
     setQueue(updatedQueue);
 
-    setBatchReviewIndex(targetIndex);
     const targetItem = updatedQueue[targetIndex];
+    if (targetItem.scenarioId) return;
 
     if (targetItem.mapData) {
+      setBatchReviewIndex(targetIndex);
       setMapData(targetItem.mapData);
       setUserPath(
         targetItem.userPath ||
@@ -535,7 +649,7 @@ export function App() {
       try {
         const newMap = await generateMap(
           targetItem.config,
-          workflowMode === "run",
+          workflowMode === "run" && scenarioQuestionnaire === null,
         );
         const initialPath = targetItem.userPath ||
           newMap.auto_path || [newMap.start];
@@ -552,6 +666,7 @@ export function App() {
               : it,
           ),
         );
+        setBatchReviewIndex(targetIndex);
         setMapData(newMap);
         setUserPath(initialPath);
       } catch (err) {
@@ -673,17 +788,19 @@ export function App() {
       }
       return;
     }
-    if (batchReviewIndex < queue.length - 1) {
-      await handleSwitchBatchMap(batchReviewIndex + 1);
-    } else {
-      handleExecuteBatch();
-    }
+    const nextIndex = queue.findIndex(
+      (item, index) => index > batchReviewIndex && !item.scenarioId,
+    );
+    if (nextIndex >= 0) await handleSwitchBatchMap(nextIndex);
+    else void handleExecuteBatch();
   }
 
   function handlePrevBatchMap() {
-    if (batchReviewIndex > 0) {
-      handleSwitchBatchMap(batchReviewIndex - 1);
-    }
+    const previousIndex = queue
+      .map((item, index) => ({ item, index }))
+      .filter(({ item, index }) => index < batchReviewIndex && !item.scenarioId)
+      .at(-1)?.index;
+    if (previousIndex !== undefined) void handleSwitchBatchMap(previousIndex);
   }
 
   function handleReuseRouteFrom(sourceIdx: number) {
@@ -720,7 +837,7 @@ export function App() {
           ? {
               ...it,
               userPath: currentPathCopy,
-              mapData: mapData ? { ...mapData, config: it.config } : it.mapData,
+              mapData: it.mapData,
               status: "awaiting_route",
             }
           : it,
@@ -736,6 +853,25 @@ export function App() {
     const finalQueue = queue.map((it, idx) =>
       idx === batchReviewIndex ? { ...it, userPath } : it,
     );
+    const invalid = finalQueue.findIndex(
+      (item) =>
+        !item.mapData ||
+        !item.userPath ||
+        validateDrawingRoute(
+          item.userPath,
+          item.mapData.start,
+          item.mapData.goal,
+          item.mapData.h,
+          item.mapData.w,
+          item.mapData.connectivity,
+        ),
+    );
+    if (invalid >= 0) {
+      setErrorMessage(
+        `Review the route for map ${invalid + 1} before solving the batch.`,
+      );
+      return;
+    }
     setQueue(finalQueue);
 
     setElapsedTime(0);
@@ -746,10 +882,15 @@ export function App() {
 
     for (let i = 0; i < finalQueue.length; i++) {
       const item = finalQueue[i];
+      if (item.scenarioId || item.result?.success) continue;
       setActiveBatchResultIndex(i);
 
       setQueue((prev) =>
-        prev.map((it, idx) => (idx === i ? { ...it, status: "solving" } : it)),
+        prev.map((it, idx) =>
+          idx === i
+            ? { ...it, status: "solving", error: undefined, result: undefined }
+            : it,
+        ),
       );
 
       try {
@@ -757,20 +898,12 @@ export function App() {
         if (!item.mapData) {
           throw new Error("Batch item has no generated map.");
         }
-        await importConfig(
-          {
-            ...item.config,
-            start: item.mapData.start,
-            goal: item.mapData.goal,
-            p_user: effectivePath,
-          },
-          true,
-        );
         const response = await solveISP(
           effectivePath,
-          item.config,
+          item.mapData.config,
           item.mapData.start,
           item.mapData.goal,
+          item.mapData.grid,
         );
 
         setQueue((prev) =>
@@ -778,7 +911,10 @@ export function App() {
             idx === i
               ? {
                   ...it,
-                  status: "completed",
+                  status: response.result.success ? "completed" : "failed",
+                  error: response.result.success
+                    ? undefined
+                    : response.result.explanation_text,
                   result: response.result,
                   artifacts: response.artifacts,
                 }
@@ -850,6 +986,21 @@ export function App() {
       <Topbar
         currentStep={currentStep}
         onSelectStep={(step) => {
+          if (isSolvingISP || isGeneratingMap || savingScenario) return;
+          if (
+            step === "route_canvas" &&
+            isBatchMode &&
+            queue[batchReviewIndex]?.scenarioId
+          ) {
+            const index = queue.findIndex(
+              (item) => !item.scenarioId && item.mapData,
+            );
+            if (index < 0) return;
+            const item = queue[index];
+            setBatchReviewIndex(index);
+            setMapData(item.mapData!);
+            setUserPath(item.userPath ?? item.mapData!.auto_path);
+          }
           if (
             scenarioQuestionnaire !== null &&
             currentStep === "config" &&
@@ -878,6 +1029,7 @@ export function App() {
         }
         onOpenAbout={() => setIsAboutOpen(true)}
         onOpenAdmin={() => {
+          if (isSolvingISP || isGeneratingMap || savingScenario) return;
           if (scenarioQuestionnaire !== null) {
             if (
               !window.confirm(
@@ -891,11 +1043,12 @@ export function App() {
       />
 
       <main className="main-content-wrapper">
-        {scenarioQuestionnaire !== null && (
-          <div className="queue-banner" role="status">
-            Creating a scenario for questionnaire #{scenarioQuestionnaire}
-          </div>
-        )}
+        <div className="queue-banner" role="status">
+          Destination:{" "}
+          {scenarioQuestionnaire !== null
+            ? `Questionnaire: ${questionnaireTitle}`
+            : "Benchmark"}
+        </div>
         {errorMessage && (
           <div className="alert-banner">
             <span className="alert-icon">&times;</span>
@@ -933,20 +1086,17 @@ export function App() {
                   : undefined
               }
               onBeforeGenerate={() =>
-                scenarioQuestionnaire === null ||
-                !mapData ||
+                (!mapData && queue.length === 0) ||
                 window.confirm(
-                  "Discard the current scenario and generate a new map?",
+                  "Discard the current simulation and generate new maps?",
                 )
               }
               key={config ? "server-config" : "fallback-config"}
-              initialConfig={
-                scenarioQuestionnaire !== null
-                  ? mapData?.config || config
-                  : config
-              }
+              initialConfig={config}
+              onDraftChange={setConfig}
               onGenerateMap={handleGenerateMap}
               onAddToQueue={handleAddToQueue}
+              onAddBatch={handleAddBatch}
               onImportConfig={handleImportConfig}
               onImportBatchConfigs={handleImportBatchConfigs}
               isGenerating={isGeneratingMap}
@@ -977,7 +1127,7 @@ export function App() {
                   onToggleInteractiveMode={setInteractiveQueueMode}
                   onRemoveItem={handleRemoveQueueItem}
                   onClearQueue={handleClearQueue}
-                  onStartQueue={handleStartBatchReview}
+                  onStartQueue={() => void handleStartBatchReview()}
                   onSelectItem={handleSelectQueueItem}
                 />
               </div>
@@ -991,11 +1141,21 @@ export function App() {
               mapData={mapData}
               userPath={userPath}
               onPathChange={(path) => {
-                if (
-                  scenarioQuestionnaire !== null &&
-                  !arePathsEqual(path, userPath)
-                )
-                  setLastResult(null);
+                if (!arePathsEqual(path, userPath)) setLastResult(null);
+                if (isBatchMode && !arePathsEqual(path, userPath))
+                  setQueue((previous) =>
+                    previous.map((item, index) =>
+                      index === batchReviewIndex && !item.scenarioId
+                        ? {
+                            ...item,
+                            userPath: path,
+                            result: undefined,
+                            error: undefined,
+                            status: "awaiting_route",
+                          }
+                        : item,
+                    ),
+                  );
                 setUserPath(path);
               }}
               onSolve={
@@ -1009,6 +1169,19 @@ export function App() {
               }
               isSolving={isSolvingISP || isGeneratingMap}
               onCancel={() => {
+                if (isBatchMode)
+                  setQueue((previous) =>
+                    previous.map((item, index) =>
+                      index === batchReviewIndex ? { ...item, userPath } : item,
+                    ),
+                  );
+                if (
+                  scenarioQuestionnaire !== null &&
+                  !window.confirm(
+                    "Return to configuration? Your prepared maps and routes will be kept.",
+                  )
+                )
+                  return;
                 setIsBatchMode(false);
                 setCurrentStep("config");
               }}
@@ -1045,6 +1218,7 @@ export function App() {
                             .filter(
                               ({ idx, item }) =>
                                 idx !== batchReviewIndex &&
+                                !item.scenarioId &&
                                 isSameMap(item.config, currentBatchItem.config),
                             )
                         : [];
@@ -1129,7 +1303,11 @@ export function App() {
                                     isActive ? "active" : ""
                                   }`}
                                   onClick={() => handleSwitchBatchMap(idx)}
-                                  disabled={isGeneratingMap || isSolvingISP}
+                                  disabled={
+                                    isGeneratingMap ||
+                                    isSolvingISP ||
+                                    Boolean(item.scenarioId)
+                                  }
                                 >
                                   <span>
                                     {workflowMode === "create"
@@ -1242,6 +1420,97 @@ export function App() {
 
         {currentStep === "results" && (
           <div key="step-results" className="step-container results-step">
+            {isBatchMode && !isSolvingISP && queue[activeBatchResultIndex] && (
+              <div className="qa-panel qa-form">
+                {queue[activeBatchResultIndex].error && (
+                  <p role="alert">{queue[activeBatchResultIndex].error}</p>
+                )}
+                {scenarioQuestionnaire !== null && (
+                  <label>
+                    Scenario name
+                    <input
+                      value={queue[activeBatchResultIndex].scenarioTitle ?? ""}
+                      disabled={
+                        Boolean(queue[activeBatchResultIndex].scenarioId) ||
+                        savingScenario
+                      }
+                      onChange={(event) => {
+                        const title = event.target.value;
+                        setScenarioQueue((previous) =>
+                          previous.map((item, index) =>
+                            index === activeBatchResultIndex
+                              ? { ...item, scenarioTitle: title }
+                              : item,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                )}
+                {queue[activeBatchResultIndex].scenarioId && (
+                  <p role="status">Saved to questionnaire</p>
+                )}
+                {queue[activeBatchResultIndex].status === "failed" && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      const item = queue[activeBatchResultIndex];
+                      if (!item.mapData) return;
+                      setBatchReviewIndex(activeBatchResultIndex);
+                      setMapData(item.mapData);
+                      setUserPath(item.userPath ?? item.mapData.auto_path);
+                      setCurrentStep("route_canvas");
+                    }}
+                  >
+                    Review route and retry
+                  </button>
+                )}
+                {scenarioQuestionnaire !== null && (
+                  <form onSubmit={saveScenario}>
+                    <button
+                      type="submit"
+                      className="btn btn-vibrant"
+                      disabled={
+                        savingScenario ||
+                        !queue.some(
+                          (item) => item.result?.success && !item.scenarioId,
+                        )
+                      }
+                    >
+                      {savingScenario
+                        ? "Saving scenarios..."
+                        : "Save successful scenarios"}
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {scenarioQuestionnaire !== null &&
+              !isBatchMode &&
+              lastResult?.success && (
+                <form className="qa-panel qa-form" onSubmit={saveScenario}>
+                  <label>
+                    Scenario name
+                    <input
+                      required
+                      value={scenarioTitle}
+                      onChange={(event) => setScenarioTitle(event.target.value)}
+                      disabled={savingScenario}
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={savingScenario || !scenarioTitle.trim()}
+                  >
+                    {savingScenario
+                      ? "Saving scenario..."
+                      : "Save scenario to questionnaire"}
+                  </button>
+                </form>
+              )}
+
             <ResultsView
               result={lastResult}
               mapData={
@@ -1263,10 +1532,11 @@ export function App() {
                   : mapData?.map_image_url
               }
               onNewRun={() => {
+                if (isSolvingISP || savingScenario) return;
                 if (
-                  scenarioQuestionnaire !== null &&
+                  (scenarioQuestionnaire !== null || isBatchMode) &&
                   !window.confirm(
-                    "Discard the current scenario and start again?",
+                    "Discard the current simulation and start again?",
                   )
                 )
                   return;
@@ -1275,6 +1545,7 @@ export function App() {
                   setUserPath([]);
                   setLastResult(null);
                   setScenarioTitle("");
+                  setScenarioQueue([]);
                 }
                 setIsBatchMode(false);
                 setCurrentStep("config");
@@ -1291,28 +1562,6 @@ export function App() {
               elapsedTime={elapsedTime}
             />
 
-            {scenarioQuestionnaire !== null && lastResult?.success && (
-              <form className="qa-panel qa-form" onSubmit={saveScenario}>
-                <label>
-                  Scenario name
-                  <input
-                    required
-                    value={scenarioTitle}
-                    onChange={(event) => setScenarioTitle(event.target.value)}
-                    disabled={savingScenario}
-                  />
-                </label>
-                <button
-                  type="submit"
-                  disabled={savingScenario || !scenarioTitle.trim()}
-                >
-                  {savingScenario
-                    ? "Saving scenario..."
-                    : "Save scenario to questionnaire"}
-                </button>
-              </form>
-            )}
-
             {scenarioQuestionnaire === null &&
               queue.length > 0 &&
               !isBatchMode && (
@@ -1326,7 +1575,7 @@ export function App() {
                     onToggleInteractiveMode={setInteractiveQueueMode}
                     onRemoveItem={handleRemoveQueueItem}
                     onClearQueue={handleClearQueue}
-                    onStartQueue={handleStartBatchReview}
+                    onStartQueue={() => void handleStartBatchReview()}
                     onSelectItem={handleSelectQueueItem}
                   />
                 </div>
