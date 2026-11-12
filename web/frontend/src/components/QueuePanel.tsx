@@ -32,7 +32,7 @@ export function QueuePanel({
       <div className="queue-empty-card">
         <p className="queue-empty-text">
           {scenarioMode
-            ? "The scenario queue is empty. Add configurations or batches above, then review routes and process the queue."
+            ? "The scenario queue is empty. Add or import configurations above, then review routes and process the queue."
             : workflowMode === "create"
               ? "The configuration queue is empty. Configure the parameters above and add named configurations to the batch."
               : "The execution queue is empty. Configure the parameters above and click + Add to Queue to enqueue batch configurations."}

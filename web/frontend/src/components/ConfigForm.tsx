@@ -856,7 +856,7 @@ export function ConfigForm({
               </button>
             )}
 
-            {activeMode === "queue" && workflowMode === "run" && (
+            {activeMode === "queue" && workflowMode === "run" && !scenarioMode && (
               <>
                 <label className="batch-count-label" htmlFor="batch-count">
                   Number of maps
@@ -888,20 +888,12 @@ export function ConfigForm({
                       );
                       return;
                     }
-                    if (
-                      !scenarioMode && onBeforeGenerate && !onBeforeGenerate()
-                    ) return;
+                    if (onBeforeGenerate && !onBeforeGenerate()) return;
                     setOutputDirError(null);
                     onAddBatch(current, batchCount);
-                    if (scenarioMode) {
-                      setFeedback(
-                        `${batchCount} scenario configurations added to queue`,
-                      );
-                      setTimeout(() => setFeedback(null), 2500);
-                    }
                   }}
                 >
-                  {scenarioMode ? "Add Batch to Queue" : "Generate Batch"}
+                  Generate Batch
                 </button>
               </>
             )}
@@ -918,7 +910,7 @@ export function ConfigForm({
               </button>
             )}
 
-            {workflowMode !== "create" && !scenarioMode && (
+            {workflowMode !== "create" && (
               <button
                 type="button"
                 className="btn btn-ghost"

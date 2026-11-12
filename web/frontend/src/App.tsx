@@ -396,8 +396,12 @@ export function App() {
           : null,
       );
       try {
-        const imported = await importConfig(parsedJson, workflowMode === "run");
+        const imported = await importConfig(
+          parsedJson,
+          workflowMode === "run" && scenarioQuestionnaire === null,
+        );
         setLastResult(null);
+        setScenarioConfigDirty(false);
         setMapData(imported);
         setUserPath(imported.user_path);
         setConfig(imported.config);
@@ -410,7 +414,7 @@ export function App() {
         setIsGeneratingMap(false);
       }
     },
-    [workflowMode],
+    [workflowMode, scenarioQuestionnaire],
   );
 
   const handleImportBatchConfigs = useCallback(
@@ -424,15 +428,22 @@ export function App() {
       let importedCount = 0;
       const errors: string[] = [];
       const newQueueItems: QueueItem[] = [];
+      const shouldPersistArtifacts =
+        workflowMode === "run" && scenarioQuestionnaire === null;
 
       for (const item of items) {
         try {
-          const imported = await importConfig(item.data, true);
+          const imported = await importConfig(item.data, shouldPersistArtifacts);
+          const cleanName = item.name.replace(/\.json$/i, "").trim();
           const queueItem: QueueItem = {
             id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             config: imported.config,
             configurationName:
               workflowMode === "create" ? item.name : undefined,
+            scenarioTitle:
+              scenarioQuestionnaire !== null
+                ? cleanName || `Scenario ${queue.length + newQueueItems.length + 1}`
+                : undefined,
             status: "awaiting_route",
             mapData: imported,
             userPath: imported.user_path,
@@ -447,8 +458,13 @@ export function App() {
 
       if (newQueueItems.length > 0) {
         const updateQueue =
-          workflowMode === "create" ? setConfigurationQueue : setRunQueue;
+          scenarioQuestionnaire !== null
+            ? setScenarioQueue
+            : workflowMode === "create"
+              ? setConfigurationQueue
+              : setRunQueue;
         updateQueue((prev) => [...prev, ...newQueueItems]);
+        setScenarioConfigDirty(false);
         setSuccessMessage(
           `Imported ${importedCount} configuration${importedCount > 1 ? "s" : ""} to batch queue.`,
         );
@@ -462,7 +478,7 @@ export function App() {
 
       setIsGeneratingMap(false);
     },
-    [workflowMode],
+    [workflowMode, scenarioQuestionnaire, queue.length],
   );
 
   const handleSingleSolve = useCallback(async () => {
@@ -550,15 +566,10 @@ export function App() {
         OUTPUT_DIR: `${base.OUTPUT_DIR.replace(/[\\/]+$/, "")}/batch-${id}-${index + 1}`,
       },
       status: "pending",
-      scenarioTitle: `Scenario ${scenarioQuestionnaire !== null ? queue.length + index + 1 : index + 1}`,
     }));
     setScenarioConfigDirty(false);
-    if (scenarioQuestionnaire !== null) {
-      setQueue((previous) => [...previous, ...items]);
-    } else {
-      setQueue(items);
-      void handleStartBatchReview(items);
-    }
+    setQueue(items);
+    void handleStartBatchReview(items);
   }
 
   function handleRemoveQueueItem(id: string) {
