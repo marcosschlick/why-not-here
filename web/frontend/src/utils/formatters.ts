@@ -14,23 +14,3 @@ export function formatReductionMethod(method?: string): string {
       return method || "None (Full Graph)";
   }
 }
-
-export function formatSolverType(
-  useIncremental?: boolean,
-  solverName?: string,
-  reductionMethod?: string,
-  astarScope?: string,
-): string {
-  const solver = solverName || "HiGHS";
-  if (!useIncremental) {
-    return `Standard Monolithic MILP (${solver})`;
-  }
-  if (
-    reductionMethod &&
-    reductionMethod.toUpperCase() !== "NONE" &&
-    astarScope?.toUpperCase() === "SUBGRAPH"
-  ) {
-    return `Iterative / Incremental MILP (${solver}, Subgraph A*)`;
-  }
-  return `Iterative / Incremental MILP (${solver})`;
-}

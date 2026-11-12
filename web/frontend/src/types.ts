@@ -175,25 +175,6 @@ export interface QueueItem {
   error?: string;
 }
 
-export interface ExecutionStatus {
-  running: boolean;
-  current_run: number;
-  total_runs: number;
-  status: string;
-  error: string | null;
-  last_result: LastResult | null;
-  artifacts: string[];
-  generation_runs?: MapGenerationMetadata[];
-}
-
-export interface DirectoryListing {
-  current: string;
-  parent: string;
-  directories: string[];
-  relative_to_root: string;
-  project_root: string;
-}
-
 export interface CheckDirResult {
   exists: boolean;
   file_count: number;

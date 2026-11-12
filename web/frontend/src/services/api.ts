@@ -1,7 +1,4 @@
 import type {
-  DirectoryListing,
-  ExecutionStatus,
-  ExportConfigPayload,
   ImportConfigResponse,
   MapData,
   MapProfile,
@@ -89,35 +86,6 @@ export async function solveISP(
   return response.json();
 }
 
-export async function fetchDirectories(
-  path?: string,
-): Promise<DirectoryListing> {
-  const query = path ? `?path=${encodeURIComponent(path)}` : "";
-  const response = await fetch(`/api/fs/directories${query}`);
-  if (!response.ok) {
-    throw new Error(`Failed to list directories: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-export async function createDirectory(
-  name: string,
-  parent: string,
-): Promise<string> {
-  const response = await fetch("/api/fs/create-dir", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ name, parent }),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to create directory: ${response.statusText}`);
-  }
-  const data = await response.json();
-  return data.path;
-}
-
 export async function browseDirectory(): Promise<string | null> {
   try {
     const response = await fetch("/api/browse", {
@@ -168,27 +136,6 @@ export async function browseFiles(
   }
 }
 
-export async function triggerRun(runs: number): Promise<void> {
-  const response = await fetch("/api/run", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ runs }),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to start execution: ${response.statusText}`);
-  }
-}
-
-export async function fetchStatus(): Promise<ExecutionStatus> {
-  const response = await fetch("/api/status");
-  if (!response.ok) {
-    throw new Error(`Failed to fetch execution status: ${response.statusText}`);
-  }
-  return response.json();
-}
-
 export async function checkOutputDir(
   path: string,
 ): Promise<import("../types").CheckDirResult> {
@@ -212,26 +159,6 @@ export async function cleanOutputDir(
   });
   if (!response.ok) {
     throw new Error(`Failed to clean output directory: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-export async function exportConfig(
-  payload: ExportConfigPayload,
-): Promise<Record<string, unknown>> {
-  const response = await fetch("/api/config/export", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(
-      errorData?.detail ||
-        `Failed to export configuration: ${response.statusText}`,
-    );
   }
   return response.json();
 }
