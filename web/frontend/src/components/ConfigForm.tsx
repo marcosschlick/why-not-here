@@ -11,7 +11,7 @@ import type { MapProfile, QueueItem, SystemConfig } from "../types";
 
 interface ConfigFormProps {
   scenarioMode?: boolean;
-  onBeforeGenerate?: () => boolean;
+  onBeforeGenerate?: (action: () => void) => void;
   onConfigChange?: () => void;
   onDraftChange: (config: SystemConfig) => void;
   initialConfig: SystemConfig | null;
@@ -219,7 +219,7 @@ export function ConfigForm({
     action();
   }
 
-  async function handleDirectRun() {
+  function handleDirectRun() {
     const trimmed =
       workflowMode === "create"
         ? configurationDestination.trim()
@@ -234,18 +234,21 @@ export function ConfigForm({
       return;
     }
 
-    if (onBeforeGenerate && !onBeforeGenerate()) return;
-    setOutputDirError(null);
-    const current = getCurrentConfig();
-    if (workflowMode === "create") {
-      onGenerateMap(current, configurationName.trim(), trimmed);
-      return;
-    }
-    if (scenarioMode) onGenerateMap(current);
-    else
-      await ensureCleanDirectoryAndExecute(current.OUTPUT_DIR, () => {
-        onGenerateMap(current);
-      });
+    const generate = () => {
+      setOutputDirError(null);
+      const current = getCurrentConfig();
+      if (workflowMode === "create") {
+        onGenerateMap(current, configurationName.trim(), trimmed);
+        return;
+      }
+      if (scenarioMode) onGenerateMap(current);
+      else
+        void ensureCleanDirectoryAndExecute(current.OUTPUT_DIR, () => {
+          onGenerateMap(current);
+        });
+    };
+    if (onBeforeGenerate) onBeforeGenerate(generate);
+    else generate();
   }
 
   async function handleAddQueue() {
@@ -888,9 +891,12 @@ export function ConfigForm({
                       );
                       return;
                     }
-                    if (onBeforeGenerate && !onBeforeGenerate()) return;
-                    setOutputDirError(null);
-                    onAddBatch(current, batchCount);
+                    const generate = () => {
+                      setOutputDirError(null);
+                      onAddBatch(current, batchCount);
+                    };
+                    if (onBeforeGenerate) onBeforeGenerate(generate);
+                    else generate();
                   }}
                 >
                   Generate Batch

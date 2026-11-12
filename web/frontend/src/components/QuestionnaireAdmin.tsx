@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { FormEvent } from "react";
 import { ConfirmModal } from "./ConfirmModal";
+import type { ConfirmModalProps } from "./ConfirmModal";
 import { Participant } from "./Participant";
 import { ScenarioMapView } from "./ScenarioMapView";
 import { Topbar } from "./Topbar";
@@ -179,6 +180,10 @@ export function QuestionnaireAdmin({
   const [error, setError] = useState("");
   const [exportKey, setExportKey] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmation, setConfirmation] = useState<Pick<
+    ConfirmModalProps,
+    "title" | "description" | "confirmLabel" | "onConfirm"
+  > | null>(null);
   const [activity, setActivity] = useState("");
   const errorRef = useRef<HTMLDivElement>(null);
   const restoreViewRef = useRef<{
@@ -244,8 +249,17 @@ export function QuestionnaireAdmin({
     }
   }, [error, selecting]);
 
-  function confirmDiscard(dirty = hasUnsavedChanges) {
-    return !dirty || window.confirm("Discard unsaved changes?");
+  function confirmDiscard(action: () => void, dirty = hasUnsavedChanges) {
+    if (!dirty) {
+      action();
+      return;
+    }
+    setConfirmation({
+      title: "Discard Unsaved Changes",
+      description: "Discard unsaved changes?",
+      confirmLabel: "Discard Changes",
+      onConfirm: action,
+    });
   }
   const loadList = useCallback(
     async () => setList(await api<Summary[]>("/questionnaires")),
@@ -314,31 +328,33 @@ export function QuestionnaireAdmin({
       sidebarToggleRef.current?.focus();
       return;
     }
-    if (!confirmDiscard()) return;
-    setSelecting(true);
-    void perform(async () => {
-      await loadQuestionnaire(id, true);
-      setSidebarOpen(false);
-      sidebarToggleRef.current?.focus();
-      setExportKey("");
-      setConfirmDelete(false);
-      setPreview(false);
-    }).finally(() => setSelecting(false));
+    confirmDiscard(() => {
+      setSelecting(true);
+      void perform(async () => {
+        await loadQuestionnaire(id, true);
+        setSidebarOpen(false);
+        sidebarToggleRef.current?.focus();
+        setExportKey("");
+        setConfirmDelete(false);
+        setPreview(false);
+      }).finally(() => setSelecting(false));
+    });
   }
   function newDraft() {
     if (busy) return;
-    if (!confirmDiscard()) return;
-    setExportKey("");
-    setConfirmDelete(false);
-    setSelected(null);
-    setTitle("");
-    setDescription("");
-    setScenarios([]);
-    setRenamingScenario(null);
-    setScenarioName("");
-    setProtocol(emptyProtocol);
-    setPreview(false);
-    setError("");
+    confirmDiscard(() => {
+      setExportKey("");
+      setConfirmDelete(false);
+      setSelected(null);
+      setTitle("");
+      setDescription("");
+      setScenarios([]);
+      setRenamingScenario(null);
+      setScenarioName("");
+      setProtocol(emptyProtocol);
+      setPreview(false);
+      setError("");
+    });
   }
   function saveDraft(event: FormEvent) {
     event.preventDefault();
@@ -439,9 +455,7 @@ export function QuestionnaireAdmin({
     <>
       <Topbar
         view="admin"
-        onBack={() => {
-          if (confirmDiscard()) onBack();
-        }}
+        onBack={() => confirmDiscard(onBack)}
         onOpenAbout={onOpenAbout}
       />
       <div className="qa-app">
@@ -563,26 +577,29 @@ export function QuestionnaireAdmin({
                 <button
                   type="button"
                   disabled={panelBusy || selected.questions.length !== 14}
-                  onClick={() => {
-                    if (!confirmDiscard()) return;
-                    if (
-                      !window.confirm(
-                        "Activate this questionnaire? It can no longer be edited.",
-                      )
-                    )
-                      return;
-                    setTitle(selected.title);
-                    setDescription(selected.description || "");
-                    setProtocol(selected.protocol);
-                    void perform(async () => {
-                      await api(
-                        `/questionnaires/${selected.id}/activate`,
-                        "POST",
-                      );
-                      await loadList();
-                      await loadQuestionnaire(selected.id);
-                    });
-                  }}
+                  onClick={() =>
+                    confirmDiscard(() => {
+                      setConfirmation({
+                        title: "Activate Questionnaire",
+                        description:
+                          "Activate this questionnaire? It can no longer be edited.",
+                        confirmLabel: "Activate Questionnaire",
+                        onConfirm: () => {
+                          setTitle(selected.title);
+                          setDescription(selected.description || "");
+                          setProtocol(selected.protocol);
+                          void perform(async () => {
+                            await api(
+                              `/questionnaires/${selected.id}/activate`,
+                              "POST",
+                            );
+                            await loadList();
+                            await loadQuestionnaire(selected.id);
+                          });
+                        },
+                      });
+                    })
+                  }
                 >
                   Activate questionnaire
                 </button>
@@ -609,19 +626,24 @@ export function QuestionnaireAdmin({
                   type="button"
                   className="qa-secondary"
                   disabled={panelBusy}
-                  onClick={() => {
-                    if (
-                      !window.confirm(
+                  onClick={() =>
+                    setConfirmation({
+                      title: "Close Questionnaire",
+                      description:
                         "Close this questionnaire? New submissions will no longer be accepted.",
-                      )
-                    )
-                      return;
-                    void perform(async () => {
-                      await api(`/questionnaires/${selected.id}/close`, "POST");
-                      await loadList();
-                      await loadQuestionnaire(selected.id);
-                    });
-                  }}
+                      confirmLabel: "Close Questionnaire",
+                      onConfirm: () => {
+                        void perform(async () => {
+                          await api(
+                            `/questionnaires/${selected.id}/close`,
+                            "POST",
+                          );
+                          await loadList();
+                          await loadQuestionnaire(selected.id);
+                        });
+                      },
+                    })
+                  }
                 >
                   Close questionnaire
                 </button>
@@ -822,8 +844,10 @@ export function QuestionnaireAdmin({
                     type="button"
                     disabled={panelBusy || !editable}
                     onClick={() => {
-                      if (selected && confirmDiscard())
-                        onCreateScenario(selected.id, selected.title);
+                      if (selected)
+                        confirmDiscard(() =>
+                          onCreateScenario(selected.id, selected.title),
+                        );
                     }}
                   >
                     Create scenario
@@ -868,12 +892,12 @@ export function QuestionnaireAdmin({
                                       renamingScenario === scenario.id
                                     }
                                     aria-label={`Rename scenario ${scenario.title}`}
-                                    onClick={() => {
-                                      if (!confirmDiscard(scenarioDirty))
-                                        return;
-                                      setRenamingScenario(scenario.id);
-                                      setScenarioName(scenario.title);
-                                    }}
+                                    onClick={() =>
+                                      confirmDiscard(() => {
+                                        setRenamingScenario(scenario.id);
+                                        setScenarioName(scenario.title);
+                                      }, scenarioDirty)
+                                    }
                                   >
                                     Rename
                                   </button>
@@ -963,6 +987,18 @@ export function QuestionnaireAdmin({
           </main>
         </div>
       </div>
+      {confirmation && (
+        <ConfirmModal
+          key={confirmation.title}
+          {...confirmation}
+          busy={false}
+          onClose={() => setConfirmation(null)}
+          onConfirm={() => {
+            setConfirmation(null);
+            confirmation.onConfirm();
+          }}
+        />
+      )}
       {confirmDelete && selected && (
         <ConfirmModal
           title="Delete Questionnaire"

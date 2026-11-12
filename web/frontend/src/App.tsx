@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { AboutModal } from "./components/AboutModal";
 import { ConfigForm } from "./components/ConfigForm";
+import { ConfirmModal } from "./components/ConfirmModal";
+import type { ConfirmModalProps } from "./components/ConfirmModal";
 import { QueuePanel } from "./components/QueuePanel";
 import { ResultsView } from "./components/ResultsView";
 import { RouteCanvas } from "./components/RouteCanvas";
@@ -143,6 +145,10 @@ export function App() {
   const [interactiveQueueMode, setInteractiveQueueMode] =
     useState<boolean>(true);
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
+  const [confirmation, setConfirmation] = useState<Pick<
+    ConfirmModalProps,
+    "title" | "description" | "confirmLabel" | "onConfirm"
+  > | null>(null);
 
   useEffect(() => {
     if (!mapData && queue.length === 0 && !scenarioConfigDirty) return;
@@ -574,24 +580,36 @@ export function App() {
 
   function handleRemoveQueueItem(id: string) {
     const item = queue.find((entry) => entry.id === id);
-    if (
-      item?.mapData &&
-      !item.scenarioId &&
-      !window.confirm("Discard this prepared item?")
-    )
+    const removeItem = () =>
+      setQueue((prev) => prev.filter((entry) => entry.id !== id));
+    if (item?.mapData && !item.scenarioId) {
+      setConfirmation({
+        title: "Discard Prepared Item",
+        description: "Discard this prepared item?",
+        confirmLabel: "Discard Item",
+        onConfirm: removeItem,
+      });
       return;
-    setQueue((prev) => prev.filter((entry) => entry.id !== id));
+    }
+    removeItem();
   }
 
   function handleClearQueue() {
-    if (
-      queue.some((item) => item.mapData && !item.scenarioId) &&
-      !window.confirm("Discard the prepared items?")
-    )
+    const clearQueue = () => {
+      setQueue([]);
+      setIsBatchMode(false);
+      setBatchReviewIndex(0);
+    };
+    if (queue.some((item) => item.mapData && !item.scenarioId)) {
+      setConfirmation({
+        title: "Discard Prepared Items",
+        description: "Discard the prepared items?",
+        confirmLabel: "Discard Items",
+        onConfirm: clearQueue,
+      });
       return;
-    setQueue([]);
-    setIsBatchMode(false);
-    setBatchReviewIndex(0);
+    }
+    clearQueue();
   }
 
   async function handleStartBatchReview(items = queue) {
@@ -1051,9 +1069,16 @@ export function App() {
             step !== "config" &&
             scenarioConfigDirty
           ) {
-            if (!window.confirm("Discard changes to the configuration?"))
-              return;
-            setScenarioConfigDirty(false);
+            setConfirmation({
+              title: "Discard Configuration Changes",
+              description: "Discard changes to the configuration?",
+              confirmLabel: "Discard Changes",
+              onConfirm: () => {
+                setScenarioConfigDirty(false);
+                setCurrentStep(step);
+              },
+            });
+            return;
           }
           setCurrentStep(step);
         }}
@@ -1075,13 +1100,13 @@ export function App() {
         onOpenAdmin={() => {
           if (isSolvingISP || isGeneratingMap || savingScenario) return;
           if (scenarioQuestionnaire !== null) {
-            if (
-              !window.confirm(
+            setConfirmation({
+              title: "Discard Unfinished Scenario",
+              description:
                 "Discard the unfinished scenario and return to questionnaires?",
-              )
-            )
-              return;
-            returnToAdmin();
+              confirmLabel: "Discard Scenario",
+              onConfirm: () => returnToAdmin(),
+            });
           } else setShowAdmin(true);
         }}
       />
@@ -1131,12 +1156,19 @@ export function App() {
                   ? () => setScenarioConfigDirty(true)
                   : undefined
               }
-              onBeforeGenerate={() =>
-                (!mapData && queue.length === 0) ||
-                window.confirm(
-                  "Discard the current simulation and generate new maps?",
-                )
-              }
+              onBeforeGenerate={(action) => {
+                if (!mapData && queue.length === 0) {
+                  action();
+                  return;
+                }
+                setConfirmation({
+                  title: "Generate New Maps",
+                  description:
+                    "Discard the current simulation and generate new maps?",
+                  confirmLabel: "Generate New Maps",
+                  onConfirm: action,
+                });
+              }}
               key={config ? "server-config" : "fallback-config"}
               initialConfig={config}
               onDraftChange={setConfig}
@@ -1222,15 +1254,21 @@ export function App() {
                       index === batchReviewIndex ? { ...item, userPath } : item,
                     ),
                   );
-                if (
-                  scenarioQuestionnaire !== null &&
-                  !window.confirm(
-                    "Return to configuration? Your prepared maps and routes will be kept.",
-                  )
-                )
+                const returnToConfig = () => {
+                  setIsBatchMode(false);
+                  setCurrentStep("config");
+                };
+                if (scenarioQuestionnaire !== null) {
+                  setConfirmation({
+                    title: "Return to Configuration",
+                    description:
+                      "Return to configuration? Your prepared maps and routes will be kept.",
+                    confirmLabel: "Return to Configuration",
+                    onConfirm: returnToConfig,
+                  });
                   return;
-                setIsBatchMode(false);
-                setCurrentStep("config");
+                }
+                returnToConfig();
               }}
               busyButtonText={
                 workflowMode === "create"
@@ -1589,15 +1627,21 @@ export function App() {
                   ? undefined
                   : () => {
                       if (isSolvingISP || savingScenario) return;
-                      if (
-                        isBatchMode &&
-                        !window.confirm(
-                          "Discard the current simulation and start again?",
-                        )
-                      )
+                      const startAgain = () => {
+                        setIsBatchMode(false);
+                        setCurrentStep("config");
+                      };
+                      if (isBatchMode) {
+                        setConfirmation({
+                          title: "Start Again",
+                          description:
+                            "Discard the current simulation and start again?",
+                          confirmLabel: "Start Again",
+                          onConfirm: startAgain,
+                        });
                         return;
-                      setIsBatchMode(false);
-                      setCurrentStep("config");
+                      }
+                      startAgain();
                     }
               }
               batchQueue={isBatchMode && queue.length > 1 ? queue : undefined}
@@ -1701,6 +1745,18 @@ export function App() {
         </div>
       )}
 
+      {confirmation && (
+        <ConfirmModal
+          key={confirmation.title}
+          {...confirmation}
+          busy={false}
+          onClose={() => setConfirmation(null)}
+          onConfirm={() => {
+            setConfirmation(null);
+            confirmation.onConfirm();
+          }}
+        />
+      )}
       <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
     </div>
   );

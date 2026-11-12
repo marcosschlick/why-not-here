@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
-interface ConfirmModalProps {
+export interface ConfirmModalProps {
   title: string;
   description: ReactNode;
-  warning: ReactNode;
+  warning?: ReactNode;
   confirmLabel: string;
   busy: boolean;
   onClose: () => void;
@@ -100,7 +100,7 @@ export function ConfirmModal({
           </button>
         </div>
         <p className="confirm-modal-desc">{description}</p>
-        <div className="confirm-modal-warning">{warning}</div>
+        {warning && <div className="confirm-modal-warning">{warning}</div>}
         <div className="confirm-modal-actions">
           <button
             ref={cancelRef}
