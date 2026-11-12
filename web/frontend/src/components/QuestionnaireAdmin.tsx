@@ -410,6 +410,27 @@ export function QuestionnaireAdmin({
       setProtocol(saved.protocol);
     }, "Saving study protocol...");
   }
+  function handleActivateQuestionnaire() {
+    if (!selected) return;
+    confirmDiscard(() => {
+      setConfirmation({
+        title: "Activate Questionnaire",
+        description:
+          "Activate this questionnaire? It can no longer be edited.",
+        confirmLabel: "Activate Questionnaire",
+        onConfirm: () => {
+          setTitle(selected.title);
+          setDescription(selected.description || "");
+          setProtocol(selected.protocol);
+          void perform(async () => {
+            await api(`/questionnaires/${selected.id}/activate`, "POST");
+            await loadList();
+            await loadQuestionnaire(selected.id);
+          });
+        },
+      });
+    });
+  }
   function handleConfirmDelete() {
     if (!selected) return;
     void perform(async () => {
@@ -577,29 +598,7 @@ export function QuestionnaireAdmin({
                 <button
                   type="button"
                   disabled={panelBusy || selected.questions.length !== 14}
-                  onClick={() =>
-                    confirmDiscard(() => {
-                      setConfirmation({
-                        title: "Activate Questionnaire",
-                        description:
-                          "Activate this questionnaire? It can no longer be edited.",
-                        confirmLabel: "Activate Questionnaire",
-                        onConfirm: () => {
-                          setTitle(selected.title);
-                          setDescription(selected.description || "");
-                          setProtocol(selected.protocol);
-                          void perform(async () => {
-                            await api(
-                              `/questionnaires/${selected.id}/activate`,
-                              "POST",
-                            );
-                            await loadList();
-                            await loadQuestionnaire(selected.id);
-                          });
-                        },
-                      });
-                    })
-                  }
+                  onClick={handleActivateQuestionnaire}
                 >
                   Activate questionnaire
                 </button>
