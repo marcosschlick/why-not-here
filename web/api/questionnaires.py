@@ -1,14 +1,26 @@
-from typing import Annotated, Literal
+from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from psycopg import errors
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from web.api.database import connect_database
+from web.api.study_protocol import (
+    PROTOCOL_VERSION,
+    ProtocolInput,
+    StudyGroup,
+    build_questions,
+    protocol_selection,
+    read_questions,
+    require_protocol,
+    serialize_step,
+    study_steps,
+    validate_scenario,
+)
 
 router = APIRouter(prefix="/api/questionnaires", tags=["questionnaires"])
-
 NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
@@ -19,99 +31,8 @@ class QuestionnaireInput(BaseModel):
     description: str | None = None
 
 
-class QuestionOrder(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    question_ids: list[int]
-
-
-class EmptyConfiguration(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class LikertConfiguration(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    min: int = 1
-    max: int = 5
-
-    @model_validator(mode="after")
-    def validate_bounds(self):
-        if self.min != 1 or self.max != 5:
-            raise ValueError("Likert questions must use a fixed 1 to 5 scale")
-        return self
-
-
-class NumericConfiguration(BaseModel):
-    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
-
-    min: float = 0.0
-    max: float = 100.0
-
-    @model_validator(mode="after")
-    def validate_bounds(self):
-        if self.min != 0.0 or self.max != 100.0:
-            raise ValueError("Numeric question range is fixed from 0 to 100")
-        return self
-
-
-class TextConfiguration(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    max_length: int = 1000
-
-    @model_validator(mode="after")
-    def validate_length(self):
-        if self.max_length != 1000:
-            raise ValueError("Text question character limit is fixed at 1000")
-        return self
-
-
-class QuestionBase(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    prompt: NonEmptyText
-
-
-class TextQuestion(QuestionBase):
-    type: Literal["text"]
-    configuration: TextConfiguration = Field(default_factory=TextConfiguration)
-
-
-class LikertQuestion(QuestionBase):
-    type: Literal["likert"]
-    configuration: LikertConfiguration = Field(default_factory=LikertConfiguration)
-
-
-class NumericQuestion(QuestionBase):
-    type: Literal["numeric"]
-    configuration: NumericConfiguration = Field(default_factory=NumericConfiguration)
-
-
-class RouteChoiceQuestion(QuestionBase):
-    type: Literal["route_choice"]
-    scenario_id: int = Field(gt=0, strict=True)
-    configuration: EmptyConfiguration = Field(default_factory=EmptyConfiguration)
-
-
-class RouteDrawingQuestion(QuestionBase):
-    type: Literal["route_drawing"]
-    scenario_id: int = Field(gt=0, strict=True)
-    configuration: EmptyConfiguration = Field(default_factory=EmptyConfiguration)
-
-
-QuestionInput = Annotated[
-    TextQuestion
-    | LikertQuestion
-    | NumericQuestion
-    | RouteChoiceQuestion
-    | RouteDrawingQuestion,
-    Field(discriminator="type"),
-]
-
-
 def get_questionnaire(connection, questionnaire_id: int, *, lock: bool = False):
-    query = "SELECT id, title, description, status, created_at, closed_at, access_token FROM questionnaires WHERE id = %s"
+    query = "SELECT id, title, description, status, protocol_version, created_at, closed_at, access_token FROM questionnaires WHERE id = %s"
     if lock:
         query += " FOR UPDATE"
     questionnaire = connection.execute(query, (questionnaire_id,)).fetchone()
@@ -127,86 +48,34 @@ def require_draft(connection, questionnaire_id: int):
     return questionnaire
 
 
-def validate_scenario(connection, questionnaire_id: int, payload: QuestionInput):
-    if not isinstance(payload, (RouteChoiceQuestion, RouteDrawingQuestion)):
-        return None
-    scenario = connection.execute(
-        "SELECT data FROM scenarios WHERE id = %s AND questionnaire_id = %s FOR KEY SHARE",
-        (payload.scenario_id, questionnaire_id),
-    ).fetchone()
-    if scenario is None:
-        raise HTTPException(status_code=404, detail="Scenario not found")
-    data = scenario["data"]
-    if not isinstance(data, dict):
-        raise HTTPException(status_code=422, detail="Scenario data is invalid")
-    if payload.type == "route_choice":
-        optimal = data.get("optimal_path")
-        alternative = data.get("alternative_path")
-        if (
-            not valid_path(optimal)
-            or not valid_path(alternative)
-            or optimal == alternative
-        ):
-            raise HTTPException(
-                status_code=422, detail="Scenario must contain two distinct routes"
+def questionnaire_details(connection, questionnaire_id):
+    questionnaire = get_questionnaire(connection, questionnaire_id)
+    questions = read_questions(connection, questionnaire_id)
+    questionnaire["questions"] = [
+        {
+            key: question[key]
+            for key in (
+                "id",
+                "prompt",
+                "type",
+                "configuration",
+                "scenario_id",
+                "position",
             )
-    elif not valid_drawing_scenario(data):
-        raise HTTPException(
-            status_code=422, detail="Scenario must contain a map and valid endpoints"
-        )
-    return payload.scenario_id
-
-
-def validate_unique_route_scenario(connection, questionnaire_id, payload, question_id=None):
-    if payload.type == "route_choice" and connection.execute(
-        "SELECT 1 FROM questions WHERE questionnaire_id = %s AND scenario_id = %s AND type = 'route_choice' AND (%s::bigint IS NULL OR id <> %s)",
-        (questionnaire_id, payload.scenario_id, question_id, question_id),
-    ).fetchone():
-        raise HTTPException(status_code=422, detail="This scenario is already used by another route choice question")
-
-
-def valid_point(point):
-    return (
-        isinstance(point, list)
-        and len(point) == 2
-        and all(type(coordinate) is int and coordinate >= 0 for coordinate in point)
-    )
-
-
-def valid_path(path):
-    return (
-        isinstance(path, list)
-        and len(path) > 0
-        and all(valid_point(point) for point in path)
-    )
-
-
-def valid_drawing_scenario(data):
-    if not isinstance(data, dict) or not isinstance(data.get("map"), dict):
-        return False
-    grid = data["map"]
-    height, width = grid.get("h"), grid.get("w")
-    if type(height) is not int or type(width) is not int or height <= 0 or width <= 0:
-        return False
-    for layer in ("terrain", "elevation", "obstacle"):
-        matrix = grid.get(layer)
-        if not isinstance(matrix, list) or len(matrix) != height:
-            return False
-        if any(not isinstance(row, list) or len(row) != width for row in matrix):
-            return False
-    return all(
-        valid_point(point) and point[0] < height and point[1] < width
-        for point in (data.get("start"), data.get("goal"))
-    )
+        }
+        for question in questions
+    ]
+    questionnaire["protocol"] = protocol_selection(questions)
+    return questionnaire
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_questionnaire(payload: QuestionnaireInput):
     with connect_database() as connection:
         return connection.execute(
-            "INSERT INTO questionnaires (title, description) VALUES (%s, %s) "
-            "RETURNING id, title, description, status, created_at",
-            (payload.title, payload.description),
+            "INSERT INTO questionnaires (title, description, protocol_version) VALUES (%s, %s, %s) "
+            "RETURNING id, title, description, status, protocol_version, created_at",
+            (payload.title, payload.description, PROTOCOL_VERSION),
         ).fetchone()
 
 
@@ -214,21 +83,14 @@ def create_questionnaire(payload: QuestionnaireInput):
 def list_questionnaires():
     with connect_database() as connection:
         return connection.execute(
-            "SELECT id, title, description, status, created_at, access_token "
-            "FROM questionnaires ORDER BY id"
+            "SELECT id, title, description, status, protocol_version, created_at, access_token FROM questionnaires ORDER BY id"
         ).fetchall()
 
 
 @router.get("/{questionnaire_id}")
 def read_questionnaire(questionnaire_id: int):
     with connect_database() as connection:
-        questionnaire = get_questionnaire(connection, questionnaire_id)
-        questionnaire["questions"] = connection.execute(
-            "SELECT id, prompt, type, configuration, scenario_id, position FROM questions "
-            "WHERE questionnaire_id = %s ORDER BY position, id",
-            (questionnaire_id,),
-        ).fetchall()
-        return questionnaire
+        return questionnaire_details(connection, questionnaire_id)
 
 
 @router.put("/{questionnaire_id}")
@@ -237,106 +99,74 @@ def update_questionnaire(questionnaire_id: int, payload: QuestionnaireInput):
         require_draft(connection, questionnaire_id)
         return connection.execute(
             "UPDATE questionnaires SET title = %s, description = %s WHERE id = %s "
-            "RETURNING id, title, description, status, created_at",
+            "RETURNING id, title, description, status, protocol_version, created_at",
             (payload.title, payload.description, questionnaire_id),
         ).fetchone()
 
 
-@router.post("/{questionnaire_id}/questions", status_code=status.HTTP_201_CREATED)
-def create_question(questionnaire_id: int, payload: QuestionInput):
+@router.put("/{questionnaire_id}/protocol")
+def save_protocol(questionnaire_id: int, payload: ProtocolInput):
+    ids = payload.explanation_scenario_ids + payload.prediction_scenario_ids
+    if len(set(ids)) != 6:
+        raise HTTPException(
+            status_code=422, detail="All six scenarios must be different"
+        )
     with connect_database() as connection:
         require_draft(connection, questionnaire_id)
-        validate_unique_route_scenario(connection, questionnaire_id, payload)
-        scenario_id = validate_scenario(connection, questionnaire_id, payload)
-        return connection.execute(
-            "INSERT INTO questions (questionnaire_id, prompt, type, configuration, scenario_id, position) "
-            "VALUES (%s, %s, %s, %s, %s, "
-            "(SELECT COALESCE(MAX(position), 0) + 1 FROM questions WHERE questionnaire_id = %s)) "
-            "RETURNING id, prompt, type, configuration, scenario_id, position",
-            (
-                questionnaire_id,
-                payload.prompt,
-                payload.type,
-                Jsonb(payload.configuration.model_dump(exclude_none=True)),
-                scenario_id,
-                questionnaire_id,
-            ),
-        ).fetchone()
-
-
-@router.put("/{questionnaire_id}/questions/order", status_code=204)
-def reorder_questions(questionnaire_id: int, payload: QuestionOrder):
-    with connect_database() as connection:
-        require_draft(connection, questionnaire_id)
-        rows = connection.execute(
-            "SELECT id FROM questions WHERE questionnaire_id = %s", (questionnaire_id,)
+        scenarios = connection.execute(
+            "SELECT id, data FROM scenarios WHERE questionnaire_id = %s AND id = ANY(%s)",
+            (questionnaire_id, ids),
         ).fetchall()
-        current = {row["id"] for row in rows}
-        if (
-            len(payload.question_ids) != len(current)
-            or set(payload.question_ids) != current
-        ):
+        if len(scenarios) != 6:
             raise HTTPException(
-                status_code=422,
-                detail="Question order must contain every question exactly once",
+                status_code=422, detail="Select six scenarios from this questionnaire"
             )
-        for position, question_id in enumerate(payload.question_ids, start=1):
+        for scenario in scenarios:
+            validate_scenario(
+                scenario["data"],
+                explanation=scenario["id"] in payload.explanation_scenario_ids,
+            )
+        existing = read_questions(connection, questionnaire_id)
+        if protocol_selection(existing) != payload.model_dump():
             connection.execute(
-                "UPDATE questions SET position = %s WHERE id = %s AND questionnaire_id = %s",
-                (position, question_id, questionnaire_id),
+                "DELETE FROM questions WHERE questionnaire_id = %s", (questionnaire_id,)
             )
-    return Response(status_code=204)
+            for question in build_questions(payload):
+                connection.execute(
+                    "INSERT INTO questions (questionnaire_id, prompt, type, configuration, scenario_id, position) VALUES (%s, %s, %s, %s, %s, %s)",
+                    (
+                        questionnaire_id,
+                        question["prompt"],
+                        question["type"],
+                        Jsonb(question["configuration"]),
+                        question["scenario_id"],
+                        question["position"],
+                    ),
+                )
+        require_protocol(read_questions(connection, questionnaire_id))
+        return questionnaire_details(connection, questionnaire_id)
 
 
-@router.put("/{questionnaire_id}/questions/{question_id}")
-def update_question(questionnaire_id: int, question_id: int, payload: QuestionInput):
+@router.get("/{questionnaire_id}/preview")
+def preview_questionnaire(
+    questionnaire_id: int,
+    group: StudyGroup,
+    submission_key: UUID,
+    step: Annotated[int, Query(ge=0, le=17)] = 0,
+):
     with connect_database() as connection:
-        require_draft(connection, questionnaire_id)
-        existing = connection.execute(
-            "SELECT id FROM questions WHERE id = %s AND questionnaire_id = %s FOR UPDATE",
-            (question_id, questionnaire_id),
-        ).fetchone()
-        if existing is None:
-            raise HTTPException(status_code=404, detail="Question not found")
-        if connection.execute(
-            "SELECT 1 FROM answers WHERE question_id = %s LIMIT 1", (question_id,)
-        ).fetchone():
-            raise HTTPException(status_code=409, detail="Question has answers")
-        validate_unique_route_scenario(connection, questionnaire_id, payload, question_id)
-        scenario_id = validate_scenario(connection, questionnaire_id, payload)
-        question = connection.execute(
-            "UPDATE questions SET prompt = %s, type = %s, configuration = %s, "
-            "scenario_id = %s "
-            "WHERE id = %s AND questionnaire_id = %s "
-            "RETURNING id, prompt, type, configuration, scenario_id, position",
-            (
-                payload.prompt,
-                payload.type,
-                Jsonb(payload.configuration.model_dump(exclude_none=True)),
-                scenario_id,
-                question_id,
-                questionnaire_id,
-            ),
-        ).fetchone()
-        if question is None:
-            raise HTTPException(status_code=404, detail="Question not found")
-        return question
-
-
-@router.delete("/{questionnaire_id}/questions/{question_id}", status_code=204)
-def delete_question(questionnaire_id: int, question_id: int):
-    try:
-        with connect_database() as connection:
-            require_draft(connection, questionnaire_id)
-            question = connection.execute(
-                "DELETE FROM questions WHERE id = %s AND questionnaire_id = %s RETURNING id",
-                (question_id, questionnaire_id),
-            ).fetchone()
-            if question is None:
-                raise HTTPException(status_code=404, detail="Question not found")
-    except errors.ForeignKeyViolation as error:
-        raise HTTPException(status_code=409, detail="Question has answers") from error
-    return Response(status_code=204)
+        questionnaire = get_questionnaire(connection, questionnaire_id)
+        questions = read_questions(connection, questionnaire_id)
+        require_protocol(questions)
+        return {
+            "title": questionnaire["title"],
+            "description": questionnaire["description"],
+            "protocol_version": questionnaire["protocol_version"],
+            "submission_completed": False,
+            "current_step": step,
+            "total_steps": len(study_steps(questions)),
+            "step": serialize_step(questions, step, submission_key, group),
+        }
 
 
 @router.delete("/{questionnaire_id}", status_code=204)
@@ -353,21 +183,13 @@ def delete_questionnaire(questionnaire_id: int):
                     detail="Questionnaire has recorded participations and cannot be deleted",
                 )
             connection.execute(
-                "DELETE FROM route_confirmations WHERE question_id IN "
-                "(SELECT id FROM questions WHERE questionnaire_id = %s)",
-                (questionnaire_id,),
+                "DELETE FROM questions WHERE questionnaire_id = %s", (questionnaire_id,)
             )
             connection.execute(
-                "DELETE FROM questions WHERE questionnaire_id = %s",
-                (questionnaire_id,),
+                "DELETE FROM scenarios WHERE questionnaire_id = %s", (questionnaire_id,)
             )
             connection.execute(
-                "DELETE FROM scenarios WHERE questionnaire_id = %s",
-                (questionnaire_id,),
-            )
-            connection.execute(
-                "DELETE FROM questionnaires WHERE id = %s",
-                (questionnaire_id,),
+                "DELETE FROM questionnaires WHERE id = %s", (questionnaire_id,)
             )
     except errors.ForeignKeyViolation as error:
         raise HTTPException(

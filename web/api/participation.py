@@ -1,113 +1,44 @@
 import hashlib
 import hmac
-import math
 import secrets
-from itertools import pairwise
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Path, Response
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from src import config
-from src.visual.appearance import resolve_map_appearance
 from web.api.database import connect_database
-from web.api.questionnaires import (
-    QuestionInput,
-    get_questionnaire,
-    require_draft,
-    valid_drawing_scenario,
-    validate_scenario,
+from web.api.questionnaires import get_questionnaire, require_draft
+from web.api.study_protocol import (
+    RouteAssessment,
+    read_questions,
+    require_protocol,
+    route_order,
+    serialize_step,
+    study_steps,
 )
 
 router = APIRouter(prefix="/api", tags=["participation"])
 public_router = APIRouter(prefix="/api", tags=["participation"])
-question_adapter = TypeAdapter(QuestionInput)
-
-
-class AnswerInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    question_id: int
-    value: Any
-    visible_duration_ms: int | None = Field(default=None, strict=True, ge=0)
-    explanation_visible_duration_ms: int | None = Field(default=None, strict=True, ge=0)
 
 
 class SubmissionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
     submission_key: UUID
-    answers: list[AnswerInput]
 
 
-class RouteConfirmationInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    submission_key: UUID
-    choice: int = Field(strict=True, ge=0, le=1)
-    decision_visible_duration_ms: int | None = Field(default=None, strict=True, ge=0)
-
-
-def resolve_scenario_terrain_colors(configuration):
-    return configuration.get("TERRAIN_COLORS") or config.TERRAIN_COLORS
-
-
-def read_questions(connection, questionnaire_id):
-    return connection.execute(
-        "SELECT q.id, q.prompt, q.type, q.configuration, q.scenario_id, s.data, s.configuration AS scenario_configuration "
-        "FROM questions q LEFT JOIN scenarios s ON s.id = q.scenario_id AND s.questionnaire_id = q.questionnaire_id "
-        "WHERE q.questionnaire_id = %s ORDER BY q.position, q.id",
-        (questionnaire_id,),
-    ).fetchall()
-
-
-def check_question(connection, questionnaire_id, question):
-    payload = {
-        "type": question["type"],
-        "prompt": question["prompt"],
-        "configuration": question["configuration"],
-    }
-    if question["type"] in {"route_choice", "route_drawing"}:
-        payload["scenario_id"] = question["scenario_id"]
-    try:
-        model = question_adapter.validate_python(payload)
-        validate_scenario(connection, questionnaire_id, model)
-    except (ValidationError, HTTPException) as error:
-        raise HTTPException(
-            status_code=422,
-            detail="Questionnaire contains an invalid question or scenario",
-        ) from error
-    check_justifications(question, 422)
-    if question["type"] in {
-        "route_choice",
-        "route_drawing",
-    } and not valid_drawing_scenario(question["data"]):
-        raise HTTPException(status_code=422, detail="Scenario map is incomplete")
-    if question["type"] in {"route_choice", "route_drawing"}:
-        data = question["data"]
-        if data["map"].get("connectivity") not in (4, 8):
-            raise HTTPException(status_code=422, detail="Scenario map is incomplete")
-        if question["type"] == "route_choice" and not all(
-            validate_route(data[key], data)
-            for key in ("optimal_path", "alternative_path")
-        ):
-            raise HTTPException(status_code=422, detail="Scenario routes are invalid")
+class StepConfirmationInput(SubmissionInput):
+    value: Any = None
+    visible_duration_ms: int = Field(strict=True, ge=0)
 
 
 @router.post("/questionnaires/{questionnaire_id}/activate")
 def activate_questionnaire(questionnaire_id: int):
     with connect_database() as connection:
         require_draft(connection, questionnaire_id)
-        questions = read_questions(connection, questionnaire_id)
-        if not questions:
-            raise HTTPException(
-                status_code=422,
-                detail="Questionnaire must contain at least one question",
-            )
-        route_scenarios = [q["scenario_id"] for q in questions if q["type"] == "route_choice"]
-        if len(route_scenarios) != len(set(route_scenarios)):
-            raise HTTPException(status_code=422, detail="A scenario is used by more than one route choice question")
-        for question in questions:
-            check_question(connection, questionnaire_id, question)
+        require_protocol(read_questions(connection, questionnaire_id))
         token = secrets.token_urlsafe(32)
         connection.execute(
             "UPDATE questionnaires SET status = 'active', access_token = %s, group_secret = %s WHERE id = %s",
@@ -127,361 +58,186 @@ def close_questionnaire(questionnaire_id: int):
                 status_code=409, detail="Only active questionnaires can be closed"
             )
         return connection.execute(
-            "UPDATE questionnaires SET status = 'closed', closed_at = CURRENT_TIMESTAMP "
-            "WHERE id = %s RETURNING status, closed_at",
+            "UPDATE questionnaires SET status = 'closed', closed_at = CURRENT_TIMESTAMP WHERE id = %s RETURNING status, closed_at",
             (questionnaire_id,),
         ).fetchone()
 
 
-def active_questionnaire(connection, token, *, lock=False, allow_closed=False):
-    query = "SELECT id, title, description, group_secret, status FROM questionnaires WHERE access_token = %s AND status IN ('active', 'closed')"
-    if lock:
-        query += " FOR UPDATE"
+def active_questionnaire(connection, token):
     questionnaire = connection.execute(
-        query,
+        "SELECT id, title, description, protocol_version, group_secret, status FROM questionnaires WHERE access_token = %s AND status IN ('active', 'closed') FOR UPDATE",
         (token,),
     ).fetchone()
     if questionnaire is None:
         raise HTTPException(status_code=404, detail="Questionnaire not found")
-    if questionnaire["status"] == "closed" and not allow_closed:
-        raise HTTPException(status_code=410, detail="This questionnaire is closed")
     return questionnaire
 
 
-def check_justifications(question, status_code):
-    if question["scenario_id"] is None:
-        return
-    data = question["data"]
-    if not isinstance(data, dict) or any(
-        not isinstance(data.get(key), str) or not data[key].strip()
-        for key in ("cost_baseline_text", "explanation_text")
+def participation_record(connection, questionnaire, submission_key, *, create=False):
+    participation = connection.execute(
+        "SELECT id, study_group, current_step, completed_at FROM participations WHERE questionnaire_id = %s AND submission_key = %s FOR UPDATE",
+        (questionnaire["id"], submission_key),
+    ).fetchone()
+    if participation is None and create and questionnaire["status"] == "active":
+        digest = hmac.new(
+            questionnaire["group_secret"].encode(),
+            str(submission_key).encode(),
+            hashlib.sha256,
+        ).digest()
+        group = "experimental" if digest[0] & 1 else "control"
+        participation = connection.execute(
+            "INSERT INTO participations (questionnaire_id, submission_key, study_group) VALUES (%s, %s, %s) RETURNING id, study_group, current_step, completed_at",
+            (questionnaire["id"], submission_key, group),
+        ).fetchone()
+    if questionnaire["status"] == "closed" and (
+        participation is None or participation["completed_at"] is None
     ):
+        raise HTTPException(status_code=410, detail="This questionnaire is closed")
+    if participation is None:
         raise HTTPException(
-            status_code=status_code,
-            detail="Scenario is missing a required justification; generate a new scenario",
+            status_code=409, detail="Open this participation before confirming a step"
         )
+    return participation
 
 
-def assigned_group(connection, questionnaire, submission_key):
-    secret = questionnaire["group_secret"]
-    if not secret:
-        secret = secrets.token_hex(32)
-        connection.execute(
-            "UPDATE questionnaires SET group_secret = %s WHERE id = %s",
-            (secret, questionnaire["id"]),
-        )
-    digest = hmac.new(
-        secret.encode(), str(submission_key).encode(), hashlib.sha256
-    ).digest()
-    return "experimental" if digest[0] & 1 else "control"
-
-
-def route_order(submission_key: UUID, question_id: int) -> list[str]:
-    digest = hashlib.sha256(f"{submission_key}:{question_id}".encode()).digest()
-    if digest[0] & 1:
-        return ["alternative", "optimal"]
-    return ["optimal", "alternative"]
-
-
-def public_question(
-    question,
-    submission_key: UUID,
-    saved_order=None,
-    study_group=None,
-    confirmed_choice=None,
-    justification_ready=True,
-):
-    public = {key: question[key] for key in ("id", "prompt", "type", "configuration")}
-    if question["type"] == "route_choice":
-        public["confirmed_choice"] = confirmed_choice
-    if (
-        question["scenario_id"] is not None
-        and study_group is not None
-        and justification_ready
-    ):
-        field = "cost_baseline_text" if study_group == "control" else "explanation_text"
-        public["justification"] = question["data"][field]
-    if question["type"] in {"route_choice", "route_drawing"}:
-        data = question["data"]
-        grid = data["map"]
-        public["scenario"] = {
-            "map": grid,
-            "start": data["start"],
-            "goal": data["goal"],
-            "terrain_colors": resolve_scenario_terrain_colors(
-                question["scenario_configuration"]
-            ),
-            "appearance": resolve_map_appearance(grid["h"], grid["w"]),
-        }
-        if question["type"] == "route_choice":
-            paths = {
-                "optimal": data["optimal_path"],
-                "alternative": data["alternative_path"],
-            }
-            order = saved_order or route_order(submission_key, question["id"])
-            public["scenario"]["routes"] = [paths[name] for name in order]
-            if justification_ready:
-                public["scenario"]["route_order"] = order
-            if justification_ready and study_group == "experimental":
-                public["scenario"]["modifications"] = data.get("modifications")
-                public["scenario"]["show_explanation_map"] = True
-    return public
+def public_state(questionnaire, questions, participation, submission_key):
+    completed = participation["completed_at"] is not None
+    return {
+        "title": questionnaire["title"],
+        "description": questionnaire["description"],
+        "protocol_version": questionnaire["protocol_version"],
+        "submission_completed": completed,
+        "current_step": participation["current_step"],
+        "total_steps": len(study_steps(questions)),
+        "step": None
+        if completed
+        else serialize_step(
+            questions,
+            participation["current_step"],
+            submission_key,
+            participation["study_group"],
+        ),
+    }
 
 
 @public_router.get("/participate/{token}")
-def get_public_questionnaire(token: str, submission_key: UUID):
+def get_public_questionnaire(token: str, submission_key: UUID, response: Response):
+    response.headers["Cache-Control"] = "no-store"
     with connect_database() as connection:
-        questionnaire = active_questionnaire(connection, token, lock=True)
-        existing = connection.execute(
-            "SELECT id, study_group, completed_at FROM participations WHERE questionnaire_id = %s AND submission_key = %s",
-            (questionnaire["id"], submission_key),
-        ).fetchone()
-        saved_orders = {}
-        confirmed_choices = {}
-        questions = read_questions(connection, questionnaire["id"])
-        for question in questions:
-            check_justifications(question, 409)
-        study_group = (
-            existing["study_group"]
-            if existing
-            else assigned_group(connection, questionnaire, submission_key)
+        questionnaire = active_questionnaire(connection, token)
+        participation = participation_record(
+            connection, questionnaire, submission_key, create=True
         )
-        if existing and existing["completed_at"] is not None:
-            rows = connection.execute(
-                "SELECT question_id, value, route_order FROM answers WHERE participation_id = %s",
-                (existing["id"],),
-            ).fetchall()
-            saved_orders = {
-                row["question_id"]: row["route_order"] or ["optimal", "alternative"]
-                for row in rows
-            }
-            route_question_ids = {
-                q["id"] for q in questions if q["type"] == "route_choice"
-            }
-            confirmed_choices = {
-                row["question_id"]: row["value"]
-                for row in rows
-                if row["question_id"] in route_question_ids
-            }
-        else:
-            rows = connection.execute(
-                "SELECT rc.question_id, rc.choice, rc.route_order FROM route_confirmations rc "
-                "JOIN questions q ON q.id = rc.question_id WHERE q.questionnaire_id = %s AND rc.submission_key = %s",
-                (questionnaire["id"], submission_key),
-            ).fetchall()
-            confirmed_choices = {row["question_id"]: row["choice"] for row in rows}
-            saved_orders = {row["question_id"]: row["route_order"] for row in rows}
-        if existing is None:
-            connection.execute(
-                "INSERT INTO participations (questionnaire_id, submission_key, study_group, participation_started_at) VALUES (%s, %s, %s, CURRENT_TIMESTAMP)",
-                (questionnaire["id"], submission_key, study_group),
-            )
-        pending_scenarios = {q["scenario_id"] for q in questions if q["type"] == "route_choice" and q["id"] not in confirmed_choices}
-        return {
-            "title": questionnaire["title"],
-            "description": questionnaire["description"],
-            "submission_completed": existing is not None and existing["completed_at"] is not None,
-            "questions": [
-                public_question(
-                    q,
-                    submission_key,
-                    saved_orders.get(q["id"]),
-                    study_group,
-                    confirmed_choices.get(q["id"]),
-                    q["scenario_id"] not in pending_scenarios,
-                )
-                for q in questions
-            ],
-        }
+        questions = read_questions(connection, questionnaire["id"])
+        return public_state(questionnaire, questions, participation, submission_key)
 
 
-@public_router.post("/participate/{token}/questions/{question_id}/confirm")
-def confirm_route_choice(token: str, question_id: int, payload: RouteConfirmationInput):
-    with connect_database() as connection:
-        questionnaire = active_questionnaire(connection, token, lock=True)
-        question = connection.execute(
-            "SELECT id FROM questions WHERE id = %s AND questionnaire_id = %s AND type = 'route_choice'",
-            (question_id, questionnaire["id"]),
-        ).fetchone()
-        if question is None:
+def normalized_answer(kind, value):
+    if kind == "route_assessment":
+        try:
+            return RouteAssessment.model_validate(value).model_dump()
+        except ValidationError as error:
             raise HTTPException(
-                status_code=404, detail="Route choice question not found"
-            )
-        completed = connection.execute(
-            "SELECT a.value FROM answers a JOIN participations p ON p.id = a.participation_id "
-            "WHERE p.questionnaire_id = %s AND p.submission_key = %s AND a.question_id = %s",
-            (questionnaire["id"], payload.submission_key, question_id),
-        ).fetchone()
-        if completed is not None:
-            if completed["value"] != payload.choice:
-                raise HTTPException(
-                    status_code=409, detail="Route choice is already confirmed"
-                )
-            return {"choice": payload.choice}
-        existing = connection.execute(
-            "SELECT choice FROM route_confirmations WHERE question_id = %s AND submission_key = %s",
-            (question_id, payload.submission_key),
-        ).fetchone()
-        if existing is not None:
-            if existing["choice"] != payload.choice:
-                raise HTTPException(
-                    status_code=409, detail="Route choice is already confirmed"
-                )
-            return {"choice": payload.choice}
-        connection.execute(
-            "INSERT INTO route_confirmations (question_id, submission_key, choice, route_order, decision_visible_duration_ms) VALUES (%s, %s, %s, %s, %s)",
-            (
-                question_id,
-                payload.submission_key,
-                payload.choice,
-                Jsonb(route_order(payload.submission_key, question_id)),
-                payload.decision_visible_duration_ms,
-            ),
-        )
-        return {"choice": payload.choice}
+                status_code=422,
+                detail="Choose a route, enter confidence from 0 to 100, and provide a reason of up to 1000 characters",
+            ) from error
+    if kind == "likert" and type(value) is int and 1 <= value <= 5:
+        return value
+    if kind == "route_prediction" and type(value) is int and value in (0, 1):
+        return value
+    if kind == "explanation" and value is None:
+        return None
+    raise HTTPException(status_code=422, detail="Invalid answer for this step")
 
 
-def validate_route(value, data):
-    grid = data["map"]
-    height, width, connectivity = grid["h"], grid["w"], grid["connectivity"]
-    if not isinstance(value, list) or not value:
-        return False
-    if any(
-        not isinstance(p, list)
-        or len(p) != 2
-        or any(type(n) is not int for n in p)
-        or not (0 <= p[0] < height and 0 <= p[1] < width)
-        for p in value
-    ):
-        return False
-    if (
-        value[0] != data["start"]
-        or value[-1] != data["goal"]
-        or len({tuple(p) for p in value}) != len(value)
-    ):
-        return False
-    for first, second in pairwise(value):
-        dr, dc = abs(first[0] - second[0]), abs(first[1] - second[1])
-        if max(dr, dc) != 1 or (connectivity == 4 and dr + dc != 1):
-            return False
-    return connectivity in (4, 8)
-
-
-def validate_answer(question, value):
-    kind, config = question["type"], question["configuration"]
-    if kind == "text":
-        return isinstance(value, str) and bool(value.strip()) and len(value.strip()) <= 1000
-    if kind == "choice":
-        return type(value) is int and 0 <= value < len(config.get("options", []))
-    if kind == "likert":
-        return type(value) is int and config.get("min", 1) <= value <= config.get("max", 5)
-    if kind == "numeric":
-        return (
-            type(value) in (float, int)
-            and math.isfinite(value)
-            and 0 <= value <= 100
-        )
-    if kind == "route_choice":
-        return type(value) is int and value in (0, 1)
-    if kind == "route_drawing":
-        return validate_route(value, question["data"])
-    return False
-
-
-def same_value(first, second):
-    if isinstance(first, list) and isinstance(second, list):
-        return len(first) == len(second) and all(
-            same_value(a, b) for a, b in zip(first, second, strict=True)
-        )
-    if type(first) in (int, float) and type(second) in (int, float):
-        return first == second
-    return type(first) is type(second) and first == second
-
-
-@public_router.post("/participate/{token}/submit", status_code=status.HTTP_201_CREATED)
-def submit_answers(token: str, payload: SubmissionInput):
+@public_router.post("/participate/{token}/steps/{step}/confirm")
+def confirm_step(
+    token: str,
+    step: Annotated[int, Path(ge=0, le=16)],
+    payload: StepConfirmationInput,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
     with connect_database() as connection:
-        questionnaire = active_questionnaire(
-            connection, token, lock=True, allow_closed=True
+        questionnaire = active_questionnaire(connection, token)
+        participation = participation_record(
+            connection, questionnaire, payload.submission_key
         )
-        existing = connection.execute(
-            "SELECT id, completed_at FROM participations WHERE questionnaire_id = %s AND submission_key = %s",
-            (questionnaire["id"], payload.submission_key),
-        ).fetchone()
         questions = read_questions(connection, questionnaire["id"])
-        answers = {answer.question_id: answer.value for answer in payload.answers}
-        if existing and existing["completed_at"] is not None:
-            rows = connection.execute(
-                "SELECT question_id, value FROM answers WHERE participation_id = %s",
-                (existing["id"],),
-            ).fetchall()
-            saved = {row["question_id"]: row["value"] for row in rows}
+        steps = study_steps(questions)
+        kind, question = steps[step]
+        value = normalized_answer(kind, payload.value)
+        if step > participation["current_step"]:
+            raise HTTPException(
+                status_code=409, detail="Complete the current step before continuing"
+            )
+        if step < participation["current_step"]:
+            saved = connection.execute(
+                "SELECT value, explanation_completed_at FROM answers WHERE participation_id = %s AND question_id = %s",
+                (participation["id"], question["id"]),
+            ).fetchone()
             if (
-                len(answers) != len(payload.answers)
-                or saved.keys() != answers.keys()
-                or not all(same_value(saved[key], answers[key]) for key in saved)
+                saved is None
+                or (kind == "explanation" and saved["explanation_completed_at"] is None)
+                or (kind != "explanation" and saved["value"] != value)
             ):
                 raise HTTPException(
                     status_code=409,
-                    detail="This submission was already completed with different answers",
+                    detail="This step was already confirmed with a different answer",
                 )
-            return {"status": "completed", "participation_id": existing["id"]}
-        if questionnaire["status"] == "closed":
-            raise HTTPException(status_code=410, detail="This questionnaire is closed")
-        if len(answers) != len(payload.answers) or set(answers) != {
-            q["id"] for q in questions
-        }:
-            raise HTTPException(
-                status_code=422, detail="Every question must have exactly one answer"
+            return public_state(
+                questionnaire, questions, participation, payload.submission_key
             )
-        rows = connection.execute(
-            "SELECT rc.question_id, rc.choice, rc.route_order, rc.decision_visible_duration_ms FROM route_confirmations rc "
-            "JOIN questions q ON q.id = rc.question_id WHERE q.questionnaire_id = %s AND rc.submission_key = %s",
-            (questionnaire["id"], payload.submission_key),
-        ).fetchall()
-        confirmations = {row["question_id"]: row for row in rows}
-        for question in questions:
-            check_justifications(question, 409)
-            if not validate_answer(question, answers[question["id"]]):
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Invalid answer for question {question['id']}",
-                )
-            if question["type"] == "route_choice":
-                confirmation = confirmations.get(question["id"])
-                if (
-                    confirmation is None
-                    or confirmation["choice"] != answers[question["id"]]
-                ):
-                    raise HTTPException(
-                        status_code=409,
-                        detail=f"Confirm the route choice for question {question['id']}",
-                    )
-        if existing:
-            participation = connection.execute(
-                "UPDATE participations SET completed_at = CURRENT_TIMESTAMP WHERE id = %s RETURNING id",
-                (existing["id"],),
-            ).fetchone()
-        else:
-            participation = connection.execute(
-                "INSERT INTO participations (questionnaire_id, submission_key, completed_at, study_group) VALUES (%s, %s, CURRENT_TIMESTAMP, %s) RETURNING id",
-                (questionnaire["id"], payload.submission_key, assigned_group(connection, questionnaire, payload.submission_key)),
-            ).fetchone()
-        durations = {answer.question_id: answer.visible_duration_ms for answer in payload.answers}
-        explanation_durations = {answer.question_id: answer.explanation_visible_duration_ms for answer in payload.answers}
-        for question in questions:
+        if kind == "explanation":
             connection.execute(
-                "INSERT INTO answers (participation_id, question_id, value, route_order, visible_duration_ms, decision_visible_duration_ms, explanation_visible_duration_ms) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                "UPDATE answers SET explanation_visible_duration_ms = %s, visible_duration_ms = visible_duration_ms + %s, explanation_completed_at = CURRENT_TIMESTAMP WHERE participation_id = %s AND question_id = %s",
+                (
+                    payload.visible_duration_ms,
+                    payload.visible_duration_ms,
+                    participation["id"],
+                    question["id"],
+                ),
+            )
+        else:
+            is_route = kind in {"route_assessment", "route_prediction"}
+            connection.execute(
+                "INSERT INTO answers (participation_id, question_id, value, route_order, visible_duration_ms, decision_visible_duration_ms) VALUES (%s, %s, %s, %s, %s, %s)",
                 (
                     participation["id"],
                     question["id"],
-                    Jsonb(answers[question["id"]]),
-                    Jsonb(confirmations[question["id"]]["route_order"])
-                    if question["type"] == "route_choice"
+                    Jsonb(value),
+                    Jsonb(route_order(payload.submission_key, question["id"]))
+                    if is_route
                     else None,
-                    durations[question["id"]],
-                    confirmations[question["id"]]["decision_visible_duration_ms"] if question["type"] == "route_choice" else None,
-                    explanation_durations[question["id"]],
+                    payload.visible_duration_ms,
+                    payload.visible_duration_ms if is_route else None,
                 ),
             )
+        participation["current_step"] += 1
+        connection.execute(
+            "UPDATE participations SET current_step = %s WHERE id = %s",
+            (participation["current_step"], participation["id"]),
+        )
+        return public_state(
+            questionnaire, questions, participation, payload.submission_key
+        )
+
+
+@public_router.post("/participate/{token}/submit")
+def submit_answers(token: str, payload: SubmissionInput):
+    with connect_database() as connection:
+        questionnaire = active_questionnaire(connection, token)
+        participation = participation_record(
+            connection, questionnaire, payload.submission_key
+        )
+        if participation["completed_at"] is not None:
+            return {"status": "completed", "participation_id": participation["id"]}
+        if participation["current_step"] != 17:
+            raise HTTPException(
+                status_code=409, detail="Complete every step before submitting"
+            )
+        connection.execute(
+            "UPDATE participations SET completed_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (participation["id"],),
+        )
         return {"status": "completed", "participation_id": participation["id"]}

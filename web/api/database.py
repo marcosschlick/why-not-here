@@ -23,7 +23,12 @@ def initialize_database() -> None:
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             title TEXT NOT NULL,
             description TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'closed')),
+            protocol_version TEXT NOT NULL DEFAULT 'route-study-v1',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            closed_at TIMESTAMPTZ,
+            access_token TEXT UNIQUE,
+            group_secret TEXT
         )
         """,
         """
@@ -31,22 +36,32 @@ def initialize_database() -> None:
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             questionnaire_id BIGINT NOT NULL REFERENCES questionnaires(id),
             title TEXT NOT NULL,
-            configuration JSONB NOT NULL DEFAULT '{}'::jsonb
+            configuration JSONB NOT NULL,
+            data JSONB NOT NULL
         )
         """,
         """
         CREATE TABLE IF NOT EXISTS questions (
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            scenario_id BIGINT NOT NULL REFERENCES scenarios(id),
-            prompt TEXT NOT NULL
+            questionnaire_id BIGINT NOT NULL REFERENCES questionnaires(id),
+            scenario_id BIGINT REFERENCES scenarios(id),
+            prompt TEXT NOT NULL,
+            type TEXT NOT NULL CHECK (type IN ('route_assessment', 'likert', 'route_prediction')),
+            configuration JSONB NOT NULL,
+            position INTEGER NOT NULL,
+            UNIQUE (questionnaire_id, position)
         )
         """,
         """
         CREATE TABLE IF NOT EXISTS participations (
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             questionnaire_id BIGINT NOT NULL REFERENCES questionnaires(id),
+            submission_key UUID NOT NULL,
+            study_group TEXT NOT NULL CHECK (study_group IN ('control', 'experimental')),
+            current_step SMALLINT NOT NULL DEFAULT 0 CHECK (current_step BETWEEN 0 AND 17),
             started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            completed_at TIMESTAMPTZ
+            completed_at TIMESTAMPTZ,
+            UNIQUE (questionnaire_id, submission_key)
         )
         """,
         """
@@ -55,56 +70,21 @@ def initialize_database() -> None:
             participation_id BIGINT NOT NULL REFERENCES participations(id),
             question_id BIGINT NOT NULL REFERENCES questions(id),
             value JSONB NOT NULL,
+            route_order JSONB,
+            confirmed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            explanation_completed_at TIMESTAMPTZ,
+            visible_duration_ms BIGINT NOT NULL CHECK (visible_duration_ms >= 0),
+            decision_visible_duration_ms BIGINT CHECK (decision_visible_duration_ms >= 0),
+            explanation_visible_duration_ms BIGINT CHECK (explanation_visible_duration_ms >= 0),
             UNIQUE (participation_id, question_id)
         )
         """,
-        """
-        CREATE TABLE IF NOT EXISTS route_confirmations (
-            question_id BIGINT NOT NULL REFERENCES questions(id),
-            submission_key UUID NOT NULL,
-            choice SMALLINT NOT NULL CHECK (choice IN (0, 1)),
-            route_order JSONB NOT NULL,
-            PRIMARY KEY (question_id, submission_key)
-        )
-        """,
-        "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'draft'",
-        "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ",
-        "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS access_token TEXT UNIQUE",
-        "ALTER TABLE questionnaires ADD COLUMN IF NOT EXISTS group_secret TEXT",
-        "ALTER TABLE participations ADD COLUMN IF NOT EXISTS submission_key UUID",
-        "ALTER TABLE participations ADD COLUMN IF NOT EXISTS study_group TEXT",
-        "ALTER TABLE participations ADD COLUMN IF NOT EXISTS participation_started_at TIMESTAMPTZ",
-        "ALTER TABLE answers ADD COLUMN IF NOT EXISTS route_order JSONB",
-        "ALTER TABLE answers ADD COLUMN IF NOT EXISTS visible_duration_ms BIGINT",
-        "ALTER TABLE answers ADD COLUMN IF NOT EXISTS explanation_visible_duration_ms BIGINT",
-        "ALTER TABLE route_confirmations ADD COLUMN IF NOT EXISTS decision_visible_duration_ms BIGINT",
-        "ALTER TABLE answers ADD COLUMN IF NOT EXISTS decision_visible_duration_ms BIGINT",
-        "CREATE UNIQUE INDEX IF NOT EXISTS participations_submission_key_idx ON participations (questionnaire_id, submission_key) WHERE submission_key IS NOT NULL",
-        "ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT '{}'::jsonb",
-        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS questionnaire_id BIGINT REFERENCES questionnaires(id)",
-        "ALTER TABLE questions ALTER COLUMN scenario_id DROP NOT NULL",
-        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'text'",
-        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS configuration JSONB NOT NULL DEFAULT '{}'::jsonb",
-        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS position INTEGER",
-        """
-        WITH ordered AS (
-            SELECT id, COALESCE((SELECT MAX(q.position) FROM questions q
-                WHERE q.questionnaire_id = questions.questionnaire_id), 0)
-                + ROW_NUMBER() OVER (PARTITION BY questionnaire_id ORDER BY id) AS new_position
-            FROM questions WHERE position IS NULL
-        )
-        UPDATE questions SET position = ordered.new_position FROM ordered WHERE questions.id = ordered.id
-        """,
-        "ALTER TABLE questions ALTER COLUMN position SET NOT NULL",
-        """
-        UPDATE questions SET questionnaire_id = scenarios.questionnaire_id
-        FROM scenarios
-        WHERE questions.scenario_id = scenarios.id AND questions.questionnaire_id IS NULL
-        """,
-        "ALTER TABLE questions ALTER COLUMN questionnaire_id SET NOT NULL",
     )
     try:
         with connect_database() as connection:
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtext('why-not-here-schema'))"
+            )
             for statement in statements:
                 connection.execute(statement)
     except (KeyError, psycopg.Error) as error:

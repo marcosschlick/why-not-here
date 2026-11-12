@@ -63,53 +63,35 @@ export ADMIN_EXPORT_KEY=your_export_key
 database and user must already exist. The API creates its tables on startup
 and does not start if database initialization fails.
 
-Questionnaire draft and question endpoints, including their request formats,
-are available in the API documentation at `http://localhost:8000/docs`.
-Questions of type `route_choice` or `route_drawing` require a `scenario_id`
-belonging to the same questionnaire. Route choice uses the scenario's optimal
-and alternative paths; route drawing uses its map and endpoints.
-Create draft scenarios using the simulation configuration, route and results screens.
-The results screen saves successful calculations through
-`POST /api/questionnaires/{id}/scenarios`; scenario list and detail endpoints
-return the saved map, routes and results.
-In the scenario batch queue, add individual configurations or batches with
-different settings before reviewing routes and processing them. Successful
-scenarios can be saved together; retrying a partial save skips scenarios already
-saved. Draft scenarios can be renamed through
-`PATCH /api/questionnaires/{id}/scenarios/{scenario_id}` with a `title` field;
-renaming preserves their configurations, maps and question associations.
-Use **Questionnaires** in the application navigation to administer drafts and
-preview their saved questions and scenarios for either group without saving answers. The API saves question ordering via
-`PUT /api/questionnaires/{id}/questions/order`, with a `question_ids` array
-containing every question in the desired order.
-Activate a draft in the administration screen to lock it and obtain a
-participant link. Participants answer all questions without an account and
-submit their responses together; refreshing before submission resets the form.
-The API exposes `POST /api/questionnaires/{id}/activate`,
-`GET /api/participate/{token}`, and `POST /api/participate/{token}/submit`.
-The participant GET requires the `submission_key` UUID query parameter. It
-determines a stable randomized route order for each question and attempt. New
-route-choice answers store their displayed order in `answers.route_order`;
-older answers have a null order and used optimal followed by alternative.
-Before revealing a scenario justification, the participant must confirm every
-route-choice question linked to that scenario using
-`POST /api/participate/{token}/questions/{question_id}/confirm` with
-`submission_key` and the selected `choice` (0 or 1). The confirmation and route
-order persist across reloads; changing a confirmed choice returns a conflict.
-The final submission must contain the confirmed choice. Repeating a completed
-submission with different answers returns a conflict.
+Use **Questionnaires** to create a draft and generate scenarios through the
+existing simulation, route and results screens. Individual and batch generation,
+scenario naming and saved maps/routes remain available. Select three scenarios
+for explanations and three different scenarios for prediction, then save the
+protocol. The application generates all questions automatically. Preview either
+group before activating the draft and sharing its participant link.
 
-Each new participation is assigned to either the control group (cost baseline)
-or experimental group (contrastive explanation). The assignment remains stable
-for the same attempt and is saved on submission. Older participations have no
-group. Each scenario referenced by a question must contain both justifications.
+The fixed protocol collects a route choice, confidence (0 to 100), and a written
+reason before each of three explanations. The control group receives the cost
+justification; the experimental group receives the textual and visual contrastive
+explanation. Eight adapted ESS items follow, then three new route predictions
+without costs, explanations or correctness feedback.
 
-Set `ADMIN_EXPORT_KEY` to enable results export, and enter the same key in the
-administration screen to download the questionnaire results as JSON. The API
-also supports `GET /api/questionnaires/{id}/export` with the `X-Export-Key`
-header. Exports include completed participations, questions, scenarios, answers,
-groups, and route ordering; they exclude access tokens and submission keys.
-The export key does not protect other administrative routes.
+Confirmed answers are saved at each step. Reloading the same participation in the
+same browser tab resumes its server-controlled step; confirmed steps cannot be
+revisited. Group assignment and A/B route order stay stable for that attempt.
+After all steps, participants submit to mark the participation complete.
+
+Set `ADMIN_EXPORT_KEY` to enable protected JSON export using the administration
+screen or `GET /api/questionnaires/{id}/export` with the `X-Export-Key` header.
+Exports contain completed participations, groups, answers, route orders, timing,
+scenario data and protocol/instrument metadata. Tokens and submission keys are
+excluded. The export key does not protect other administrative endpoints.
+
+The questionnaire schema requires an empty database. There is no migration or
+compatibility with the previous manual-question format, and startup does not
+erase or convert existing data. See [Questionnaire protocol](docs/questionnaire.md)
+for the endpoints, instrument adaptation and timing definitions. Request schemas
+are also available at `http://localhost:8000/docs`.
 
 ```bash
 # Terminal 1: Local backend API (port 8000)

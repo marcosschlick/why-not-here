@@ -49,7 +49,9 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  transition: opacity var(--duration-fast) var(--ease-out), transform var(--duration-normal) var(--ease-out);
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    transform var(--duration-normal) var(--ease-out);
 }
 .qa-layout-collapsed .qa-sidebar-content {
   opacity: 0;
@@ -315,15 +317,6 @@
   gap: 0.8rem;
   width: 100%;
 }
-.qa-questions {
-  list-style: none;
-  padding: 0;
-  display: grid;
-  gap: 0.6rem;
-}
-.qa-question-panel {
-  overflow-anchor: none;
-}
 .qa-app button[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.5;
@@ -366,32 +359,6 @@
   margin-top: 0.75rem;
   color: var(--text-danger);
 }
-.qa-questions li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 0.8rem;
-}
-.qa-questions li > div:first-child {
-  min-width: 0;
-}
-.qa-questions strong {
-  overflow-wrap: anywhere;
-}
-.qa-questions small {
-  display: block;
-  padding-left: 2.3rem;
-  color: var(--text-muted);
-}
-.qa-question-number {
-  display: inline-block;
-  width: 2.3rem;
-  color: var(--text-structural);
-  font-weight: 700;
-}
 .qa-actions {
   display: flex;
   flex-wrap: wrap;
@@ -400,10 +367,6 @@
 .qa-actions button {
   padding: 0.45rem 0.65rem;
   font-size: 0.8rem;
-}
-.qa-question-form {
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 1.2rem;
 }
 .qa-empty,
 .qa-notice {
@@ -451,13 +414,6 @@
 .qa-app .scenario-map-view .btn-zoom:hover:not(:disabled) {
   background: var(--surface-selected);
 }
-.qa-preview-question {
-  padding: 1.4rem 0;
-  border-top: 1px solid var(--border-subtle);
-}
-.qa-preview-question h3 {
-  margin: 0.6rem 0;
-}
 @media (max-width: 760px) {
   .qa-header {
     align-items: flex-start;
@@ -480,16 +436,14 @@
   .qa-app .qa-sidebar-toggle {
     top: 0.75rem;
   }
-  .qa-questions li {
-    align-items: flex-start;
-    flex-direction: column;
-  }
   .qa-heading {
     flex-wrap: wrap;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .qa-layout, .qa-sidebar, .qa-sidebar-content {
+  .qa-layout,
+  .qa-sidebar,
+  .qa-sidebar-content {
     transition: none;
   }
 }
@@ -511,11 +465,6 @@
 .qa-participant-form {
   display: grid;
   gap: 1.2rem;
-}
-.qa-question-navigation {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
 }
 .qa-route-options {
   display: grid;
@@ -569,10 +518,6 @@
   outline: 3px solid var(--yale-blue);
   outline-offset: 2px;
 }
-.qa-direction-controls button {
-  min-width: 44px;
-  min-height: 44px;
-}
 
 .qa-text-response {
   display: grid;
@@ -583,20 +528,6 @@
   font-size: 0.78rem;
   color: var(--text-muted);
   justify-self: end;
-}
-
-.qa-likert-info {
-  display: grid;
-  gap: 0.35rem;
-}
-
-.qa-likert-labels {
-  margin: 0;
-  padding-left: 1.25rem;
-  font-size: 0.85rem;
-  color: var(--text-structural);
-  display: grid;
-  gap: 0.2rem;
 }
 
 .qa-likert-group {
@@ -618,4 +549,59 @@
   background: var(--lobster-pink);
   color: var(--bright-snow);
   border-color: var(--lobster-pink);
+}
+
+.qa-protocol-form,
+.qa-protocol-form fieldset {
+  width: 100%;
+}
+.qa-protocol-form legend {
+  font-size: 1rem;
+  font-weight: 650;
+}
+.qa-assessment-fields {
+  width: 100%;
+  max-width: 44rem;
+  margin-bottom: 1.5rem;
+}
+.qa-assessment-fields p {
+  margin: 0;
+}
+.qa-instrument-details {
+  margin-top: 1rem;
+  line-height: 1.6;
+}
+.qa-instrument-details summary {
+  cursor: pointer;
+  color: var(--text-structural);
+  font-weight: 650;
+}
+.qa-participant h2:focus {
+  outline: none;
+}
+.qa-field-error {
+  color: var(--text-danger);
+  font-size: 0.88rem;
+}
+@media (hover: hover) and (pointer: fine) {
+  .qa-participant button {
+    transition: transform var(--duration-press) var(--ease-out);
+  }
+  .qa-participant button:active:not(:disabled):not(:focus-visible) {
+    transform: scale(0.98);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qa-participant button {
+    transition: none;
+  }
+  .qa-participant button:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+.qa-preview > label {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
 }

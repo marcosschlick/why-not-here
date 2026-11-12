@@ -7,12 +7,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.grid import Grid
 from src.visual.appearance import resolve_map_appearance
 from web.api.database import connect_database
-from web.api.participation import resolve_scenario_terrain_colors, validate_route
 from web.api.questionnaires import (
     NonEmptyText,
     get_questionnaire,
     require_draft,
-    valid_drawing_scenario,
+)
+from web.api.study_protocol import (
+    resolve_scenario_terrain_colors,
+    valid_scenario_map,
+    validate_route,
 )
 
 router = APIRouter(prefix="/api/questionnaires", tags=["scenarios"])
@@ -50,7 +53,9 @@ class ScenarioDetails(ScenarioSummary):
 
 
 def add_appearance(scenario):
-    scenario["terrain_colors"] = resolve_scenario_terrain_colors(scenario["configuration"])
+    scenario["terrain_colors"] = resolve_scenario_terrain_colors(
+        scenario["configuration"]
+    )
     grid = scenario["data"].get("map")
     if (
         isinstance(grid, dict)
@@ -75,7 +80,7 @@ def create_scenario(questionnaire_id: int, payload: ScenarioInput):
     try:
         Grid.from_dict(data["map"])
         valid = (
-            valid_drawing_scenario(data)
+            valid_scenario_map(data)
             and all(
                 validate_route(data[key], data)
                 for key in ("optimal_path", "alternative_path")

@@ -32,7 +32,9 @@ export default defineConfig({
               path === "/docs" ||
               path === "/openapi.json" ||
               path === "/redoc") &&
-            !/^\/api\/participate\/[^/]+(?:\/submit|\/questions\/\d+\/confirm)?$/.test(path)
+            !/^\/api\/participate\/[^/]+(?:\/submit|\/steps\/\d+\/confirm)?$/.test(
+              path,
+            )
           ) {
             response.statusCode = 404;
             response.end("Not Found");
@@ -48,7 +50,7 @@ export default defineConfig({
     allowedHosts: publicOnly && publicHost ? [publicHost] : [],
     proxy: publicOnly
       ? {
-          "/api/participate": backendUrl,
+          "/api/participate": { target: backendUrl, changeOrigin: false },
         }
       : {
           "/api": backendUrl,

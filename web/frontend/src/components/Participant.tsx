@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { RouteCanvas } from "./RouteCanvas";
-import { ScenarioMapView } from "./ScenarioMapView";
 import type {
   MapAppearance,
   MapData,
   SemanticModificationsData,
 } from "../types";
-import { validateDrawingRoute } from "../utils/validateRoute";
+import { ScenarioMapView } from "./ScenarioMapView";
 import "./questionnaire-admin.css";
 
 type Point = [number, number];
@@ -17,39 +15,55 @@ type Scenario = {
   goal: Point;
   terrain_colors: Record<string, string>;
   appearance: MapAppearance;
-  routes?: Point[][];
+  routes: Point[][];
   route_order?: ("optimal" | "alternative")[];
   modifications?: SemanticModificationsData | null;
   show_explanation_map?: boolean;
 };
-export type ParticipantQuestion = {
-  id: number;
+type StudyStep = {
+  index: number;
+  type: "route_assessment" | "explanation" | "likert" | "route_prediction";
+  question_id: number;
   prompt: string;
-  type:
-    "text" | "choice" | "likert" | "numeric" | "route_choice" | "route_drawing";
-  configuration: { options?: string[]; min?: number; max?: number };
+  scenario_number?: number;
   scenario?: Scenario;
   justification?: string;
-  preview_route_id?: number;
-  confirmed_choice?: number | null;
+  instrument?: string;
+  source?: string;
+  item_number?: number;
 };
-export type ParticipantQuestionnaire = {
+type Study = {
   title: string;
   description: string | null;
   submission_completed: boolean;
-  questions: ParticipantQuestion[];
+  current_step: number;
+  total_steps: number;
+  step: StudyStep | null;
 };
-type Answer = string | number | Point[];
-
-const LIKERT_OPTIONS = [
-  { value: 1, label: "Strongly disagree" },
-  { value: 2, label: "Somewhat disagree" },
-  { value: 3, label: "Neither agree nor disagree" },
-  { value: 4, label: "Somewhat agree" },
-  { value: 5, label: "Strongly agree" },
+type Preview = {
+  questionnaireId: number;
+  group: "control" | "experimental";
+  submissionKey: string;
+};
+const LIKERT_LABELS = [
+  "Strongly disagree",
+  "Somewhat disagree",
+  "Neither agree nor disagree",
+  "Somewhat agree",
+  "Strongly agree",
 ];
 
-function toMap(scenario: Scenario): MapData {
+function attemptKey() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function scenarioMap(scenario: Scenario): MapData {
   return {
     ...scenario.map,
     start: scenario.start,
@@ -63,123 +77,51 @@ function toMap(scenario: Scenario): MapData {
   } as unknown as MapData;
 }
 
-function RouteOption({
-  scenario,
-  path,
-}: {
-  scenario: Scenario;
-  path: Point[];
-}) {
-  const map = useMemo(() => toMap(scenario), [scenario]);
-  return (
-    <ScenarioMapView
-      mapData={map}
-      userPath={path}
-      alternativePathLabel="Route"
-    />
-  );
+async function readResponse<T>(response: Response): Promise<T> {
+  const body = await response.json().catch(() => null);
+  if (!response.ok)
+    throw new Error(
+      typeof body?.detail === "string"
+        ? body.detail
+        : "Unable to load or save this step. Please try again.",
+    );
+  return body as T;
 }
 
-function DrawingAnswer({
+function RouteOptions({
   scenario,
-  value,
+  choice,
   onChange,
+  disabled,
 }: {
   scenario: Scenario;
-  value: Point[];
-  onChange: (value: Point[]) => void;
+  choice: number | null;
+  onChange: (choice: number) => void;
+  disabled: boolean;
 }) {
-  const map = useMemo(() => toMap(scenario), [scenario]);
-  const last = value[value.length - 1] || scenario.start;
-  function step(dr: number, dc: number) {
-    const next: Point = [last[0] + dr, last[1] + dc];
-    if (
-      next[0] < 0 ||
-      next[1] < 0 ||
-      next[0] >= map.h ||
-      next[1] >= map.w ||
-      value.some((p) => p[0] === next[0] && p[1] === next[1])
-    )
-      return;
-    if (last[0] === scenario.goal[0] && last[1] === scenario.goal[1]) return;
-    onChange([...value, next]);
-  }
+  const map = useMemo(() => scenarioMap(scenario), [scenario]);
   return (
-    <div>
-      <RouteCanvas
-        mapData={map}
-        userPath={value}
-        onPathChange={onChange}
-        onSolve={() => {}}
-        isSolving={false}
-        participantMode
-      />
-      <div
-        className="qa-actions qa-direction-controls"
-        role="group"
-        aria-label="Move route endpoint"
-      >
-        <button type="button" aria-label="Move up" onClick={() => step(-1, 0)}>
-          ↑
-        </button>
-        <button
-          type="button"
-          aria-label="Move left"
-          onClick={() => step(0, -1)}
-        >
-          ←
-        </button>
-        <button
-          type="button"
-          aria-label="Move right"
-          onClick={() => step(0, 1)}
-        >
-          →
-        </button>
-        <button type="button" aria-label="Move down" onClick={() => step(1, 0)}>
-          ↓
-        </button>
-        {map.connectivity === 8 && (
-          <>
-            <button
-              type="button"
-              aria-label="Move up and left"
-              onClick={() => step(-1, -1)}
-            >
-              ↖
-            </button>
-            <button
-              type="button"
-              aria-label="Move up and right"
-              onClick={() => step(-1, 1)}
-            >
-              ↗
-            </button>
-            <button
-              type="button"
-              aria-label="Move down and left"
-              onClick={() => step(1, -1)}
-            >
-              ↙
-            </button>
-            <button
-              type="button"
-              aria-label="Move down and right"
-              onClick={() => step(1, 1)}
-            >
-              ↘
-            </button>
-          </>
-        )}
-        <button
-          type="button"
-          onClick={() =>
-            onChange(value.length > 1 ? value.slice(0, -1) : value)
-          }
-        >
-          Remove last point
-        </button>
-      </div>
+    <div className="qa-route-options">
+      {scenario.routes.map((path, index) => (
+        <div className="qa-route-option" key={index}>
+          <label className="qa-option">
+            <input
+              type="radio"
+              name="route-choice"
+              checked={choice === index}
+              onChange={() => onChange(index)}
+              disabled={disabled}
+              required
+            />
+            Route {index === 0 ? "A" : "B"}
+          </label>
+          <ScenarioMapView
+            mapData={map}
+            userPath={path}
+            alternativePathLabel="Route"
+          />
+        </div>
+      ))}
     </div>
   );
 }
@@ -189,84 +131,79 @@ export function Participant({
   preview,
 }: {
   token?: string;
-  preview?: ParticipantQuestionnaire;
+  preview?: Preview;
 }) {
-  const [questionnaire, setQuestionnaire] =
-    useState<ParticipantQuestionnaire | null>(preview ?? null);
-  const [answers, setAnswers] = useState<Record<number, Answer>>({});
-  const [questionIndex, setQuestionIndex] = useState(0);
-  const durations = useRef<Record<number, number>>({});
-  const decisionDurations = useRef<Record<number, number>>({});
-  const explanationDurations = useRef<Record<number, number>>({});
-  const timingStart = useRef<number | null>(null);
-  const [error, setError] = useState("");
-  const [conflict, setConflict] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState<number | null>(null);
-  const errorRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (error) errorRef.current?.focus();
-  }, [error]);
-  const [completed, setCompleted] = useState(false);
-  const [closed, setClosed] = useState(false);
   const [submissionKey] = useState(() => {
-    if (preview) return "";
+    if (preview) return preview.submissionKey;
     const key = `participation:${token}`;
-    let value = sessionStorage.getItem(key);
-    if (!value) {
-      const bytes = crypto.getRandomValues(new Uint8Array(16));
-      bytes[6] = (bytes[6] & 15) | 64;
-      bytes[8] = (bytes[8] & 63) | 128;
-      const hex = Array.from(bytes, (byte) =>
-        byte.toString(16).padStart(2, "0"),
-      ).join("");
-      value = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-      sessionStorage.setItem(key, value);
-    }
-    return value;
+    const saved = sessionStorage.getItem(key) || attemptKey();
+    sessionStorage.setItem(key, saved);
+    return saved;
   });
-  const timingKey = `participation-timing:${token}:${submissionKey}`;
+  const [study, setStudy] = useState<Study | null>(null);
+  const [choice, setChoice] = useState<number | null>(null);
+  const [confidence, setConfidence] = useState("");
+  const [reason, setReason] = useState("");
+  const [rating, setRating] = useState<number | null>(null);
+  const [attempted, setAttempted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [closed, setClosed] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const elapsed = useRef(0);
+  const timer = useRef<number | null>(null);
+  const step = study?.step;
+  const timingKey = `participation-timing:${token}:${submissionKey}:${study?.current_step ?? 0}`;
+  const previewId = preview?.questionnaireId;
+  const previewGroup = preview?.group;
+  const load = useCallback(
+    async (index = 0) => {
+      const path =
+        previewId != null
+          ? `/api/questionnaires/${previewId}/preview?group=${previewGroup}&step=${index}&submission_key=${submissionKey}`
+          : `/api/participate/${encodeURIComponent(token)}?submission_key=${submissionKey}`;
+      const response = await fetch(path, { cache: "no-store" });
+      return readResponse<Study>(response);
+    },
+    [previewId, previewGroup, submissionKey, token],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((data) => {
+        if (!cancelled) setStudy(data);
+      })
+      .catch((failure: Error) => {
+        if (!cancelled) setError(failure.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
   const stopTiming = useCallback(() => {
-    const question = questionnaire?.questions[questionIndex];
-    if (question && timingStart.current !== null) {
-      const elapsed = performance.now() - timingStart.current;
-      durations.current[question.id] =
-        (durations.current[question.id] || 0) + elapsed;
-      if (question.type === "route_choice" && question.confirmed_choice == null)
-        decisionDurations.current[question.id] = (decisionDurations.current[question.id] || 0) + elapsed;
-      const previewPending = question.preview_route_id != null && !questionnaire?.questions.some((item) => item.id === question.preview_route_id && item.confirmed_choice != null);
-      if (question.justification && !previewPending)
-        explanationDurations.current[question.id] = (explanationDurations.current[question.id] || 0) + elapsed;
-      timingStart.current = null;
-      if (!preview)
-        sessionStorage.setItem(timingKey, JSON.stringify({ questions: durations.current, decisions: decisionDurations.current, explanations: explanationDurations.current }));
+    if (timer.current !== null) {
+      elapsed.current += performance.now() - timer.current;
+      timer.current = null;
+      if (previewId == null)
+        sessionStorage.setItem(timingKey, String(elapsed.current));
     }
-  }, [questionnaire, questionIndex, preview, timingKey]);
+  }, [previewId, timingKey]);
+
   useEffect(() => {
-    if (preview) return;
-    try {
-      const stored = JSON.parse(sessionStorage.getItem(timingKey) || "{}");
-      durations.current = stored.questions || stored;
-      decisionDurations.current = stored.decisions || {};
-      explanationDurations.current = stored.explanations || {};
-    } catch {
-      durations.current = {};
-    }
-  }, [preview, timingKey]);
+    const stored = Number(sessionStorage.getItem(timingKey) || 0);
+    elapsed.current =
+      previewId == null && Number.isFinite(stored) && stored >= 0 ? stored : 0;
+    headingRef.current?.focus({ preventScroll: true });
+  }, [timingKey, previewId, step?.index]);
+
   useEffect(() => {
-    if (
-      !questionnaire ||
-      questionnaire.submission_completed ||
-      completed ||
-      closed || confirming !== null
-    )
-      return;
+    if (!step || busy || closed || study?.submission_completed) return;
     const start = () => {
-      if (
-        document.visibilityState === "visible" &&
-        timingStart.current === null
-      )
-        timingStart.current = performance.now();
+      if (document.visibilityState === "visible" && timer.current === null)
+        timer.current = performance.now();
     };
     const visibility = () => {
       if (document.visibilityState === "visible") start();
@@ -286,237 +223,128 @@ export function Participant({
       window.removeEventListener("pagehide", stopTiming);
       window.clearInterval(interval);
     };
-  }, [questionnaire, questionIndex, completed, closed, confirming, stopTiming]);
+  }, [step, busy, closed, study?.submission_completed, stopTiming]);
+
   useEffect(() => {
-    if (preview) return;
-    fetch(
-      `/api/participate/${encodeURIComponent(token)}?submission_key=${encodeURIComponent(submissionKey)}`,
-    )
-      .then(async (response) => {
-        if (!response.ok) {
-          const body = await response.json().catch(() => null);
-          throw new Error(
-            typeof body?.detail === "string"
-              ? body.detail
-              : "This questionnaire link is unavailable.",
-          );
-        }
-        return response.json();
-      })
-      .then((data: ParticipantQuestionnaire) => {
-        setQuestionnaire(data);
-        setAnswers((current) => {
-          const next = { ...current };
-          for (const question of data.questions) {
-            if (question.confirmed_choice != null)
-              next[question.id] = question.confirmed_choice;
-          }
-          return next;
-        });
-      })
-      .catch((reason: Error) => setError(reason.message));
-  }, [token, submissionKey, preview]);
-  function update(id: number, value: Answer) {
-    setAnswers((current) => ({ ...current, [id]: value }));
+    if (error) errorRef.current?.focus();
+  }, [error]);
+
+  function accept(data: Study) {
+    setStudy(data);
+    setChoice(null);
+    setConfidence("");
+    setReason("");
+    setRating(null);
+    setAttempted(false);
+    window.scrollTo({ top: 0, behavior: "instant" });
   }
-  async function confirmChoice(question: ParticipantQuestion) {
-    const choice = answers[question.id];
-    if (typeof choice !== "number") return;
-    stopTiming();
-    setBusy(true);
-    setConfirming(question.id);
-    setError("");
-    try {
-      if (preview) {
-        setQuestionnaire(
-          (current) =>
-            current && {
-              ...current,
-              questions: current.questions.map((item) =>
-                item.id === question.id
-                  ? { ...item, confirmed_choice: choice }
-                  : item,
-              ),
-            },
-        );
-      } else {
-        const response = await fetch(
-          `/api/participate/${encodeURIComponent(token)}/questions/${question.id}/confirm`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ submission_key: submissionKey, choice, decision_visible_duration_ms: Math.round(decisionDurations.current[question.id] || 0) }),
-          },
-        );
-        if (!response.ok) {
-          if (response.status === 410) setClosed(true);
-          const body = await response.json().catch(() => null);
-          throw new Error(
-            typeof body?.detail === "string"
-              ? body.detail
-              : "Unable to confirm route choice.",
-          );
-        }
-        const refreshed = await fetch(`/api/participate/${encodeURIComponent(token)}?submission_key=${encodeURIComponent(submissionKey)}`);
-        if (!refreshed.ok) throw new Error("Choice confirmed. Refresh the page to load the justification.");
-        setQuestionnaire(await refreshed.json());
-      }
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Unable to confirm route choice.",
-      );
-    } finally {
-      setBusy(false);
-      setConfirming(null);
-    }
-  }
-  async function submit(event: FormEvent) {
+
+  async function confirm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!questionnaire) return;
-    for (const question of questionnaire.questions) {
-      const questionPosition = questionnaire.questions.indexOf(question);
-      const value = answers[question.id];
-      if (value === undefined || (typeof value === "string" && !value.trim())) {
-        setQuestionIndex(questionPosition);
-        setError("Please answer every question before submitting.");
-        return;
-      }
-      if (question.type === "text") {
-        const text = (value as string).trim();
-        if (text.length > 1000) {
-          setQuestionIndex(questionPosition);
-          setError(
-            `Question ${questionnaire.questions.indexOf(question) + 1}: Response exceeds the 1000-character limit.`,
-          );
-          return;
-        }
-      }
-      if (question.type === "numeric") {
-        const num = value as number;
-        if (
-          typeof num !== "number" ||
-          !Number.isFinite(num) ||
-          num < 0 ||
-          num > 100
-        ) {
-          setQuestionIndex(questionPosition);
-          setError(
-            `Question ${questionnaire.questions.indexOf(question) + 1}: Please enter a number between 0 and 100.`,
-          );
-          return;
-        }
-      }
-      if (question.type === "likert") {
-        const num = value as number;
-        const min = question.configuration.min ?? 1;
-        const max = question.configuration.max ?? 5;
-        if (
-          typeof num !== "number" ||
-          !Number.isInteger(num) ||
-          num < min ||
-          num > max
-        ) {
-          setQuestionIndex(questionPosition);
-          setError(
-            `Question ${questionnaire.questions.indexOf(question) + 1}: Please select a value between ${min} and ${max}.`,
-          );
-          return;
-        }
-      }
-      if (
-        question.type === "route_choice" &&
-        question.confirmed_choice !== value
-      ) {
-        setQuestionIndex(questionPosition);
-        setError(
-          `Confirm your route choice for question ${questionnaire.questions.indexOf(question) + 1}.`,
-        );
-        return;
-      }
-      if (question.type === "route_drawing") {
-        const path = value as Point[];
-        const scenario = question.scenario!;
-        const message = validateDrawingRoute(
-          path,
-          scenario.start,
-          scenario.goal,
-          scenario.map.h!,
-          scenario.map.w!,
-          scenario.map.connectivity!,
-        );
-        if (message) {
-          setQuestionIndex(questionPosition);
-          setError(
-            `Question ${questionnaire.questions.indexOf(question) + 1}: ${message}`,
-          );
-          return;
-        }
-      }
-    }
-    if (preview) {
-      setCompleted(true);
-      return;
-    }
-    setBusy(true);
-    stopTiming();
-    const entries = questionnaire.questions.map((q) => ({
-      question_id: q.id,
-      value: answers[q.id],
-      visible_duration_ms: Math.round(durations.current[q.id] || 0),
-      explanation_visible_duration_ms: q.justification && (q.preview_route_id == null || questionnaire.questions.some((item) => item.id === q.preview_route_id && item.confirmed_choice != null)) ? Math.round(explanationDurations.current[q.id] || 0) : null,
-    }));
+    if (!study || busy) return;
+    setAttempted(true);
     setError("");
-    setConflict(false);
-    try {
-      const response = await fetch(
-        `/api/participate/${encodeURIComponent(token)}/submit`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            submission_key: submissionKey,
-            answers: entries,
-          }),
-        },
-      );
-      if (!response.ok) {
-        if (response.status === 410) setClosed(true);
-        const body = await response.json().catch(() => null);
-        if (
-          response.status === 409 &&
-          body?.detail ===
-            "This submission was already completed with different answers"
-        )
-          setConflict(true);
-        throw new Error(
-          typeof body?.detail === "string"
-            ? body.detail
-            : "Unable to submit answers.",
+    let value: unknown = null;
+    if (step?.type === "route_assessment") {
+      const number = Number(confidence);
+      if (
+        choice === null ||
+        confidence.trim() === "" ||
+        !Number.isFinite(number) ||
+        number < 0 ||
+        number > 100 ||
+        !reason.trim() ||
+        reason.trim().length > 1000
+      ) {
+        setError(
+          "Choose a route, enter confidence from 0 to 100, and explain your choice.",
         );
+        return;
       }
-      stopTiming();
-      if (sessionStorage.getItem(`participation:${token}`) === submissionKey) {
-        sessionStorage.removeItem(`participation:${token}`);
+      value = { choice, confidence: number, reason: reason.trim() };
+    } else if (step?.type === "route_prediction") {
+      if (choice === null) {
+        setError("Choose a route before continuing.");
+        return;
       }
-      sessionStorage.removeItem(timingKey);
-      setCompleted(true);
-    } catch (reason) {
+      value = choice;
+    } else if (step?.type === "likert") {
+      if (rating === null) {
+        setError("Select a rating before continuing.");
+        return;
+      }
+      value = rating;
+    }
+    stopTiming();
+    setBusy(true);
+    try {
+      if (!step) {
+        if (!preview) {
+          const response = await fetch(
+            `/api/participate/${encodeURIComponent(token)}/submit`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ submission_key: submissionKey }),
+            },
+          );
+          if (response.status === 410) setClosed(true);
+          await readResponse(response);
+        }
+        setStudy({ ...study, submission_completed: true });
+      } else {
+        if (preview) accept(await load(step.index + 1));
+        else {
+          const response = await fetch(
+            `/api/participate/${encodeURIComponent(token)}/steps/${step.index}/confirm`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                submission_key: submissionKey,
+                value,
+                visible_duration_ms: Math.round(elapsed.current),
+              }),
+            },
+          );
+          if (response.status === 410) setClosed(true);
+          const next = await readResponse<Study>(response);
+          sessionStorage.removeItem(timingKey);
+          accept(next);
+        }
+      }
+    } catch (failure) {
       setError(
-        reason instanceof Error ? reason.message : "Unable to submit answers.",
+        failure instanceof Error
+          ? failure.message
+          : "Unable to save this step.",
       );
     } finally {
       setBusy(false);
     }
   }
+
+  const phaseLabel = !step
+    ? "Ready to submit"
+    : step.type === "likert"
+      ? `Explanation satisfaction ${step.item_number} of 8`
+      : step.type === "route_prediction"
+        ? `Prediction ${step.scenario_number} of 3`
+        : `${step.type === "explanation" ? "Explanation" : "Route selection"} ${step.scenario_number} of 3`;
+  const invalidConfidence =
+    attempted &&
+    (confidence.trim() === "" ||
+      !Number.isFinite(Number(confidence)) ||
+      Number(confidence) < 0 ||
+      Number(confidence) > 100);
+  const invalidReason =
+    attempted && (!reason.trim() || reason.trim().length > 1000);
   return (
     <div className={`qa-app ${preview ? "qa-preview-app" : ""}`}>
       {!preview && (
         <header className="qa-header">
           <div>
-            <span className="qa-overline">WHY NOT HERE? / RESEARCH STUDY</span>
-            <h1>Questionnaire</h1>
+            <h1>Route planning study</h1>
           </div>
         </header>
       )}
@@ -526,26 +354,12 @@ export function Participant({
             {error}
           </div>
         )}
-        {(conflict || questionnaire?.submission_completed) && !completed && (
-          <div className="qa-notice">
-            <p>
-              {conflict
-                ? "This submission was already completed with different answers."
-                : "This browser has an already completed submission for this questionnaire."}{" "}
-              Starting again creates a separate participation.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                sessionStorage.removeItem(`participation:${token}`);
-                window.location.reload();
-              }}
-            >
-              Start a new participation
-            </button>
-          </div>
-        )}
-        {completed ? (
+        {closed ? (
+          <section className="qa-panel">
+            <h2>Questionnaire closed</h2>
+            <p>This questionnaire is no longer accepting answers.</p>
+          </section>
+        ) : study?.submission_completed ? (
           <section className="qa-panel">
             <h2>Thank you for participating</h2>
             <p>
@@ -553,303 +367,212 @@ export function Participant({
                 ? "Preview complete. No answers were saved."
                 : "Your answers have been submitted."}
             </p>
+            {preview && (
+              <button
+                onClick={() => {
+                  setError("");
+                  void load()
+                    .then(accept)
+                    .catch((failure: Error) => setError(failure.message));
+                }}
+              >
+                Restart preview
+              </button>
+            )}
+          </section>
+        ) : !study ? (
+          <section className="qa-panel" aria-busy={!error}>
+            <p role="status">
+              {error
+                ? "The questionnaire could not be loaded."
+                : "Loading questionnaire..."}
+            </p>
             <button
               type="button"
               onClick={() => {
-                if (preview) {
-                  setQuestionnaire(preview);
-                  setAnswers({});
-                  setQuestionIndex(0);
-                  setCompleted(false);
-                } else window.location.reload();
+                setError("");
+                void load()
+                  .then(accept)
+                  .catch((failure: Error) => setError(failure.message));
               }}
             >
-              Start a new participation
+              Reload questionnaire
             </button>
           </section>
-        ) : closed ? (
-          <section className="qa-panel">
-            <h2>Questionnaire closed</h2>
-            <p>This questionnaire is no longer accepting answers.</p>
-          </section>
-        ) : !questionnaire ? (
-          !error && <p role="status">Loading questionnaire…</p>
         ) : (
           <>
             <section className="qa-panel">
-              <span className="qa-overline">PARTICIPANT QUESTIONNAIRE</span>
-              <h2>{questionnaire.title}</h2>
-              {questionnaire.description && <p>{questionnaire.description}</p>}
+              <h2>{study.title}</h2>
+              {study.description && <p>{study.description}</p>}
               <p className="qa-muted">
-                All questions are required. Your answers are submitted together.
+                Confirmed answers are saved automatically. You can reload to
+                resume, but cannot return to previous steps.
               </p>
             </section>
-            <form onSubmit={submit} className="qa-participant-form" noValidate>
-              {questionnaire.questions.map(
-                (q, index) =>
-                  index === questionIndex && (
-                    <section className="qa-panel" key={q.id}>
-                      <fieldset disabled={busy} className="qa-fieldset">
-                        <legend>
-                          <span className="qa-overline">
-                            QUESTION {index + 1} /{" "}
-                            {questionnaire.questions.length}
-                          </span>
-                          <br />
-                          <strong>{q.prompt}</strong>
-                        </legend>
-                        {q.type === "text" && (
-                          <div className="qa-text-response">
-                            <textarea
-                              aria-label={q.prompt}
-                              required
-                              maxLength={1000}
-                              value={(answers[q.id] as string) || ""}
-                              onChange={(e) => update(q.id, e.target.value)}
-                            />
-                            <span className="qa-text-counter">
-                              {((answers[q.id] as string) || "").length} / 1000
-                            </span>
-                          </div>
-                        )}
-                        {q.type === "choice" &&
-                          q.configuration.options?.map((option, i) => (
-                            <label className="qa-option" key={i}>
-                              <input
-                                type="radio"
-                                name={`q-${q.id}`}
-                                checked={answers[q.id] === i}
-                                onChange={() => update(q.id, i)}
-                                required
-                              />
-                              {option}
-                            </label>
-                          ))}
-                        {q.type === "likert" &&
-                        (q.configuration.min ?? 1) === 1 &&
-                        (q.configuration.max ?? 5) === 5 ? (
-                          <div
-                            className="qa-likert-group"
-                            role="radiogroup"
-                            aria-label={q.prompt}
-                          >
-                            {LIKERT_OPTIONS.map((opt) => (
-                              <label className="qa-option" key={opt.value}>
-                                <input
-                                  type="radio"
-                                  name={`q-${q.id}`}
-                                  checked={answers[q.id] === opt.value}
-                                  onChange={() => update(q.id, opt.value)}
-                                  required
-                                />
-                                <span>
-                                  {opt.value}. {opt.label}
-                                </span>
-                              </label>
-                            ))}
-                          </div>
-                        ) : (
-                          q.type === "likert" && (
-                            <label className="qa-response-label">
-                              Choose a value ({q.configuration.min}–
-                              {q.configuration.max})
-                              <input
-                                type="number"
-                                step="1"
-                                min={q.configuration.min}
-                                max={q.configuration.max}
-                                required
-                                value={
-                                  (answers[q.id] as number | undefined) ?? ""
-                                }
-                                onChange={(e) =>
-                                  e.target.value === ""
-                                    ? setAnswers((a) => {
-                                        const next = { ...a };
-                                        delete next[q.id];
-                                        return next;
-                                      })
-                                    : update(q.id, Number(e.target.value))
-                                }
-                              />
-                            </label>
-                          )
-                        )}
-                        {q.type === "numeric" && (
-                          <label className="qa-response-label">
-                            Choose a value (0–100)
-                            <input
-                              type="number"
-                              step="any"
-                              min="0"
-                              max="100"
-                              required
-                              value={
-                                (answers[q.id] as number | undefined) ?? ""
-                              }
-                              onChange={(e) =>
-                                e.target.value === ""
-                                  ? setAnswers((a) => {
-                                      const next = { ...a };
-                                      delete next[q.id];
-                                      return next;
-                                    })
-                                  : update(q.id, Number(e.target.value))
-                              }
-                            />
-                          </label>
-                        )}
-                        {q.type === "route_choice" && (
-                          <div className="qa-route-options">
-                            {q.scenario?.routes?.map((path, i) => (
-                              <div className="qa-route-option" key={i}>
-                                <label>
-                                  <input
-                                    type="radio"
-                                    name={`q-${q.id}`}
-                                    checked={answers[q.id] === i}
-                                    onChange={() => update(q.id, i)}
-                                    disabled={q.confirmed_choice != null}
-                                    required
-                                  />{" "}
-                                  Route {i === 0 ? "A" : "B"}
-                                </label>
-                                <RouteOption
-                                  scenario={q.scenario!}
-                                  path={path}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {q.type === "route_choice" && (
-                          <>
-                            {q.confirmed_choice == null && (
-                              <p className="qa-muted">
-                                Your choice will be locked after confirmation.
-                              </p>
-                            )}
-                            {confirming === q.id && (
-                              <p role="status">Confirming route choice…</p>
-                            )}
-                            {q.confirmed_choice == null ? (
-                              <button
-                                type="button"
-                                disabled={
-                                  busy || typeof answers[q.id] !== "number"
-                                }
-                                onClick={() => void confirmChoice(q)}
-                              >
-                                Confirm route choice
-                              </button>
-                            ) : (
-                              <p role="status">Route choice confirmed.</p>
-                            )}
-                          </>
-                        )}
-                        {q.justification && (q.preview_route_id == null || questionnaire.questions.some((item) => item.id === q.preview_route_id && item.confirmed_choice != null)) && (
-                          <div className="qa-justification">
-                            <strong>Justification</strong>
-                            <p>{q.justification}</p>
-                            {q.type === "route_choice" &&
-                              q.scenario?.route_order && (
-                                <p>
-                                  Route{" "}
-                                  {q.scenario.route_order.indexOf("optimal") ===
-                                  0
-                                    ? "A"
-                                    : "B"}{" "}
-                                  is the optimal route p*; route{" "}
-                                  {q.scenario.route_order.indexOf(
-                                    "alternative",
-                                  ) === 0
-                                    ? "A"
-                                    : "B"}{" "}
-                                  is the alternative route p'.
-                                </p>
-                              )}
-                            {q.type === "route_choice" &&
-                              q.scenario?.show_explanation_map &&
-                              q.scenario.routes &&
-                              q.scenario.route_order && (
-                                <ScenarioMapView
-                                  mapData={toMap(q.scenario)}
-                                  optimalPath={
-                                    q.scenario.routes[
-                                      q.scenario.route_order.indexOf("optimal")
-                                    ]
-                                  }
-                                  userPath={
-                                    q.scenario.routes[
-                                      q.scenario.route_order.indexOf(
-                                        "alternative",
-                                      )
-                                    ]
-                                  }
-                                  modifications={q.scenario.modifications}
-                                />
-                              )}
-                          </div>
-                        )}
-                        {q.type === "route_drawing" && q.scenario && (
-                          <>
-                            <DrawingAnswer
-                              scenario={q.scenario}
-                              value={
-                                (answers[q.id] as Point[]) || [q.scenario.start]
-                              }
-                              onChange={(value) => update(q.id, value)}
-                            />
-                            {Array.isArray(answers[q.id]) && (
-                              <p role="status" className="qa-muted">
-                                {validateDrawingRoute(
-                                  answers[q.id] as Point[],
-                                  q.scenario.start,
-                                  q.scenario.goal,
-                                  q.scenario.map.h!,
-                                  q.scenario.map.w!,
-                                  q.scenario.map.connectivity!,
-                                )}
-                              </p>
-                            )}
-                          </>
-                        )}
-                      </fieldset>
-                    </section>
-                  ),
-              )}
-              <div className="qa-question-navigation">
-                <button
-                  type="button"
-                  disabled={busy || questionIndex === 0}
-                  onClick={() => {
-                    setError("");
-                    setQuestionIndex(questionIndex - 1);
-                  }}
-                  aria-label="Previous question"
-                >
-                  ← Previous
-                </button>
-                {questionIndex < questionnaire.questions.length - 1 ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      setError("");
-                      setQuestionIndex(questionIndex + 1);
-                    }}
-                    aria-label="Next question"
-                  >
-                    Next →
-                  </button>
-                ) : (
-                  <button type="submit" disabled={busy}>
-                    {busy && confirming === null
-                      ? "Submitting…"
-                      : "Submit answers"}
-                  </button>
+            <form
+              onSubmit={(event) => void confirm(event)}
+              className="qa-participant-form"
+              noValidate
+            >
+              <section className="qa-panel" aria-busy={busy}>
+                <p className="qa-muted">{phaseLabel}</p>
+                <h2 ref={headingRef} tabIndex={-1}>
+                  {step?.prompt || "Submit your completed questionnaire"}
+                </h2>
+                {step?.type === "likert" && (
+                  <>
+                    <p>{step.instrument}</p>
+                    <p className="qa-muted">
+                      Rate the explanations received in the first three
+                      scenarios. {step.source}.
+                    </p>
+                  </>
                 )}
-              </div>
+                <fieldset disabled={busy} className="qa-fieldset">
+                  <legend className="qa-visually-hidden">{phaseLabel}</legend>
+                  {attempted &&
+                    choice === null &&
+                    (step?.type === "route_assessment" ||
+                      step?.type === "route_prediction") && (
+                      <p className="qa-field-error">Choose route A or B.</p>
+                    )}
+                  {(step?.type === "route_assessment" ||
+                    step?.type === "route_prediction") &&
+                    step.scenario && (
+                      <RouteOptions
+                        scenario={step.scenario}
+                        choice={choice}
+                        onChange={setChoice}
+                        disabled={busy}
+                      />
+                    )}
+                  {step?.type === "route_assessment" && (
+                    <div className="qa-form qa-assessment-fields">
+                      <label htmlFor="confidence">
+                        Confidence in your choice (0 to 100)
+                        <input
+                          id="confidence"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="any"
+                          required
+                          value={confidence}
+                          onChange={(event) =>
+                            setConfidence(event.target.value)
+                          }
+                          aria-invalid={invalidConfidence}
+                          aria-describedby={
+                            invalidConfidence
+                              ? "confidence-help confidence-error"
+                              : "confidence-help"
+                          }
+                        />
+                      </label>
+                      <p id="confidence-help" className="qa-muted">
+                        0 means no confidence; 100 means complete confidence.
+                      </p>
+                      {invalidConfidence && (
+                        <p id="confidence-error" className="qa-field-error">
+                          Enter a number from 0 to 100.
+                        </p>
+                      )}
+                      <label htmlFor="reason">
+                        Why did you choose this route?
+                        <textarea
+                          id="reason"
+                          rows={4}
+                          required
+                          maxLength={1000}
+                          value={reason}
+                          onChange={(event) => setReason(event.target.value)}
+                          aria-invalid={invalidReason}
+                          aria-describedby={
+                            invalidReason
+                              ? "reason-count reason-error"
+                              : "reason-count"
+                          }
+                        />
+                      </label>
+                      {invalidReason && (
+                        <p id="reason-error" className="qa-field-error">
+                          Explain your choice in 1 to 1000 characters.
+                        </p>
+                      )}
+                      <span id="reason-count" className="qa-text-counter">
+                        {reason.length} / 1000
+                      </span>
+                    </div>
+                  )}
+                  {step?.type === "likert" && (
+                    <div className="qa-likert-group">
+                      {attempted && rating === null && (
+                        <p className="qa-field-error">Select one rating.</p>
+                      )}
+                      {LIKERT_LABELS.map((label, index) => (
+                        <label className="qa-option" key={label}>
+                          <input
+                            type="radio"
+                            name="ess-rating"
+                            checked={rating === index + 1}
+                            onChange={() => setRating(index + 1)}
+                            required
+                          />
+                          {index + 1}. {label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {step?.type === "explanation" && step.scenario && (
+                    <div className="qa-justification">
+                      <p>{step.justification}</p>
+                      <p>
+                        Route{" "}
+                        {step.scenario.route_order?.indexOf("optimal") === 0
+                          ? "A"
+                          : "B"}{" "}
+                        is the system’s optimal route; route{" "}
+                        {step.scenario.route_order?.indexOf("alternative") === 0
+                          ? "A"
+                          : "B"}{" "}
+                        is the alternative.
+                      </p>
+                      {step.scenario.show_explanation_map &&
+                        step.scenario.route_order && (
+                          <ScenarioMapView
+                            mapData={scenarioMap(step.scenario)}
+                            optimalPath={
+                              step.scenario.routes[
+                                step.scenario.route_order.indexOf("optimal")
+                              ]
+                            }
+                            userPath={
+                              step.scenario.routes[
+                                step.scenario.route_order.indexOf("alternative")
+                              ]
+                            }
+                            modifications={step.scenario.modifications}
+                          />
+                        )}
+                    </div>
+                  )}
+                  {!step && (
+                    <p>
+                      All required responses have been recorded. Submit to
+                      complete your participation.
+                    </p>
+                  )}
+                  <button type="submit" disabled={busy}>
+                    {busy
+                      ? "Saving..."
+                      : !step
+                        ? "Submit answers"
+                        : step.type === "route_assessment"
+                          ? "Confirm and reveal explanation"
+                          : "Continue"}
+                  </button>
+                </fieldset>
+              </section>
             </form>
           </>
         )}

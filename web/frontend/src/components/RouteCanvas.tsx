@@ -26,7 +26,6 @@ interface RouteCanvasProps {
   busyButtonText?: string;
   onPrevMap?: () => void;
   batchStepper?: React.ReactNode;
-  participantMode?: boolean;
 }
 
 export function RouteCanvas({
@@ -40,7 +39,6 @@ export function RouteCanvas({
   busyButtonText,
   onPrevMap,
   batchStepper,
-  participantMode = false,
 }: RouteCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [wrapper, setWrapper] = useState<HTMLDivElement | null>(null);
@@ -416,9 +414,8 @@ export function RouteCanvas({
     </span>
   ) : (
     <span>
-      {participantMode
-        ? "Drag on the map to draw, or use the directional buttons below to move the route endpoint."
-        : "Hover over grid or drag pointer to interact (hold Shift for straight/diagonal lines)"}
+      Hover over grid or drag pointer to interact (hold Shift for
+      straight/diagonal lines)
     </span>
   );
 
@@ -439,16 +436,14 @@ export function RouteCanvas({
             role="group"
             aria-label="Route editing"
           >
-            {!participantMode && (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handleAutoRoute}
-                disabled={isSolving}
-              >
-                Automatic Route
-              </button>
-            )}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleAutoRoute}
+              disabled={isSolving}
+            >
+              Automatic Route
+            </button>
             <button
               type="button"
               className="btn btn-ghost"
@@ -480,25 +475,23 @@ export function RouteCanvas({
             role="group"
             aria-label="Map display"
           >
-            {!participantMode && (
-              <button
-                type="button"
-                className={`btn ${showOptimalRoute ? "btn-secondary active" : "btn-ghost"}`}
-                onClick={() => setShowOptimalRoute((prev) => !prev)}
-                disabled={
-                  isSolving ||
-                  !mapData.optimal_path ||
-                  mapData.optimal_path.length === 0
-                }
-                title={
-                  showOptimalRoute
-                    ? "Hide initial optimal path (p*)"
-                    : "Show initial optimal path (p*)"
-                }
-              >
-                {showOptimalRoute ? "Hide Optimal Route" : "Show Optimal Route"}
-              </button>
-            )}
+            <button
+              type="button"
+              className={`btn ${showOptimalRoute ? "btn-secondary active" : "btn-ghost"}`}
+              onClick={() => setShowOptimalRoute((prev) => !prev)}
+              disabled={
+                isSolving ||
+                !mapData.optimal_path ||
+                mapData.optimal_path.length === 0
+              }
+              title={
+                showOptimalRoute
+                  ? "Hide initial optimal path (p*)"
+                  : "Show initial optimal path (p*)"
+              }
+            >
+              {showOptimalRoute ? "Hide Optimal Route" : "Show Optimal Route"}
+            </button>
 
             <div className="zoom-controls-bar">
               <span className="zoom-label">Zoom</span>
@@ -589,18 +582,16 @@ export function RouteCanvas({
             </button>
           )}
 
-          {!participantMode && (
-            <button
-              type="button"
-              className="btn btn-vibrant btn-large"
-              onClick={onSolve}
-              disabled={isSolving || !isConnectedToGoal}
-            >
-              {isSolving
-                ? busyButtonText || "Solving ISP..."
-                : solveButtonText || "Solve ISP"}
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn btn-vibrant btn-large"
+            onClick={onSolve}
+            disabled={isSolving || !isConnectedToGoal}
+          >
+            {isSolving
+              ? busyButtonText || "Solving ISP..."
+              : solveButtonText || "Solve ISP"}
+          </button>
         </div>
       </div>
 

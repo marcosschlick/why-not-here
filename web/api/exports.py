@@ -7,6 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from web.api.database import connect_database
+from web.api.study_protocol import ESS_SOURCE, ESS_TITLE, protocol_selection
 
 router = APIRouter(prefix="/api/questionnaires", tags=["exports"])
 
@@ -25,7 +26,7 @@ def export_questionnaire(
     with connect_database() as connection:
         connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         questionnaire = connection.execute(
-            "SELECT id, title, description, status, created_at, closed_at FROM questionnaires WHERE id = %s",
+            "SELECT id, title, description, status, protocol_version, created_at, closed_at FROM questionnaires WHERE id = %s",
             (questionnaire_id,),
         ).fetchone()
         if questionnaire is None:
@@ -39,11 +40,11 @@ def export_questionnaire(
             (questionnaire_id,),
         ).fetchall()
         participations = connection.execute(
-            "SELECT id, study_group, started_at, participation_started_at, completed_at FROM participations WHERE questionnaire_id = %s AND completed_at IS NOT NULL ORDER BY id",
+            "SELECT id, study_group, started_at, completed_at FROM participations WHERE questionnaire_id = %s AND completed_at IS NOT NULL ORDER BY id",
             (questionnaire_id,),
         ).fetchall()
         answers = connection.execute(
-            "SELECT a.participation_id, a.question_id, a.value, a.route_order, a.visible_duration_ms, a.decision_visible_duration_ms, a.explanation_visible_duration_ms FROM answers a JOIN participations p ON p.id = a.participation_id WHERE p.questionnaire_id = %s AND p.completed_at IS NOT NULL ORDER BY a.participation_id, a.id",
+            "SELECT a.participation_id, a.question_id, a.value, a.route_order, a.confirmed_at, a.explanation_completed_at, a.visible_duration_ms, a.decision_visible_duration_ms, a.explanation_visible_duration_ms FROM answers a JOIN participations p ON p.id = a.participation_id WHERE p.questionnaire_id = %s AND p.completed_at IS NOT NULL ORDER BY a.participation_id, a.id",
             (questionnaire_id,),
         ).fetchall()
         answers_by_participation = {item["id"]: [] for item in participations}
@@ -52,17 +53,22 @@ def export_questionnaire(
         for participation in participations:
             participation["answers"] = answers_by_participation[participation["id"]]
         export = {
+            "protocol": protocol_selection(questions),
+            "instrument": {
+                "name": ESS_TITLE,
+                "source": ESS_SOURCE,
+                "adapted": True,
+                "validated_adaptation": False,
+            },
             "questionnaire": questionnaire,
             "questions": questions,
             "scenarios": scenarios,
             "participations": participations,
-            "legacy_route_order": ["optimal", "alternative"],
             "timing_fields": {
-                "participation_started_at": "Server time when the participation was opened; null for legacy records",
                 "visible_duration_ms": "Accumulated milliseconds the question was displayed while the browser tab was visible; null when unavailable",
-                "decision_visible_duration_ms": "Accumulated visible milliseconds from first viewing the route question until confirmation, excluding network wait; null when unavailable",
+                "decision_visible_duration_ms": "Visible milliseconds for the route decision, confidence and reason (assessment), or route choice (prediction), excluding network wait",
                 "explanation_visible_duration_ms": "Accumulated visible milliseconds while the explanation was displayed; included in question viewing time; null when unavailable",
-                "started_at": "Legacy database creation time; older records may have been created at submission",
+                "started_at": "Server time when the participation was opened",
             },
         }
         return JSONResponse(
