@@ -263,6 +263,14 @@ export function ConfigForm({
       return;
     }
 
+    if (scenarioMode) {
+      setOutputDirError(null);
+      onAddToQueue(getCurrentConfig());
+      setFeedback("Scenario configuration added to queue");
+      setTimeout(() => setFeedback(null), 2500);
+      return;
+    }
+
     const normalizedName = configurationName
       .trim()
       .replace(/\.json$/i, "")
@@ -880,16 +888,24 @@ export function ConfigForm({
                       );
                       return;
                     }
-                    if (onBeforeGenerate && !onBeforeGenerate()) return;
+                    if (
+                      !scenarioMode && onBeforeGenerate && !onBeforeGenerate()
+                    ) return;
                     setOutputDirError(null);
                     onAddBatch(current, batchCount);
+                    if (scenarioMode) {
+                      setFeedback(
+                        `${batchCount} scenario configurations added to queue`,
+                      );
+                      setTimeout(() => setFeedback(null), 2500);
+                    }
                   }}
                 >
-                  Generate Batch
+                  {scenarioMode ? "Add Batch to Queue" : "Generate Batch"}
                 </button>
               </>
             )}
-            {activeMode === "queue" && !scenarioMode && (
+            {activeMode === "queue" && (
               <button
                 type="button"
                 className="btn btn-secondary"

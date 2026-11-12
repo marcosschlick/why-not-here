@@ -32,6 +32,12 @@ class ScenarioSummary(BaseModel):
     title: str
 
 
+class ScenarioTitleInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: NonEmptyText
+
+
 class ScenarioDetails(ScenarioSummary):
     configuration: dict[str, Any] = Field(
         description="Effective generation and solver configuration"
@@ -109,6 +115,24 @@ def list_scenarios(questionnaire_id: int):
             "SELECT id, questionnaire_id, title FROM scenarios WHERE questionnaire_id = %s ORDER BY id",
             (questionnaire_id,),
         ).fetchall()
+
+
+@router.patch(
+    "/{questionnaire_id}/scenarios/{scenario_id}", response_model=ScenarioSummary
+)
+def rename_scenario(
+    questionnaire_id: int, scenario_id: int, payload: ScenarioTitleInput
+):
+    with connect_database() as connection:
+        require_draft(connection, questionnaire_id)
+        scenario = connection.execute(
+            "UPDATE scenarios SET title = %s WHERE questionnaire_id = %s AND id = %s "
+            "RETURNING id, questionnaire_id, title",
+            (payload.title, questionnaire_id, scenario_id),
+        ).fetchone()
+        if scenario is None:
+            raise HTTPException(status_code=404, detail="Scenario not found")
+        return scenario
 
 
 @router.get(

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ConfirmModal } from "./ConfirmModal";
 import { Participant } from "./Participant";
@@ -113,7 +113,7 @@ async function api<T>(
   return response.status === 204 ? (undefined as T) : response.json();
 }
 
-function ScenarioMap({
+const ScenarioMap = memo(function ScenarioMap({
   scenario,
 }: {
   scenario: Scenario;
@@ -151,7 +151,7 @@ function ScenarioMap({
       modifications={scenario.data.modifications}
     />
   );
-}
+});
 
 function buildPreview(
   questionnaire: Questionnaire,
@@ -218,6 +218,8 @@ export function QuestionnaireAdmin({
   const sidebarToggleRef = useRef<HTMLButtonElement>(null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<number | null>(null);
+  const [renamingScenario, setRenamingScenario] = useState<number | null>(null);
+  const [scenarioName, setScenarioName] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [form, setForm] = useState<Form>(emptyForm);
@@ -232,13 +234,55 @@ export function QuestionnaireAdmin({
   const [error, setError] = useState("");
   const [exportKey, setExportKey] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [questionToDelete, setQuestionToDelete] = useState<Question | null>(null);
   const [activity, setActivity] = useState("");
   const errorRef = useRef<HTMLDivElement>(null);
+  const promptRef = useRef<HTMLInputElement>(null);
+  const questionListRef = useRef<HTMLOListElement>(null);
+  const restoreViewRef = useRef<{
+    x: number;
+    y: number;
+    anchor?: HTMLElement;
+    anchorTop?: number;
+    focus: () => HTMLElement | null;
+  } | null>(null);
   const detailsDirty =
     title !== (selected?.title ?? "") ||
     description !== (selected?.description ?? "");
   const questionDirty = JSON.stringify(form) !== JSON.stringify(initialForm);
-  const hasUnsavedChanges = detailsDirty || questionDirty;
+  const scenarioDirty =
+    renamingScenario !== null &&
+    scenarioName !== scenarios.find((scenario) => scenario.id === renamingScenario)?.title;
+  const hasUnsavedChanges = detailsDirty || questionDirty || scenarioDirty;
+
+  useLayoutEffect(() => {
+    const restore = restoreViewRef.current;
+    if (!restore || busy) return;
+    restoreViewRef.current = null;
+    const offset =
+      restore.anchor && restore.anchorTop !== undefined
+        ? restore.anchor.getBoundingClientRect().top - restore.anchorTop
+        : 0;
+    restore.focus()?.focus({ preventScroll: true });
+    window.scrollTo({
+      left: restore.x,
+      top: restore.y + offset,
+      behavior: "instant",
+    });
+  }, [selected, scenarios, busy, renamingScenario]);
+
+  function rememberView(
+    focus: () => HTMLElement | null,
+    anchor?: HTMLElement | null,
+  ) {
+    restoreViewRef.current = {
+      x: window.scrollX,
+      y: window.scrollY,
+      anchor: anchor ?? undefined,
+      anchorTop: anchor?.getBoundingClientRect().top,
+      focus,
+    };
+  }
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -250,8 +294,10 @@ export function QuestionnaireAdmin({
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [hasUnsavedChanges]);
   useEffect(() => {
-    if (error && !selecting) errorRef.current?.focus();
-  }, [error, selecting]);
+    if (error && !selecting && !questionToDelete) {
+      errorRef.current?.focus({ preventScroll: true });
+    }
+  }, [error, selecting, questionToDelete]);
 
   function confirmDiscard(dirty = hasUnsavedChanges) {
     return !dirty || window.confirm("Discard unsaved changes?");
@@ -281,6 +327,8 @@ export function QuestionnaireAdmin({
       if (resetDetails) {
         setTitle(questionnaire.title);
         setDescription(questionnaire.description || "");
+        setRenamingScenario(null);
+        setScenarioName("");
       }
       setScenarios(details);
       setSelectedScenario((previous) =>
@@ -306,6 +354,7 @@ export function QuestionnaireAdmin({
       .catch((reason: Error) => setError(reason.message));
   }, [initialQuestionnaireId, initialScenarioId, loadQuestionnaire]);
   async function perform(action: () => Promise<void>, message = "Working…") {
+    if (busy) return;
     setActivity(message);
     setBusy(true);
     setError("");
@@ -346,6 +395,8 @@ export function QuestionnaireAdmin({
     setTitle("");
     setDescription("");
     setScenarios([]);
+    setRenamingScenario(null);
+    setScenarioName("");
     resetQuestion();
     setPreview(false);
     setError("");
@@ -405,7 +456,7 @@ export function QuestionnaireAdmin({
   }
   function saveQuestion(event: FormEvent) {
     event.preventDefault();
-    if (!selected) return;
+    if (!selected || busy) return;
     void perform(async () => {
       const configuration: { min?: number; max?: number; max_length?: number } =
         {};
@@ -426,29 +477,53 @@ export function QuestionnaireAdmin({
           ? { scenario_id: Number(form.scenarioId) }
           : {}),
       };
-      await api(
+      const saved = await api<Question>(
         `/questionnaires/${selected.id}/questions${editing ? `/${editing}` : ""}`,
         editing ? "PUT" : "POST",
         body,
       );
-      await loadQuestionnaire(selected.id);
-      resetQuestion();
+      rememberView(() => promptRef.current, promptRef.current);
+      setSelected((previous) => previous && {
+        ...previous,
+        questions: editing
+          ? previous.questions.map((question) =>
+              question.id === saved.id ? saved : question,
+            )
+          : [...previous.questions, saved],
+      });
+      const nextForm = { ...form, prompt: "" };
+      setEditing(null);
+      setForm(nextForm);
+      setInitialForm(nextForm);
     });
   }
-  function removeQuestion(id: number) {
-    if (
-      !selected ||
-      (editing === id && !confirmDiscard(questionDirty)) ||
-      !window.confirm("Delete this question?")
-    )
-      return;
+  function removeQuestion() {
+    if (!selected || !questionToDelete || busy) return;
+    const id = questionToDelete.id;
+    const index = selected.questions.findIndex((question) => question.id === id);
+    const nextQuestion =
+      selected.questions[index + 1] ?? selected.questions[index - 1];
     void perform(async () => {
       await api(`/questionnaires/${selected.id}/questions/${id}`, "DELETE");
-      await loadQuestionnaire(selected.id);
+      rememberView(() =>
+        nextQuestion
+          ? questionListRef.current?.querySelector<HTMLButtonElement>(
+              `[data-question-id="${nextQuestion.id}"] .qa-edit-question`,
+            ) ?? promptRef.current
+          : promptRef.current,
+      );
+      setSelected((previous) => previous && {
+        ...previous,
+        questions: previous.questions.filter((question) => question.id !== id),
+      });
+      setQuestionToDelete(null);
       if (editing === id) {
-        resetQuestion();
+        const nextForm = { ...form, prompt: "" };
+        setEditing(null);
+        setForm(nextForm);
+        setInitialForm(nextForm);
       }
-    });
+    }, "Deleting question…");
   }
   function handleConfirmDelete() {
     if (!selected) return;
@@ -459,17 +534,58 @@ export function QuestionnaireAdmin({
       newDraft();
     });
   }
-  function moveQuestion(index: number, direction: number) {
-    if (!selected) return;
-    const ids = selected.questions.map((question) => question.id);
+  function moveQuestion(
+    index: number,
+    direction: number,
+    button: HTMLButtonElement,
+  ) {
+    if (!selected || busy) return;
     const next = index + direction;
-    [ids[index], ids[next]] = [ids[next], ids[index]];
+    if (next < 0 || next >= selected.questions.length) return;
+    const questions = [...selected.questions];
+    [questions[index], questions[next]] = [questions[next], questions[index]];
     void perform(async () => {
       await api(`/questionnaires/${selected.id}/questions/order`, "PUT", {
-        question_ids: ids,
+        question_ids: questions.map((question) => question.id),
       });
-      await loadQuestionnaire(selected.id);
-    });
+      rememberView(() =>
+        button.disabled
+          ? button.closest("li")?.querySelector<HTMLButtonElement>(
+              "button[data-direction]:not(:disabled)",
+            ) ?? promptRef.current
+          : button,
+      );
+      setSelected((previous) => previous && {
+        ...previous,
+        questions: questions.map((question, position) => ({
+          ...question,
+          position: position + 1,
+        })),
+      });
+    }, "Saving question order…");
+  }
+  function renameScenario(event: FormEvent) {
+    event.preventDefault();
+    if (!selected || renamingScenario === null || busy) return;
+    const id = renamingScenario;
+    const row = event.currentTarget.closest("li");
+    void perform(async () => {
+      const saved = await api<{ id: number; title: string }>(
+        `/questionnaires/${selected.id}/scenarios/${id}`,
+        "PATCH",
+        { title: scenarioName },
+      );
+      rememberView(() =>
+        row?.querySelector<HTMLButtonElement>(".qa-rename-scenario") ?? null,
+      );
+      setScenarios((previous) =>
+        previous.map((scenario) =>
+          scenario.id === saved.id ? { ...scenario, title: saved.title } : scenario,
+        ),
+      );
+      setRenamingScenario(null);
+      setScenarioName("");
+    }, "Renaming scenario…");
   }
   const currentScenario = scenarios.find(
     (item) => item.id === selectedScenario,
@@ -553,11 +669,9 @@ export function QuestionnaireAdmin({
               {error}
             </div>
           )}
-          {busy && !selecting && (
-            <p role="status" className="qa-notice">
-              {activity}
-            </p>
-          )}
+          <span role="status" className="qa-visually-hidden">
+            {busy && !selecting ? activity : ""}
+          </span>
           <section className="qa-panel">
             <div className="qa-heading">
               <div>
@@ -722,7 +836,7 @@ export function QuestionnaireAdmin({
           )}
           {selected && !preview && (
             <>
-              <section className="qa-panel">
+              <section className="qa-panel qa-question-panel" aria-busy={panelBusy}>
                 <div className="qa-heading">
                   <div>
                     <span className="qa-overline">01 / BUILD</span>
@@ -740,9 +854,9 @@ export function QuestionnaireAdmin({
                 {selected.questions.length === 0 && (
                   <p className="qa-empty">Add the first question below.</p>
                 )}
-                <ol className="qa-questions">
+                <ol className="qa-questions" ref={questionListRef}>
                   {selected.questions.map((q, i) => (
-                    <li key={q.id}>
+                    <li key={q.id} data-question-id={q.id}>
                       <div>
                         <span className="qa-question-number">
                           {String(i + 1).padStart(2, "0")}
@@ -750,32 +864,38 @@ export function QuestionnaireAdmin({
                         <strong>{q.prompt}</strong>
                         <small>
                           {displayLabels[q.type] || q.type}
-                          {q.scenario_id ? ` · Scenario ${q.scenario_id}` : ""}
+                          {q.scenario_id !== null
+                            ? ` · ${scenarios.find((scenario) => scenario.id === q.scenario_id)?.title ?? "Unavailable scenario"}`
+                            : ""}
                         </small>
                       </div>
                       <div className="qa-actions">
                         <button
                           type="button"
+                          data-direction="up"
                           aria-label={`Move question ${i + 1} up`}
-                          disabled={panelBusy || !editable || i === 0}
-                          onClick={() => moveQuestion(i, -1)}
+                          disabled={!editable || i === 0}
+                          aria-disabled={panelBusy || !editable || i === 0}
+                          onClick={(event) => moveQuestion(i, -1, event.currentTarget)}
                         >
                           ↑
                         </button>
                         <button
                           type="button"
+                          data-direction="down"
                           aria-label={`Move question ${i + 1} down`}
                           disabled={
-                            panelBusy ||
                             !editable ||
                             i === selected.questions.length - 1
                           }
-                          onClick={() => moveQuestion(i, 1)}
+                          aria-disabled={panelBusy || !editable || i === selected.questions.length - 1}
+                          onClick={(event) => moveQuestion(i, 1, event.currentTarget)}
                         >
                           ↓
                         </button>
                         <button
                           type="button"
+                          className="qa-edit-question"
                           disabled={panelBusy || !editable}
                           onClick={() => editQuestion(q)}
                         >
@@ -783,8 +903,12 @@ export function QuestionnaireAdmin({
                         </button>
                         <button
                           type="button"
+                          className="qa-danger"
                           disabled={panelBusy || !editable}
-                          onClick={() => removeQuestion(q.id)}
+                          onClick={() => {
+                            setError("");
+                            setQuestionToDelete(q);
+                          }}
                         >
                           Delete
                         </button>
@@ -819,12 +943,14 @@ export function QuestionnaireAdmin({
                   <label>
                     Prompt
                     <input
+                      ref={promptRef}
                       value={form.prompt}
                       onChange={(e) =>
                         setForm({ ...form, prompt: e.target.value })
                       }
                       required
-                      disabled={panelBusy || !editable}
+                      disabled={!editable}
+                      readOnly={panelBusy}
                     />
                   </label>
                   {form.type === "text" && (
@@ -873,13 +999,14 @@ export function QuestionnaireAdmin({
                     </label>
                   )}
                   <div className="qa-actions">
-                    <button type="submit" disabled={panelBusy || !editable}>
+                    <button type="submit" disabled={!editable} aria-disabled={panelBusy || !editable}>
                       {editing ? "Save question" : "Add question"}
                     </button>
                     {editing && (
                       <button
                         type="button"
                         className="qa-secondary"
+                        disabled={panelBusy}
                         onClick={() => {
                           if (!confirmDiscard(questionDirty)) return;
                           resetQuestion();
@@ -911,21 +1038,70 @@ export function QuestionnaireAdmin({
                 </button>
                 {scenarios.length > 0 && (
                   <div className="qa-scenario-view">
-                    <label>
-                      View scenario
-                      <select
-                        value={selectedScenario || ""}
-                        onChange={(e) =>
-                          setSelectedScenario(Number(e.target.value))
-                        }
-                      >
-                        {scenarios.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.title}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <ul className="qa-scenarios" aria-label="Saved scenarios">
+                      {scenarios.map((scenario) => (
+                        <li key={scenario.id} className={selectedScenario === scenario.id ? "is-active" : ""}>
+                          <div className="qa-scenario-row">
+                            <strong>{scenario.title}</strong>
+                            <div className="qa-actions">
+                              <button
+                                type="button"
+                                className="qa-secondary"
+                                aria-pressed={selectedScenario === scenario.id}
+                                aria-label={`View scenario ${scenario.title}`}
+                                onClick={() => setSelectedScenario(scenario.id)}
+                                disabled={panelBusy}
+                              >
+                                {selectedScenario === scenario.id ? "Viewing" : "View"}
+                              </button>
+                              {editable && (
+                                <button
+                                  type="button"
+                                  className="qa-secondary qa-rename-scenario"
+                                  disabled={panelBusy || renamingScenario === scenario.id}
+                                  aria-label={`Rename scenario ${scenario.title}`}
+                                  onClick={() => {
+                                    if (!confirmDiscard(scenarioDirty)) return;
+                                    setRenamingScenario(scenario.id);
+                                    setScenarioName(scenario.title);
+                                  }}
+                                >
+                                  Rename
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {renamingScenario === scenario.id && (
+                            <form className="qa-form qa-scenario-rename" onSubmit={renameScenario}>
+                              <label>
+                                Scenario name
+                                <input
+                                  autoFocus
+                                  required
+                                  value={scenarioName}
+                                  disabled={panelBusy}
+                                  onChange={(event) => setScenarioName(event.target.value)}
+                                />
+                              </label>
+                              <div className="qa-actions">
+                                <button type="submit" disabled={panelBusy || !scenarioName.trim()}>Save name</button>
+                                <button
+                                  type="button"
+                                  className="qa-secondary"
+                                  disabled={panelBusy}
+                                  onClick={(event) => {
+                                    const row = event.currentTarget.closest("li");
+                                    rememberView(() => row?.querySelector<HTMLButtonElement>(".qa-rename-scenario") ?? null);
+                                    setRenamingScenario(null);
+                                    setScenarioName("");
+                                  }}
+                                >Cancel</button>
+                              </div>
+                            </form>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                     {currentScenario && (
                       <ScenarioMap key={currentScenario.id} scenario={currentScenario} />
                     )}
@@ -956,6 +1132,32 @@ export function QuestionnaireAdmin({
         </main>
       </div>
     </div>
+      {questionToDelete && selected && (
+        <ConfirmModal
+          title="Delete Question"
+          description={
+            <>
+              Permanently delete the question{" "}
+              <strong>&quot;{questionToDelete.prompt}&quot;</strong>?
+            </>
+          }
+          warning={
+            <>
+              This action cannot be undone. The associated saved scenario will be kept.
+              {editing === questionToDelete.id && questionDirty &&
+                " Unsaved edits to this question will also be discarded."}
+              {error && <span className="qa-modal-error" role="alert">{error}</span>}
+            </>
+          }
+          confirmLabel={busy ? "Deleting Question..." : "Continue & Delete"}
+          busy={busy}
+          onClose={() => {
+            setError("");
+            setQuestionToDelete(null);
+          }}
+          onConfirm={removeQuestion}
+        />
+      )}
       {confirmDelete && selected && (
         <ConfirmModal
           title="Delete Questionnaire"

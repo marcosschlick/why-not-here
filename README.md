@@ -72,6 +72,12 @@ Create draft scenarios using the simulation configuration, route and results scr
 The results screen saves successful calculations through
 `POST /api/questionnaires/{id}/scenarios`; scenario list and detail endpoints
 return the saved map, routes and results.
+In the scenario batch queue, add individual configurations or batches with
+different settings before reviewing routes and processing them. Successful
+scenarios can be saved together; retrying a partial save skips scenarios already
+saved. Draft scenarios can be renamed through
+`PATCH /api/questionnaires/{id}/scenarios/{scenario_id}` with a `title` field;
+renaming preserves their configurations, maps and question associations.
 Use **Questionnaires** in the application navigation to administer drafts and
 preview their saved questions and scenarios for either group without saving answers. The API saves question ordering via
 `PUT /api/questionnaires/{id}/questions/order`, with a `question_ids` array

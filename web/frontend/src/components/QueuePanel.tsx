@@ -1,6 +1,7 @@
 import type { QueueItem } from "../types";
 
 interface QueuePanelProps {
+  scenarioMode?: boolean;
   queue: QueueItem[];
   workflowMode: "run" | "create";
   currentIndex: number;
@@ -14,6 +15,7 @@ interface QueuePanelProps {
 }
 
 export function QueuePanel({
+  scenarioMode = false,
   queue,
   workflowMode,
   currentIndex,
@@ -29,9 +31,11 @@ export function QueuePanel({
     return (
       <div className="queue-empty-card">
         <p className="queue-empty-text">
-          {workflowMode === "create"
-            ? "The configuration queue is empty. Configure the parameters above and add named configurations to the batch."
-            : "The execution queue is empty. Configure the parameters above and click + Add to Queue to enqueue batch configurations."}
+          {scenarioMode
+            ? "The scenario queue is empty. Add configurations or batches above, then review routes and process the queue."
+            : workflowMode === "create"
+              ? "The configuration queue is empty. Configure the parameters above and add named configurations to the batch."
+              : "The execution queue is empty. Configure the parameters above and click + Add to Queue to enqueue batch configurations."}
         </p>
       </div>
     );
@@ -47,15 +51,19 @@ export function QueuePanel({
       <div className="queue-panel-header">
         <div>
           <h3>
-            {workflowMode === "create"
-              ? "Configuration Queue"
-              : "Batch Execution Queue"}{" "}
+            {scenarioMode
+              ? "Scenario Queue"
+              : workflowMode === "create"
+                ? "Configuration Queue"
+                : "Batch Execution Queue"}{" "}
             ({queue.length} {queue.length === 1 ? "item" : "items"})
           </h3>
           <p className="subtitle">
-            {workflowMode === "create"
-              ? "Review each route, then save the named configuration files."
-              : "Sequential pipeline execution across parameterized runs."}
+            {scenarioMode
+              ? "Review each map and route, then solve and save successful scenarios to the questionnaire."
+              : workflowMode === "create"
+                ? "Review each route, then save the named configuration files."
+                : "Sequential pipeline execution across parameterized runs."}
           </p>
         </div>
 
@@ -79,14 +87,14 @@ export function QueuePanel({
               ? workflowMode === "create"
                 ? `Preparing Routes (${currentIndex + 1}/${queue.length})...`
                 : `Running Queue (${currentIndex + 1}/${queue.length})...`
-              : workflowMode === "create"
+              : workflowMode === "create" || scenarioMode
                 ? `Review Routes (${queue.length} ${queue.length === 1 ? "item" : "items"})`
                 : `Run Queue (${queue.length} ${queue.length === 1 ? "item" : "items"})`}
           </button>
         </div>
       </div>
 
-      {workflowMode === "run" && (
+      {workflowMode === "run" && !scenarioMode && (
         <div className="queue-options-row">
           <button
             type="button"
@@ -161,6 +169,9 @@ export function QueuePanel({
               </div>
 
               <div className="queue-item-params">
+                {scenarioMode && (
+                  <span className="param-tag">Name: {item.scenarioTitle}</span>
+                )}
                 {workflowMode === "create" && item.configurationName && (
                   <span className="param-tag">
                     Name: {item.configurationName}
