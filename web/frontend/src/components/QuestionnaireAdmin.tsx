@@ -215,6 +215,7 @@ export function QuestionnaireAdmin({
   const [list, setList] = useState<Summary[]>([]);
   const [selected, setSelected] = useState<Questionnaire | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(initialQuestionnaireId === null);
+  const sidebarToggleRef = useRef<HTMLButtonElement>(null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<number | null>(null);
   const [title, setTitle] = useState("");
@@ -318,12 +319,18 @@ export function QuestionnaireAdmin({
     }
   }
   function select(id: number) {
-    if (busy || id === selected?.id) return;
+    if (busy) return;
+    if (id === selected?.id) {
+      setSidebarOpen(false);
+      sidebarToggleRef.current?.focus();
+      return;
+    }
     if (!confirmDiscard()) return;
     setSelecting(true);
     void perform(async () => {
       await loadQuestionnaire(id, true);
       setSidebarOpen(false);
+      sidebarToggleRef.current?.focus();
       setExportKey("");
       setConfirmDelete(false);
       resetQuestion();
@@ -481,10 +488,26 @@ export function QuestionnaireAdmin({
       />
       <div className="qa-app">
         <div className={`qa-layout ${sidebarOpen ? "" : "qa-layout-collapsed"}`}>
-        <aside className="qa-sidebar" id="questionnaire-sidebar" hidden={!sidebarOpen}>
+        <aside className="qa-sidebar" id="questionnaire-sidebar">
+        <button
+          type="button"
+          ref={sidebarToggleRef}
+          className="qa-sidebar-toggle"
+          aria-label={sidebarOpen ? "Hide questionnaires" : "Show questionnaires"}
+          title={sidebarOpen ? "Hide questionnaires" : "Show questionnaires"}
+          aria-expanded={sidebarOpen}
+          aria-controls="questionnaire-sidebar"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+        >
+          <span aria-hidden="true">{sidebarOpen ? "‹" : "›"}</span>
+        </button>
+        <div className="qa-sidebar-content" inert={!sidebarOpen}>
           <div className="qa-side-header">
             <div className="qa-side-heading">
               <h2>Questionnaires</h2>
+            </div>
+            <p className="qa-sidebar-subtitle">Create and manage local drafts.</p>
+          </div>
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
@@ -495,9 +518,6 @@ export function QuestionnaireAdmin({
               >
                 <span>+</span> New
               </button>
-            </div>
-            <p className="qa-sidebar-subtitle">Create and manage local drafts.</p>
-          </div>
           {list.length === 0 ? (
             <div className="qa-sidebar-empty-card">
               <p className="qa-empty-title">No questionnaires yet</p>
@@ -522,12 +542,12 @@ export function QuestionnaireAdmin({
               ))}
             </nav>
           )}
+        </div>
         </aside>
         <span className="qa-visually-hidden" role="status">
           {selecting ? "Loading questionnaire…" : ""}
         </span>
         <main className="qa-content" inert={selecting}>
-          <button type="button" className="qa-sidebar-toggle" aria-expanded={sidebarOpen} aria-controls="questionnaire-sidebar" onClick={() => setSidebarOpen(!sidebarOpen)}>{sidebarOpen ? "Hide questionnaires" : "Show questionnaires"}</button>
           {error && (
             <div className="qa-error" role="alert" tabIndex={-1} ref={errorRef}>
               {error}
