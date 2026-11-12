@@ -21,21 +21,6 @@ export async function fetchConfig(): Promise<SystemConfig> {
   return response.json();
 }
 
-export async function saveConfig(
-  payload: Partial<SystemConfig>,
-): Promise<void> {
-  const response = await fetch("/api/config", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to save configuration: ${response.statusText}`);
-  }
-}
-
 export async function generateMap(
   config: Partial<SystemConfig>,
   persistArtifacts = true,

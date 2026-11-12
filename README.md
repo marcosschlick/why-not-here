@@ -64,8 +64,10 @@ database and user must already exist. The API creates its tables on startup
 and does not start if database initialization fails.
 
 Use **Questionnaires** to create a draft and generate scenarios through the
-existing simulation, route and results screens. Individual and batch generation,
-scenario naming and saved maps/routes remain available. Select three scenarios
+existing simulation, route and results screens. Generate maps individually or
+add or import configurations into a queue, then review routes and save scenarios.
+Automatic batch map generation is available outside questionnaire scenarios.
+Select three scenarios
 for explanations and three different scenarios for prediction, then save the
 protocol. The application generates all questions automatically. Preview either
 group before activating the draft and sharing its participant link.

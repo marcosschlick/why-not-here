@@ -7,8 +7,9 @@ navigation, following the experimental design in `refs/tcc_01.pdf`.
 It uses six distinct saved scenarios in administrator-selected order. Scenarios
 belong to the questionnaire and contain a successful calculation, a map and two
 distinct routes. The first three also require both group explanations.
-Generation, route drawing, batch calculation and saved scenario naming use the
-existing simulation workflow.
+Generate maps individually or add or import configurations into a queue, then
+review routes, calculate results and name saved scenarios using the existing
+simulation workflow. Automatic batch map generation is unavailable in this mode.
 
 `PUT /api/questionnaires/{id}/protocol` accepts:
 
