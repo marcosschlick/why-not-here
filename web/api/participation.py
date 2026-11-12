@@ -30,6 +30,8 @@ class AnswerInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     question_id: int
     value: Any
+    visible_duration_ms: int | None = Field(default=None, strict=True, ge=0)
+    explanation_visible_duration_ms: int | None = Field(default=None, strict=True, ge=0)
 
 
 class SubmissionInput(BaseModel):
@@ -42,6 +44,7 @@ class RouteConfirmationInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     submission_key: UUID
     choice: int = Field(strict=True, ge=0, le=1)
+    decision_visible_duration_ms: int | None = Field(default=None, strict=True, ge=0)
 
 
 def resolve_scenario_terrain_colors(configuration):
@@ -100,6 +103,9 @@ def activate_questionnaire(questionnaire_id: int):
                 status_code=422,
                 detail="Questionnaire must contain at least one question",
             )
+        route_scenarios = [q["scenario_id"] for q in questions if q["type"] == "route_choice"]
+        if len(route_scenarios) != len(set(route_scenarios)):
+            raise HTTPException(status_code=422, detail="A scenario is used by more than one route choice question")
         for question in questions:
             check_question(connection, questionnaire_id, question)
         token = secrets.token_urlsafe(32)
@@ -188,8 +194,6 @@ def public_question(
     public = {key: question[key] for key in ("id", "prompt", "type", "configuration")}
     if question["type"] == "route_choice":
         public["confirmed_choice"] = confirmed_choice
-    if question["scenario_id"] is not None and not justification_ready:
-        public["justification_pending"] = True
     if (
         question["scenario_id"] is not None
         and study_group is not None
@@ -216,6 +220,11 @@ def public_question(
             }
             order = saved_order or route_order(submission_key, question["id"])
             public["scenario"]["routes"] = [paths[name] for name in order]
+            if justification_ready:
+                public["scenario"]["route_order"] = order
+            if justification_ready and study_group == "experimental":
+                public["scenario"]["modifications"] = data.get("modifications")
+                public["scenario"]["show_explanation_map"] = True
     return public
 
 
@@ -224,7 +233,7 @@ def get_public_questionnaire(token: str, submission_key: UUID):
     with connect_database() as connection:
         questionnaire = active_questionnaire(connection, token, lock=True)
         existing = connection.execute(
-            "SELECT id, study_group FROM participations WHERE questionnaire_id = %s AND submission_key = %s",
+            "SELECT id, study_group, completed_at FROM participations WHERE questionnaire_id = %s AND submission_key = %s",
             (questionnaire["id"], submission_key),
         ).fetchone()
         saved_orders = {}
@@ -237,7 +246,7 @@ def get_public_questionnaire(token: str, submission_key: UUID):
             if existing
             else assigned_group(connection, questionnaire, submission_key)
         )
-        if existing:
+        if existing and existing["completed_at"] is not None:
             rows = connection.execute(
                 "SELECT question_id, value, route_order FROM answers WHERE participation_id = %s",
                 (existing["id"],),
@@ -262,15 +271,16 @@ def get_public_questionnaire(token: str, submission_key: UUID):
             ).fetchall()
             confirmed_choices = {row["question_id"]: row["choice"] for row in rows}
             saved_orders = {row["question_id"]: row["route_order"] for row in rows}
-        pending_scenarios = {
-            q["scenario_id"]
-            for q in questions
-            if q["type"] == "route_choice" and q["id"] not in confirmed_choices
-        }
+        if existing is None:
+            connection.execute(
+                "INSERT INTO participations (questionnaire_id, submission_key, study_group, participation_started_at) VALUES (%s, %s, %s, CURRENT_TIMESTAMP)",
+                (questionnaire["id"], submission_key, study_group),
+            )
+        pending_scenarios = {q["scenario_id"] for q in questions if q["type"] == "route_choice" and q["id"] not in confirmed_choices}
         return {
             "title": questionnaire["title"],
             "description": questionnaire["description"],
-            "submission_completed": existing is not None,
+            "submission_completed": existing is not None and existing["completed_at"] is not None,
             "questions": [
                 public_question(
                     q,
@@ -319,12 +329,13 @@ def confirm_route_choice(token: str, question_id: int, payload: RouteConfirmatio
                 )
             return {"choice": payload.choice}
         connection.execute(
-            "INSERT INTO route_confirmations (question_id, submission_key, choice, route_order) VALUES (%s, %s, %s, %s)",
+            "INSERT INTO route_confirmations (question_id, submission_key, choice, route_order, decision_visible_duration_ms) VALUES (%s, %s, %s, %s, %s)",
             (
                 question_id,
                 payload.submission_key,
                 payload.choice,
                 Jsonb(route_order(payload.submission_key, question_id)),
+                payload.decision_visible_duration_ms,
             ),
         )
         return {"choice": payload.choice}
@@ -394,12 +405,12 @@ def submit_answers(token: str, payload: SubmissionInput):
             connection, token, lock=True, allow_closed=True
         )
         existing = connection.execute(
-            "SELECT id FROM participations WHERE questionnaire_id = %s AND submission_key = %s",
+            "SELECT id, completed_at FROM participations WHERE questionnaire_id = %s AND submission_key = %s",
             (questionnaire["id"], payload.submission_key),
         ).fetchone()
         questions = read_questions(connection, questionnaire["id"])
         answers = {answer.question_id: answer.value for answer in payload.answers}
-        if existing:
+        if existing and existing["completed_at"] is not None:
             rows = connection.execute(
                 "SELECT question_id, value FROM answers WHERE participation_id = %s",
                 (existing["id"],),
@@ -424,7 +435,7 @@ def submit_answers(token: str, payload: SubmissionInput):
                 status_code=422, detail="Every question must have exactly one answer"
             )
         rows = connection.execute(
-            "SELECT rc.question_id, rc.choice, rc.route_order FROM route_confirmations rc "
+            "SELECT rc.question_id, rc.choice, rc.route_order, rc.decision_visible_duration_ms FROM route_confirmations rc "
             "JOIN questions q ON q.id = rc.question_id WHERE q.questionnaire_id = %s AND rc.submission_key = %s",
             (questionnaire["id"], payload.submission_key),
         ).fetchall()
@@ -446,17 +457,21 @@ def submit_answers(token: str, payload: SubmissionInput):
                         status_code=409,
                         detail=f"Confirm the route choice for question {question['id']}",
                     )
-        participation = connection.execute(
-            "INSERT INTO participations (questionnaire_id, submission_key, completed_at, study_group) VALUES (%s, %s, CURRENT_TIMESTAMP, %s) RETURNING id",
-            (
-                questionnaire["id"],
-                payload.submission_key,
-                assigned_group(connection, questionnaire, payload.submission_key),
-            ),
-        ).fetchone()
+        if existing:
+            participation = connection.execute(
+                "UPDATE participations SET completed_at = CURRENT_TIMESTAMP WHERE id = %s RETURNING id",
+                (existing["id"],),
+            ).fetchone()
+        else:
+            participation = connection.execute(
+                "INSERT INTO participations (questionnaire_id, submission_key, completed_at, study_group) VALUES (%s, %s, CURRENT_TIMESTAMP, %s) RETURNING id",
+                (questionnaire["id"], payload.submission_key, assigned_group(connection, questionnaire, payload.submission_key)),
+            ).fetchone()
+        durations = {answer.question_id: answer.visible_duration_ms for answer in payload.answers}
+        explanation_durations = {answer.question_id: answer.explanation_visible_duration_ms for answer in payload.answers}
         for question in questions:
             connection.execute(
-                "INSERT INTO answers (participation_id, question_id, value, route_order) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO answers (participation_id, question_id, value, route_order, visible_duration_ms, decision_visible_duration_ms, explanation_visible_duration_ms) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 (
                     participation["id"],
                     question["id"],
@@ -464,6 +479,9 @@ def submit_answers(token: str, payload: SubmissionInput):
                     Jsonb(confirmations[question["id"]]["route_order"])
                     if question["type"] == "route_choice"
                     else None,
+                    durations[question["id"]],
+                    confirmations[question["id"]]["decision_visible_duration_ms"] if question["type"] == "route_choice" else None,
+                    explanation_durations[question["id"]],
                 ),
             )
         return {"status": "completed", "participation_id": participation["id"]}

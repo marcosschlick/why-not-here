@@ -165,12 +165,7 @@ function buildPreview(
     questions: questionnaire.questions.map((question) => {
       const saved = scenarios.find((item) => item.id === question.scenario_id);
       const data = saved?.data;
-      const pending =
-        !!saved &&
-        questionnaire.questions.some(
-          (item) =>
-            item.scenario_id === saved.id && item.type === "route_choice",
-        );
+      const previewRoute = questionnaire.questions.find((item) => item.type === "route_choice" && item.scenario_id === question.scenario_id && question.scenario_id != null);
       const justification =
         group === "control" ? data?.cost_baseline_text : data?.explanation_text;
       const scenario =
@@ -185,6 +180,9 @@ function buildPreview(
                 data.optimal_path && data.alternative_path
                   ? [data.optimal_path, data.alternative_path]
                   : undefined,
+              route_order: ["optimal", "alternative"] as ("optimal" | "alternative")[],
+              modifications: group === "experimental" ? data.modifications : undefined,
+              show_explanation_map: group === "experimental",
             }
           : undefined;
       return {
@@ -193,10 +191,8 @@ function buildPreview(
         type: question.type,
         configuration: question.configuration,
         scenario,
-        preview_scenario_id: question.scenario_id,
-        preview_justification: justification,
-        justification: pending ? undefined : justification,
-        justification_pending: pending,
+        justification,
+        preview_route_id: previewRoute?.id,
         confirmed_choice: null,
       };
     }),
@@ -218,6 +214,7 @@ export function QuestionnaireAdmin({
 }) {
   const [list, setList] = useState<Summary[]>([]);
   const [selected, setSelected] = useState<Questionnaire | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(initialQuestionnaireId === null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<number | null>(null);
   const [title, setTitle] = useState("");
@@ -326,6 +323,7 @@ export function QuestionnaireAdmin({
     setSelecting(true);
     void perform(async () => {
       await loadQuestionnaire(id, true);
+      setSidebarOpen(false);
       setExportKey("");
       setConfirmDelete(false);
       resetQuestion();
@@ -482,8 +480,8 @@ export function QuestionnaireAdmin({
         onOpenAbout={onOpenAbout}
       />
       <div className="qa-app">
-        <div className="qa-layout">
-        <aside className="qa-sidebar">
+        <div className={`qa-layout ${sidebarOpen ? "" : "qa-layout-collapsed"}`}>
+        <aside className="qa-sidebar" id="questionnaire-sidebar" hidden={!sidebarOpen}>
           <div className="qa-side-header">
             <div className="qa-side-heading">
               <h2>Questionnaires</h2>
@@ -529,6 +527,7 @@ export function QuestionnaireAdmin({
           {selecting ? "Loading questionnaire…" : ""}
         </span>
         <main className="qa-content" inert={selecting}>
+          <button type="button" className="qa-sidebar-toggle" aria-expanded={sidebarOpen} aria-controls="questionnaire-sidebar" onClick={() => setSidebarOpen(!sidebarOpen)}>{sidebarOpen ? "Hide questionnaires" : "Show questionnaires"}</button>
           {error && (
             <div className="qa-error" role="alert" tabIndex={-1} ref={errorRef}>
               {error}

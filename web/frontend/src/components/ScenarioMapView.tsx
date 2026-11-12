@@ -93,7 +93,7 @@ export function ScenarioMapView({
           </button>
         </div>
       </div>
-      <div className="canvas-wrapper" ref={setWrapper}>
+      <div className="canvas-wrapper" ref={setWrapper} style={{ aspectRatio: `${mapData.w} / ${mapData.h}` }}>
         <TacticalMapCanvas
           mapData={mapData}
           userPath={userPath}

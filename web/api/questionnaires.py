@@ -157,6 +157,14 @@ def validate_scenario(connection, questionnaire_id: int, payload: QuestionInput)
     return payload.scenario_id
 
 
+def validate_unique_route_scenario(connection, questionnaire_id, payload, question_id=None):
+    if payload.type == "route_choice" and connection.execute(
+        "SELECT 1 FROM questions WHERE questionnaire_id = %s AND scenario_id = %s AND type = 'route_choice' AND (%s::bigint IS NULL OR id <> %s)",
+        (questionnaire_id, payload.scenario_id, question_id, question_id),
+    ).fetchone():
+        raise HTTPException(status_code=422, detail="This scenario is already used by another route choice question")
+
+
 def valid_point(point):
     return (
         isinstance(point, list)
@@ -238,6 +246,7 @@ def update_questionnaire(questionnaire_id: int, payload: QuestionnaireInput):
 def create_question(questionnaire_id: int, payload: QuestionInput):
     with connect_database() as connection:
         require_draft(connection, questionnaire_id)
+        validate_unique_route_scenario(connection, questionnaire_id, payload)
         scenario_id = validate_scenario(connection, questionnaire_id, payload)
         return connection.execute(
             "INSERT INTO questions (questionnaire_id, prompt, type, configuration, scenario_id, position) "
@@ -293,6 +302,7 @@ def update_question(questionnaire_id: int, question_id: int, payload: QuestionIn
             "SELECT 1 FROM answers WHERE question_id = %s LIMIT 1", (question_id,)
         ).fetchone():
             raise HTTPException(status_code=409, detail="Question has answers")
+        validate_unique_route_scenario(connection, questionnaire_id, payload, question_id)
         scenario_id = validate_scenario(connection, questionnaire_id, payload)
         question = connection.execute(
             "UPDATE questions SET prompt = %s, type = %s, configuration = %s, "

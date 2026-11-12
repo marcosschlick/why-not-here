@@ -30,8 +30,7 @@
 .qa-layout {
   display: grid;
   grid-template-columns: minmax(14rem, 19rem) minmax(0, 1fr);
-  max-width: 100rem;
-  margin: auto;
+  max-width: none;
   min-height: calc(100vh - 5rem);
 }
 .qa-sidebar {
@@ -42,6 +41,18 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+}
+.qa-sidebar[hidden] {
+  display: none;
+}
+.qa-layout-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+.qa-layout > .qa-content {
+  max-width: 100rem;
+}
+.qa-sidebar-toggle {
+  justify-self: start;
 }
 .qa-side-header {
   display: flex;
@@ -327,6 +338,12 @@
 .scenario-map-view {
   min-width: 0;
 }
+.qa-app .scenario-map-view .canvas-wrapper {
+  height: auto;
+  min-height: 0;
+  max-height: 65dvh;
+  padding: 0.35rem;
+}
 .scenario-map-controls {
   display: flex;
   justify-content: flex-end;
@@ -383,6 +400,7 @@
 }
 .qa-participant {
   margin: 0 auto;
+  max-width: 1600px;
 }
 .qa-justification {
   margin: 0 0 1rem;
@@ -399,8 +417,20 @@
   display: grid;
   gap: 1.2rem;
 }
-.qa-participant-form > button {
-  justify-self: start;
+.qa-question-navigation {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.qa-route-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+@media (max-width: 800px) {
+  .qa-route-options {
+    grid-template-columns: 1fr;
+  }
 }
 .qa-fieldset {
   border: 0;
