@@ -2895,7 +2895,45 @@ kbd,
   }
 }
 
-.benchmark-toggle .switch-pill,
-.benchmark-toggle .switch-knob {
-  transition: none;
+.config-strategy-grid > .conditional-field-wrapper,
+.config-strategy-grid > .benchmark-setting {
+  grid-column: 1 / -1;
+}
+
+.config-strategy-grid > .conditional-field-wrapper {
+  margin-top: 0;
+}
+
+.benchmark-description {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.workflow-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  color: var(--text-strong);
+}
+
+.workflow-context > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.workflow-context span {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 48rem) {
+  .workflow-context {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }

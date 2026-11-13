@@ -240,25 +240,6 @@ export function ConfigForm({
       <fieldset className="config-fieldset">
         <legend>Pipeline Configuration</legend>
 
-        {!scenarioMode && (
-          <div className="queue-options-row">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={benchmark}
-              className={`toggle-btn benchmark-toggle ${benchmark ? "active" : ""}`}
-              onClick={() => onBenchmarkChange(!benchmark)}
-              disabled={isGenerating}
-            >
-              <span className="toggle-label">
-                Benchmark: {benchmark ? "10 combinations per map" : "Disabled"}
-              </span>
-              <span className="switch-pill">
-                <span className="switch-knob" />
-              </span>
-            </button>
-          </div>
-        )}
         <div className="config-form-section">
           <div className="config-form-grid-pair">
             <div className="form-group">
@@ -363,60 +344,96 @@ export function ConfigForm({
                   </button>
                 </div>
               </div>
+            </div>
+            <div
+              className={
+                "conditional-field-wrapper " +
+                (useIncremental || (!scenarioMode && benchmark)
+                  ? "is-active"
+                  : "is-inactive")
+              }
+            >
+              <div className="conditional-inner-grid has-scope">
+                <div className="form-group">
+                  <label htmlFor="maxIspIterations">
+                    <span>Max ISP Iterations</span>
+                    <span className="form-group-hint">Cutting-plane limit</span>
+                  </label>
+                  <input
+                    id="maxIspIterations"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={maxIspIterations}
+                    onChange={(e) =>
+                      setMaxIspIterations(Number(e.target.value))
+                    }
+                    required
+                    disabled={!useIncremental && (scenarioMode || !benchmark)}
+                  />
+                </div>
 
-              <div
-                className={
-                  "conditional-field-wrapper " +
-                  (useIncremental || (!scenarioMode && benchmark)
-                    ? "is-active"
-                    : "is-inactive")
-                }
-              >
-                <div className="conditional-inner-grid has-scope">
-                  <div className="form-group">
-                    <label htmlFor="maxIspIterations">
-                      <span>Max ISP Iterations</span>
-                      <span className="form-group-hint">
-                        Cutting-plane limit
-                      </span>
-                    </label>
-                    <input
-                      id="maxIspIterations"
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={maxIspIterations}
-                      onChange={(e) =>
-                        setMaxIspIterations(Number(e.target.value))
-                      }
-                      required
-                      disabled={!useIncremental && (scenarioMode || !benchmark)}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="incrementalAstarScope">
-                      <span>Incremental A* Scope</span>
-                      <span className="form-group-hint">
-                        Competing paths search
-                      </span>
-                    </label>
-                    <select
-                      id="incrementalAstarScope"
-                      value={incrementalAstarScope}
-                      onChange={(e) => setIncrementalAstarScope(e.target.value)}
-                      disabled={
-                        (!useIncremental || reductionMethod === "NONE") &&
-                        (scenarioMode || !benchmark)
-                      }
-                    >
-                      <option value="GLOBAL">Global Grid</option>
-                      <option value="SUBGRAPH">Reduced Subgraph</option>
-                    </select>
-                  </div>
+                <div className="form-group">
+                  <label htmlFor="incrementalAstarScope">
+                    <span>Incremental A* Scope</span>
+                    <span className="form-group-hint">
+                      Competing paths search
+                    </span>
+                  </label>
+                  <select
+                    id="incrementalAstarScope"
+                    value={incrementalAstarScope}
+                    onChange={(e) => setIncrementalAstarScope(e.target.value)}
+                    disabled={
+                      (!useIncremental || reductionMethod === "NONE") &&
+                      (scenarioMode || !benchmark)
+                    }
+                  >
+                    <option value="GLOBAL">Global Grid</option>
+                    <option value="SUBGRAPH">Reduced Subgraph</option>
+                  </select>
                 </div>
               </div>
             </div>
+            {!scenarioMode && (
+              <div className="strategy-column benchmark-setting">
+                <div className="form-group">
+                  <label htmlFor="benchmarkToggle">
+                    <span>Benchmark</span>
+                    <span className="form-group-hint">
+                      10 combinations per map
+                    </span>
+                  </label>
+                  <div className="toggle-container">
+                    <button
+                      type="button"
+                      id="benchmarkToggle"
+                      aria-label="Benchmark"
+                      role="switch"
+                      aria-checked={benchmark}
+                      aria-describedby="benchmark-description"
+                      className={`toggle-btn ${benchmark ? "active" : ""}`}
+                      onClick={() => onBenchmarkChange(!benchmark)}
+                      disabled={isGenerating}
+                    >
+                      <span className="toggle-label">
+                        {benchmark ? "On" : "Off"}
+                      </span>
+                      <span className="switch-pill">
+                        <span className="switch-knob" />
+                      </span>
+                    </button>
+                  </div>
+                  <span
+                    id="benchmark-description"
+                    className="benchmark-description"
+                  >
+                    Runs all solver and reduction combinations; individual
+                    choices are disabled.
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

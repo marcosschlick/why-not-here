@@ -1,5 +1,6 @@
 export interface TopbarProps {
   activeView: "simulation" | "admin";
+  scenarioMode?: boolean;
   currentStep: "config" | "route_canvas" | "results";
   onSelectStep: (step: "config" | "route_canvas" | "results") => void;
   hasMapData: boolean;
@@ -10,6 +11,7 @@ export interface TopbarProps {
 
 export function Topbar({
   activeView,
+  scenarioMode = false,
   currentStep,
   onSelectStep,
   hasMapData,
@@ -55,10 +57,10 @@ export function Topbar({
             } ${hasMapData ? "completed" : ""}`}
             onClick={() => onSelectStep("config")}
           >
-            <span className="stepper-indicator">
-              {hasMapData ? "✓" : "1"}
+            <span className="stepper-indicator">{hasMapData ? "✓" : "1"}</span>
+            <span className="stepper-label">
+              {scenarioMode ? "Configure" : "Configuration"}
             </span>
-            <span className="stepper-label">Configuration</span>
           </button>
 
           <button
@@ -71,10 +73,10 @@ export function Topbar({
             onClick={() => hasMapData && onSelectStep("route_canvas")}
             disabled={!hasMapData}
           >
-            <span className="stepper-indicator">
-              {hasResults ? "✓" : "2"}
+            <span className="stepper-indicator">{hasResults ? "✓" : "2"}</span>
+            <span className="stepper-label">
+              {scenarioMode ? "Define Route" : "Route Definition"}
             </span>
-            <span className="stepper-label">Route Definition</span>
           </button>
 
           <button
@@ -88,7 +90,9 @@ export function Topbar({
             disabled={!hasResults}
           >
             <span className="stepper-indicator">3</span>
-            <span className="stepper-label">Results &amp; Metrics</span>
+            <span className="stepper-label">
+              {scenarioMode ? "Review and Save" : "Results & Metrics"}
+            </span>
           </button>
         </nav>
 

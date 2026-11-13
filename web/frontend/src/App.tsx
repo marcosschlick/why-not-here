@@ -77,6 +77,7 @@ export function App() {
   );
   const [adminScenario, setAdminScenario] = useState<number | null>(null);
   const [scenarioTitle, setScenarioTitle] = useState("");
+  const [questionnaireTitle, setQuestionnaireTitle] = useState("");
   const [savingScenario, setSavingScenario] = useState(false);
   const [scenarioConfigDirty, setScenarioConfigDirty] = useState(false);
   const [simulationSnapshot, setSimulationSnapshot] = useState<{
@@ -148,7 +149,7 @@ export function App() {
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
   const [confirmation, setConfirmation] = useState<Pick<
     ConfirmModalProps,
-    "title" | "description" | "confirmLabel" | "onConfirm"
+    "title" | "description" | "confirmLabel" | "cancelLabel" | "onConfirm"
   > | null>(null);
 
   useEffect(() => {
@@ -161,7 +162,7 @@ export function App() {
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [mapData, queue.length, scenarioConfigDirty]);
 
-  function startScenario(id: number, _title: string) {
+  function startScenario(id: number, title: string) {
     setSimulationSnapshot({
       map: mapData,
       path: userPath,
@@ -176,6 +177,7 @@ export function App() {
       config,
     });
     setScenarioQuestionnaire(id);
+    setQuestionnaireTitle(title);
     setScenarioQueue([]);
     setAdminQuestionnaire(id);
     setAdminScenario(null);
@@ -210,6 +212,7 @@ export function App() {
     }
     setAdminScenario(scenarioId);
     setScenarioQuestionnaire(null);
+    setQuestionnaireTitle("");
     setSimulationSnapshot(null);
     setErrorMessage(null);
     setShowAdmin(true);
@@ -1027,6 +1030,30 @@ export function App() {
     setCurrentStep(step);
   }
 
+  function openQuestionnaires() {
+    if (isSolvingISP || isGeneratingMap || savingScenario) return;
+    if (scenarioQuestionnaire === null) {
+      setShowAdmin(true);
+      return;
+    }
+    const hasUnsavedWork =
+      scenarioConfigDirty ||
+      scenarioQueue.some((item) => !item.scenarioId) ||
+      (!isBatchMode && Boolean(mapData));
+    if (!hasUnsavedWork) {
+      returnToAdmin();
+      return;
+    }
+    setConfirmation({
+      title: "Discard Unfinished Scenario",
+      description:
+        "Unsaved configuration, maps, routes and results will be discarded. Saved scenarios will remain in the questionnaire.",
+      cancelLabel: "Keep editing",
+      confirmLabel: "Discard and return",
+      onConfirm: () => returnToAdmin(),
+    });
+  }
+
   if (showAdmin) {
     return (
       <>
@@ -1062,21 +1089,44 @@ export function App() {
         hasMapData={hasMapData}
         hasResults={hasResults}
         onOpenAbout={() => setIsAboutOpen(true)}
-        onOpenAdmin={() => {
-          if (isSolvingISP || isGeneratingMap || savingScenario) return;
-          if (scenarioQuestionnaire !== null) {
-            setConfirmation({
-              title: "Discard Unfinished Scenario",
-              description:
-                "Discard the unfinished scenario and return to questionnaires?",
-              confirmLabel: "Discard Scenario",
-              onConfirm: () => returnToAdmin(),
-            });
-          } else setShowAdmin(true);
-        }}
+        scenarioMode={scenarioQuestionnaire !== null}
+        onOpenAdmin={openQuestionnaires}
       />
 
       <main className="main-content-wrapper">
+        <div className="workflow-context">
+          <div>
+            <strong>
+              {scenarioQuestionnaire !== null
+                ? "Creating scenario"
+                : "Simulation"}
+            </strong>
+            {scenarioQuestionnaire !== null && (
+              <span>Questionnaire: {questionnaireTitle}</span>
+            )}
+            {scenarioQuestionnaire !== null && (
+              <span>
+                {currentStep === "config"
+                  ? activeTabMode === "queue"
+                    ? "Next: add or import configurations, then review their routes."
+                    : "Next: generate or import a map, then define a route."
+                  : currentStep === "route_canvas"
+                    ? "Next: solve the route, then review and save the scenario."
+                    : "Review the results and save the scenario to the questionnaire."}
+              </span>
+            )}
+          </div>
+          {scenarioQuestionnaire !== null && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={openQuestionnaires}
+              disabled={isGeneratingMap || isSolvingISP || savingScenario}
+            >
+              Back to questionnaire
+            </button>
+          )}
+        </div>
         {errorMessage && (
           <div className="alert-banner">
             <span className="alert-icon">&times;</span>

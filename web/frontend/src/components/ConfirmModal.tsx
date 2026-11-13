@@ -6,6 +6,7 @@ export interface ConfirmModalProps {
   description: ReactNode;
   warning?: ReactNode;
   confirmLabel: string;
+  cancelLabel?: string;
   busy: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -16,6 +17,7 @@ export function ConfirmModal({
   description,
   warning,
   confirmLabel,
+  cancelLabel = "Cancel",
   busy,
   onClose,
   onConfirm,
@@ -109,7 +111,7 @@ export function ConfirmModal({
             onClick={onClose}
             disabled={busy}
           >
-            Cancel
+            {cancelLabel}
           </button>
           <button
             type="button"
