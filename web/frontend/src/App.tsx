@@ -538,23 +538,6 @@ export function App() {
     setScenarioConfigDirty(false);
   }
 
-  function handleAddBatch(
-    base: SystemConfig,
-    count: number,
-    useBenchmark: boolean,
-  ) {
-    const items = Array.from({ length: count }, (_, index) =>
-      prepareItems(
-        { ...base, MAP_DEFAULT_SEED: base.MAP_DEFAULT_SEED + index },
-        { map_index: index + 1 },
-        useBenchmark,
-      ),
-    ).flat();
-    setScenarioConfigDirty(false);
-    setQueue(items);
-    void handleStartBatchReview(items);
-  }
-
   function handleRemoveQueueItem(id: string) {
     const item = queue.find((entry) => entry.id === id);
     const removeItem = () =>
@@ -1150,7 +1133,6 @@ export function App() {
               onDraftChange={setConfig}
               onGenerateMap={handleGenerateMap}
               onAddToQueue={handleAddToQueue}
-              onAddBatch={handleAddBatch}
               onImportConfig={handleImportConfig}
               onImportBatchConfigs={handleImportBatchConfigs}
               isGenerating={isGeneratingMap}

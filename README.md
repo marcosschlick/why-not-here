@@ -75,8 +75,7 @@ removed name or destination options must be recreated in the current format.
 Enable **Benchmark** to create ten configurations or executions per map:
 monolithic and incremental, each with `NONE`, `PATH_ONLY`, `SPARSIFIED`, `BBOX`
 and `FLOODFILL`. Each group shares the exact map, seed, endpoints and one reviewed
-route. A batch of two maps creates twenty entries; seeds increment between maps.
-Imported configurations are also expanded. Names identify solver and reduction,
+route. Each imported configuration is also expanded. Names identify solver and reduction,
 results have separate directories, and removing a variant removes its group.
 Benchmark is unavailable for questionnaire scenarios.
 

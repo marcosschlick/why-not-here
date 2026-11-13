@@ -2895,24 +2895,6 @@ kbd,
   }
 }
 
-.batch-count-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--shadow-grey);
-  font-weight: 600;
-}
-
-.batch-count-label input {
-  width: 5rem;
-}
-
-@media (max-width: 640px) {
-  .batch-count-label {
-    width: 100%;
-  }
-}
-
 .benchmark-toggle .switch-pill,
 .benchmark-toggle .switch-knob {
   transition: none;

@@ -12,7 +12,6 @@ interface ConfigFormProps {
   initialConfig: SystemConfig | null;
   onGenerateMap: (config: SystemConfig, benchmark: boolean) => void;
   onAddToQueue: (config: SystemConfig, benchmark: boolean) => void;
-  onAddBatch: (config: SystemConfig, count: number, benchmark: boolean) => void;
   onImportConfig?: (data: Record<string, unknown>, benchmark: boolean) => void;
   onImportBatchConfigs?: (
     configs: { name: string; data: Record<string, unknown> }[],
@@ -36,7 +35,6 @@ export function ConfigForm({
   initialConfig,
   onGenerateMap,
   onAddToQueue,
-  onAddBatch,
   onImportConfig,
   onImportBatchConfigs,
   isGenerating,
@@ -46,7 +44,6 @@ export function ConfigForm({
   onSwitchMode,
   queueCount,
 }: ConfigFormProps) {
-  const [batchCount, setBatchCount] = useState(2);
   const [mapSizes, setMapSizes] = useState<MapProfile[]>([]);
   const [profilesError, setProfilesError] = useState<string | null>(null);
   const [mapH, setMapH] = useState<number>(initialConfig?.MAP_H ?? 64);
@@ -568,42 +565,6 @@ export function ConfigForm({
               </button>
             )}
 
-            {activeMode === "queue" && !scenarioMode && (
-              <>
-                <label className="batch-count-label" htmlFor="batch-count">
-                  Number of maps
-                  <input
-                    id="batch-count"
-                    type="number"
-                    min={2}
-                    max={100}
-                    value={batchCount}
-                    onChange={(event) =>
-                      setBatchCount(Number(event.target.value))
-                    }
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="btn btn-vibrant"
-                  disabled={
-                    isGenerating ||
-                    !Number.isInteger(batchCount) ||
-                    batchCount < 2 ||
-                    batchCount > 100
-                  }
-                  onClick={() => {
-                    const generate = () => {
-                      onAddBatch(getCurrentConfig(), batchCount, benchmark);
-                    };
-                    if (onBeforeGenerate) onBeforeGenerate(generate);
-                    else generate();
-                  }}
-                >
-                  Generate Batch
-                </button>
-              </>
-            )}
             {activeMode === "queue" && (
               <button
                 type="button"
