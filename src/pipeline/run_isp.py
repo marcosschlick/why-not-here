@@ -245,7 +245,7 @@ def run_isp(
     isp_result.path_metrics = path_metrics
     out_dir = get_project_path(config.OUTPUT_DIR)
     results_dir = out_dir / RESULTS_DIRECTORY_NAME
-    results_dir.mkdir(parents=True, exist_ok=True)
+    results_dir.mkdir(parents=True, exist_ok=False)
 
     optimal_image = results_dir / OPTIMAL_PATH_IMAGE_FILENAME
     alternative_image = results_dir / ALTERNATIVE_PATH_IMAGE_FILENAME

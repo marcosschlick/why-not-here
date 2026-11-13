@@ -2969,3 +2969,8 @@ kbd,
     width: 100%;
   }
 }
+
+.benchmark-toggle .switch-pill,
+.benchmark-toggle .switch-knob {
+  transition: none;
+}

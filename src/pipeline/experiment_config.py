@@ -11,6 +11,12 @@ from src.incremental import ClosedLoopResult
 from src.map.profiles import resolve_map_profile
 from src.pipeline.generate_map import generate_map
 from src.pipeline.run_isp import run_isp
+from src.pipeline.storage import (
+    available_path,
+    reserve_configured_output,
+    storage_directory,
+    validate_name,
+)
 
 CONFIG_REGISTRY = {
     "MAP_W": "config_grid.py",
@@ -370,64 +376,52 @@ def save_experiment_configurations(
     destination_dir: str | Path,
     configurations: list[dict[str, Any]],
 ) -> list[str]:
-    destination = Path(destination_dir).expanduser().resolve()
-    if not destination.exists() or not destination.is_dir():
-        raise ValueError("Configuration destination must be an existing directory.")
     if not configurations:
         raise ValueError("At least one configuration is required.")
-
-    prepared: list[tuple[Path, str]] = []
-    names: set[str] = set()
-    existing_names = {entry.name.casefold() for entry in destination.iterdir()}
-
+    destination = storage_directory(destination_dir or "configurations")
+    prepared: list[tuple[str, bool, str]] = []
+    manual_names: set[str] = set()
     for item in configurations:
-        raw_name = str(item.get("name", "")).strip()
-        if raw_name.lower().endswith(".json"):
-            raw_name = raw_name[:-5]
-        if (
-            not raw_name
-            or raw_name in {".", ".."}
-            or len(raw_name) > 180
-            or any(ord(character) < 32 for character in raw_name)
-            or any(character in raw_name for character in '/\\<>:"|?*')
-        ):
-            raise ValueError("Configuration names must be valid file names.")
-
-        filename = f"{raw_name}.json"
-        normalized_name = filename.casefold()
-        if normalized_name in names:
-            raise ValueError(f"Duplicate configuration name: {raw_name}")
-        if normalized_name in existing_names:
-            raise FileExistsError(f"Configuration file already exists: {filename}")
-        names.add(normalized_name)
-
-        config_dict = item.get("config") or {}
-        start = item.get("start")
-        goal = item.get("goal")
-        user_path = item.get("user_path")
+        name = str(item.get("name", "")).strip()
+        if name.lower().endswith(".json"):
+            name = name[:-5]
+        name = validate_name(name)
+        automatic = bool(item.get("automatic_name", False))
+        if not automatic:
+            if name.casefold() in manual_names:
+                raise ValueError(f"Duplicate configuration name: {name}")
+            manual_names.add(name.casefold())
+            available_path(destination, name, False, ".json")
         export_data = build_experiment_config(
-            config_dict=config_dict,
-            start=start,
-            goal=goal,
-            user_path=user_path,
+            config_dict=item.get("config") or {},
+            start=item.get("start"),
+            goal=item.get("goal"),
+            user_path=item.get("user_path"),
         )
         validate_experiment_config(export_data)
-        prepared.append((destination / filename, json.dumps(export_data, indent=2)))
+        prepared.append((name, automatic, json.dumps(export_data, indent=2) + "\n"))
 
-    created_paths: list[Path] = []
+    created_paths: dict[int, Path] = {}
     try:
-        for target, content in prepared:
-            config_file = target.open("x", encoding="utf-8")
-            created_paths.append(target)
+        for index, (name, automatic, content) in sorted(
+            enumerate(prepared), key=lambda entry: entry[1][1]
+        ):
+            while True:
+                target = available_path(destination, name, automatic, ".json")
+                try:
+                    config_file = target.open("x", encoding="utf-8")
+                    break
+                except FileExistsError:
+                    if not automatic:
+                        raise
+            created_paths[index] = target
             with config_file:
                 config_file.write(content)
-                config_file.write("\n")
     except OSError:
-        for target in created_paths:
+        for target in created_paths.values():
             target.unlink(missing_ok=True)
         raise
-
-    return [str(target) for target, _ in prepared]
+    return [str(created_paths[index]) for index in range(len(prepared))]
 
 
 def validate_experiment_config(
@@ -567,6 +561,10 @@ def execute_experiment(
     if verbose:
         print(f"Applying configuration for seed={params.get('MAP_DEFAULT_SEED')}...")
 
+    output_dir = reserve_configured_output(
+        params["MAP_H"], params["MAP_W"], params["OUTPUT_DIR"]
+    )
+    params["OUTPUT_DIR"] = str(output_dir)
     apply_experiment_config(params, start=start, goal=goal)
 
     generate_map(verbose=verbose)

@@ -1,10 +1,10 @@
 import json
 import math
 import os
-import shutil
 import subprocess
 import sys
-from pathlib import Path
+from collections.abc import Callable
+from functools import wraps
 from typing import Any
 from urllib.parse import quote
 
@@ -18,7 +18,6 @@ from src.map.profiles import map_profiles
 from src.pipeline.artifact_names import (
     MAP_DIRECTORY_NAME,
     MAP_IMAGE_FILENAME,
-    OUTPUT_ARTIFACT_FILENAMES,
 )
 from src.pipeline.experiment_config import (
     apply_experiment_config,
@@ -26,8 +25,9 @@ from src.pipeline.experiment_config import (
     save_experiment_configurations,
     validate_experiment_config,
 )
-from src.pipeline.generate_map import generate_map
+from src.pipeline.generate_map import generate_map, persist_map
 from src.pipeline.run_isp import run_isp
+from src.pipeline.storage import reserve_configured_output, reserve_output_directory
 from src.pipeline.utils import (
     create_alternative_path,
     get_project_path,
@@ -52,6 +52,21 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api")
+
+
+def exclusive_pipeline(function: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(function)
+    def execute(*args: Any, **kwargs: Any) -> Any:
+        if not runner.execution_lock.acquire(blocking=False):
+            raise HTTPException(
+                status_code=409, detail="Pipeline execution already in progress."
+            )
+        try:
+            return function(*args, **kwargs)
+        finally:
+            runner.execution_lock.release()
+
+    return execute
 
 
 def _generation_metadata(grid: Grid) -> dict[str, int | None]:
@@ -107,6 +122,7 @@ def read_config() -> dict[str, Any]:
 
 
 @router.post("/config")
+@exclusive_pipeline
 def modify_config(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         updated_items = update_configurations(payload)
@@ -116,6 +132,7 @@ def modify_config(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.post("/config/export")
+@exclusive_pipeline
 def export_configuration_endpoint(payload: ExportConfigRequest) -> dict[str, Any]:
     config_dict = payload.config or {}
     start = (int(payload.start[0]), int(payload.start[1]))
@@ -133,6 +150,7 @@ def export_configuration_endpoint(payload: ExportConfigRequest) -> dict[str, Any
 
 
 @router.post("/config/save")
+@exclusive_pipeline
 def save_configurations_endpoint(
     payload: SaveConfigurationsRequest,
 ) -> dict[str, Any]:
@@ -155,6 +173,7 @@ def save_configurations_endpoint(
 
 
 @router.post("/config/import")
+@exclusive_pipeline
 def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any]:
     raw_data = payload.model_dump(exclude_unset=True)
     try:
@@ -162,11 +181,17 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    if payload.persist_artifacts and not str(params.get("OUTPUT_DIR", "")).strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Output directory is required when importing a configuration for a run.",
-        )
+    if payload.persist_artifacts:
+        try:
+            params["OUTPUT_DIR"] = str(
+                reserve_configured_output(
+                    params["MAP_H"], params["MAP_W"], params["OUTPUT_DIR"]
+                )
+            )
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
         apply_experiment_config(params, start=start, goal=goal)
@@ -235,6 +260,7 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
 
 
 @router.post("/map/generate")
+@exclusive_pipeline
 def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
     persist_artifacts = payload.persist_artifacts
     updates: dict[str, Any] = payload.model_dump(exclude_unset=True, exclude_none=True)
@@ -244,12 +270,19 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
         if isinstance(extra, dict):
             updates.update(extra)
 
-    effective_output_dir = updates.get("OUTPUT_DIR", config.OUTPUT_DIR)
-    if persist_artifacts and not str(effective_output_dir or "").strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Output directory is required. Select a directory before generating map artifacts.",
-        )
+    if persist_artifacts:
+        try:
+            updates["OUTPUT_DIR"] = str(
+                reserve_configured_output(
+                    updates.get("MAP_H", config.MAP_H),
+                    updates.get("MAP_W", config.MAP_W),
+                    updates.get("OUTPUT_DIR", "results"),
+                )
+            )
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
         apply_experiment_config(updates, start=None, goal=None)
@@ -304,6 +337,7 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
 
 
 @router.post("/isp/solve")
+@exclusive_pipeline
 def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
     if runner.is_running():
         raise HTTPException(
@@ -322,12 +356,6 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    if not str(config.OUTPUT_DIR or "").strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Output directory is required before executing the ISP solver.",
-        )
-
     p_user = None
     if payload.user_path is not None:
         p_user = [tuple(p) for p in payload.user_path]
@@ -339,9 +367,19 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
         runner.state["status"] = "solving"
 
     try:
-        if payload.map is not None:
-            grid = Grid.from_dict(payload.map)
-            grid.save(get_project_path(config.OUTPUT_DIR) / "map" / "map.json")
+        grid = (
+            Grid.from_dict(payload.map)
+            if payload.map is not None
+            else Grid.load(get_project_path(config.OUTPUT_DIR) / "map" / "map.json")
+        )
+        if payload.output is None:
+            output_dir = reserve_configured_output(grid.h, grid.w, config.OUTPUT_DIR)
+        else:
+            output_dir = reserve_output_directory(
+                grid.h, grid.w, **payload.output.model_dump()
+            )
+        apply_experiment_config({"OUTPUT_DIR": str(output_dir)}, start=start, goal=goal)
+        persist_map(grid, start=start, goal=goal)
         result = run_isp(verbose=False, user_path=p_user, start=start, goal=goal)
         if not result:
             raise HTTPException(
@@ -437,6 +475,7 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
             "status": "success",
             "result": sanitized_result,
             "artifacts": artifacts,
+            "output_dir": str(output_dir),
         }
     except Exception as exc:
         with runner.lock:
@@ -444,6 +483,8 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
             runner.state["status"] = "failed"
         if isinstance(exc, HTTPException):
             raise
+        if isinstance(exc, FileExistsError):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         if isinstance(exc, (TypeError, ValueError)):
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if isinstance(exc, FileNotFoundError):
@@ -455,16 +496,20 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
 
 @router.post("/run")
 def execute_pipeline(payload: RunRequest) -> dict[str, Any]:
-    if not str(config.OUTPUT_DIR or "").strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Output directory is required before starting the pipeline.",
-        )
     if runner.is_running():
         raise HTTPException(
             status_code=409, detail="Pipeline execution already in progress"
         )
-    runner.start(payload.runs)
+    try:
+        runner.start(payload.runs, payload.output.model_dump())
+    except (RuntimeError, FileExistsError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create output directory: {exc}"
+        ) from exc
     return {"status": "started", "runs": payload.runs}
 
 
@@ -473,204 +518,26 @@ def fetch_status() -> dict[str, Any]:
     return runner.get_status()
 
 
-@router.get("/fs/directories")
-def list_directories(path: str = "") -> dict[str, Any]:
-    project_root = Path(__file__).resolve().parents[2]
-    if path and path.strip():
-        target_path = Path(path).resolve()
-    else:
-        target_path = project_root
-
-    if not target_path.exists() or not target_path.is_dir():
-        target_path = project_root
-
-    subdirs = []
-    try:
-        for entry in sorted(target_path.iterdir(), key=lambda p: p.name.lower()):
-            if entry.is_dir() and not entry.name.startswith("."):
-                subdirs.append(entry.name)
-    except PermissionError:
-        subdirs = []
-
-    try:
-        relative_to_root = str(target_path.relative_to(project_root))
-    except ValueError:
-        relative_to_root = str(target_path)
-
-    parent_path = (
-        str(target_path.parent)
-        if target_path != target_path.parent
-        else str(target_path)
-    )
-
-    return {
-        "current": str(target_path),
-        "parent": parent_path,
-        "directories": subdirs,
-        "relative_to_root": relative_to_root if relative_to_root != "." else "",
-        "project_root": str(project_root),
-    }
-
-
-@router.post("/fs/create-dir")
-def create_directory(payload: dict[str, str]) -> dict[str, Any]:
-    name = payload.get("name", "").strip()
-    parent = payload.get("parent", "").strip()
-    if not name or "/" in name or "\\" in name or name.startswith("."):
-        raise HTTPException(status_code=400, detail="Invalid directory name")
-    project_root = Path(__file__).resolve().parents[2]
-    parent_path = Path(parent).resolve() if parent else project_root
-    new_dir = parent_path / name
-    new_dir.mkdir(parents=True, exist_ok=True)
-    return {"status": "success", "path": str(new_dir)}
-
-
-@router.get("/fs/check-output-dir")
-def check_output_dir(path: str = "output") -> dict[str, Any]:
-    project_root = Path(__file__).resolve().parents[2]
-    clean_path = path.strip() if path else "output"
-    target_path = Path(clean_path).expanduser()
-    if not target_path.is_absolute():
-        target_path = (project_root / clean_path).resolve()
-    else:
-        target_path = target_path.resolve()
-
-    if not target_path.exists() or not target_path.is_dir():
-        return {
-            "exists": False,
-            "file_count": 0,
-            "has_artifacts": False,
-            "files": [],
-        }
-
-    files = [
-        f
-        for f in target_path.rglob("*")
-        if f.is_file()
-        and not any(part.startswith(".") for part in f.relative_to(target_path).parts)
-    ]
-    has_artifacts = any(f.name in OUTPUT_ARTIFACT_FILENAMES for f in files)
-
-    return {
-        "exists": True,
-        "file_count": len(files),
-        "has_artifacts": has_artifacts,
-        "files": [str(f.relative_to(target_path)) for f in files[:10]],
-    }
-
-
-@router.post("/fs/clean-output-dir")
-def clean_output_dir(payload: dict[str, str]) -> dict[str, Any]:
-    project_root = Path(__file__).resolve().parents[2]
-    raw_path = payload.get("path", "output").strip()
-    target_path = Path(raw_path).expanduser()
-    if not target_path.is_absolute():
-        target_path = (project_root / raw_path).resolve()
-    else:
-        target_path = target_path.resolve()
-
-    if (
-        target_path == Path("/")
-        or target_path == Path.home()
-        or target_path == project_root
-    ):
-        raise HTTPException(status_code=400, detail="Cannot clean protected directory")
-
-    if not target_path.exists() or not target_path.is_dir():
-        target_path.mkdir(parents=True, exist_ok=True)
-        return {"status": "success", "deleted_count": 0}
-
-    deleted_count = 0
-    for item in list(target_path.iterdir()):
-        if item.name.startswith("."):
-            continue
-        if item.is_file():
-            try:
-                item.unlink()
-                deleted_count += 1
-            except OSError:
-                pass
-        elif item.is_dir():
-            for sub in item.rglob("*"):
-                if sub.is_file():
-                    deleted_count += 1
-            shutil.rmtree(item, ignore_errors=True)
-
-    return {"status": "success", "deleted_count": deleted_count}
-
-
 @router.post("/browse")
 def browse_system_dialog(payload: BrowseRequest) -> dict[str, Any]:
-    env = os.environ.copy()
-    mode = payload.mode
-    title = payload.title or (
-        "Select Output Directory"
-        if mode == "directory"
-        else "Import Configuration File"
-    )
-
+    title = payload.title or "Select Output Directory"
     py_code = (
         "import sys, json\n"
         "from PyQt6.QtWidgets import QApplication, QFileDialog\n"
         "app = QApplication(sys.argv)\n"
+        f"res = QFileDialog.getExistingDirectory(None, {json.dumps(title)})\n"
+        "print(json.dumps({'path': res or ''}), end='')\n"
     )
-    if mode == "directory":
-        py_code += (
-            f"res = QFileDialog.getExistingDirectory(None, {json.dumps(title)})\n"
-            "print(json.dumps({'path': res or ''}), end='')\n"
-        )
-    elif mode == "files":
-        py_code += (
-            f"res, _ = QFileDialog.getOpenFileNames(None, {json.dumps(title)}, '', 'JSON Files (*.json);;All Files (*)')\n"
-            "print(json.dumps({'files': res or []}), end='')\n"
-        )
-    else:
-        py_code += (
-            f"res, _ = QFileDialog.getOpenFileName(None, {json.dumps(title)}, '', 'JSON Files (*.json);;All Files (*)')\n"
-            "print(json.dumps({'file': res or ''}), end='')\n"
-        )
-
     try:
-        proc = subprocess.run(
+        process = subprocess.run(
             [sys.executable, "-B", "-c", py_code],
             check=False,
             capture_output=True,
             text=True,
-            env=env,
+            env=os.environ.copy(),
         )
-        if proc.returncode != 0 or not proc.stdout.strip():
-            return {"path": "", "files": [], "file": ""}
-        result = json.loads(proc.stdout.strip())
+        if process.returncode != 0 or not process.stdout.strip():
+            return {"path": ""}
+        return {"path": json.loads(process.stdout.strip()).get("path", "")}
     except (subprocess.SubprocessError, OSError, json.JSONDecodeError):
-        return {"path": "", "files": [], "file": ""}
-
-    if mode == "directory":
-        return {"path": result.get("path", "")}
-
-    if mode == "files":
-        raw_files = result.get("files", [])
-        parsed_files = []
-        for file_path in raw_files:
-            fp = Path(file_path)
-            if fp.exists() and fp.is_file():
-                try:
-                    with fp.open("r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    parsed_files.append(
-                        {"path": str(fp), "name": fp.stem, "data": data}
-                    )
-                except (OSError, json.JSONDecodeError):
-                    continue
-        return {"files": parsed_files}
-
-    raw_file = result.get("file", "")
-    if raw_file:
-        fp = Path(raw_file)
-        if fp.exists() and fp.is_file():
-            try:
-                with fp.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
-                return {"path": str(fp), "name": fp.stem, "data": data}
-            except (OSError, json.JSONDecodeError):
-                return {"path": str(fp), "name": fp.stem, "data": None}
-    return {"path": "", "name": "", "data": None}
+        return {"path": ""}

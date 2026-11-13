@@ -1,10 +1,15 @@
 import math
 import threading
+from pathlib import Path
 from typing import Any
 
-from src.pipeline.experiment_config import apply_experiment_config
+from src.pipeline.experiment_config import (
+    apply_experiment_config,
+    get_experiment_configurations,
+)
 from src.pipeline.generate_map import generate_map
 from src.pipeline.run_isp import run_isp
+from src.pipeline.storage import reserve_output_directory
 
 from .artifacts import collect_artifacts
 
@@ -16,6 +21,7 @@ def _finite_round(value: float, digits: int) -> float | None:
 class PipelineRunner:
     def __init__(self) -> None:
         self.lock = threading.Lock()
+        self.execution_lock = threading.Lock()
         self.state: dict[str, Any] = {
             "running": False,
             "current_run": 0,
@@ -25,13 +31,33 @@ class PipelineRunner:
             "last_result": None,
             "artifacts": [],
             "generation_runs": [],
+            "output_dirs": [],
         }
 
     def is_running(self) -> bool:
         with self.lock:
             return self.state["running"]
 
-    def start(self, runs: int) -> None:
+    def start(self, runs: int, output: dict[str, Any]) -> None:
+        if not self.execution_lock.acquire(blocking=False):
+            raise RuntimeError("Pipeline execution already in progress.")
+        parameters = get_experiment_configurations()
+        output_dirs: list[Path] = []
+        try:
+            for index in range(1, runs + 1):
+                target = dict(output)
+                if runs > 1 and target.get("name"):
+                    target["name"] = f"{target['name']}-map-{index}"
+                output_dirs.append(
+                    reserve_output_directory(
+                        parameters["MAP_H"], parameters["MAP_W"], **target
+                    )
+                )
+        except (ValueError, OSError):
+            for directory in output_dirs:
+                directory.rmdir()
+            self.execution_lock.release()
+            raise
         with self.lock:
             self.state["running"] = True
             self.state["current_run"] = 0
@@ -41,19 +67,25 @@ class PipelineRunner:
             self.state["last_result"] = None
             self.state["artifacts"] = []
             self.state["generation_runs"] = []
+            self.state["output_dirs"] = []
 
         worker_thread = threading.Thread(
-            target=self._run_loop, args=(runs,), daemon=True
+            target=self._run_loop,
+            args=(output_dirs, parameters),
+            daemon=True,
         )
         worker_thread.start()
 
-    def _run_loop(self, runs: int) -> None:
+    def _run_loop(self, output_dirs: list[Path], parameters: dict[str, Any]) -> None:
         try:
             apply_experiment_config({}, start=None, goal=None)
-            for index in range(1, runs + 1):
+            for index, output_dir in enumerate(output_dirs, start=1):
                 with self.lock:
                     self.state["current_run"] = index
-                    self.state["status"] = f"Running {index} of {runs}"
+                    self.state["status"] = f"Running {index} of {len(output_dirs)}"
+                apply_experiment_config(
+                    {**parameters, "OUTPUT_DIR": str(output_dir)}, start=None, goal=None
+                )
                 grid = generate_map(verbose=False)
                 generation = {
                     "base_seed": grid.base_seed,
@@ -62,6 +94,7 @@ class PipelineRunner:
                 }
                 with self.lock:
                     self.state["generation_runs"].append(generation)
+                    self.state["output_dirs"].append(str(output_dir))
                 result = run_isp(verbose=False)
                 if result is None:
                     raise RuntimeError("Pipeline did not produce an ISP result.")
@@ -105,7 +138,11 @@ class PipelineRunner:
                         }
             with self.lock:
                 self.state["status"] = "completed"
-                self.state["artifacts"] = collect_artifacts()
+                self.state["artifacts"] = [
+                    artifact
+                    for directory in self.state["output_dirs"]
+                    for artifact in collect_artifacts(directory)
+                ]
         except (RuntimeError, ValueError, KeyError, OSError) as exc:
             with self.lock:
                 self.state["status"] = "failed"
@@ -113,11 +150,13 @@ class PipelineRunner:
         finally:
             with self.lock:
                 self.state["running"] = False
+            self.execution_lock.release()
 
     def get_status(self) -> dict[str, Any]:
         with self.lock:
             snapshot = dict(self.state)
             snapshot["generation_runs"] = list(self.state["generation_runs"])
+            snapshot["output_dirs"] = list(self.state["output_dirs"])
             return snapshot
 
 

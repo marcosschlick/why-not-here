@@ -1,2 +1,2 @@
-# Output directory for visual renders
-OUTPUT_DIR = ""
+# Default base directory for experiment artifacts
+OUTPUT_DIR = "results"

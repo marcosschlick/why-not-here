@@ -3,8 +3,15 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class OutputTarget(BaseModel):
+    directory: str = "results"
+    name: str | None = None
+    automatic_name: bool = True
+
+
 class RunRequest(BaseModel):
     runs: int = Field(default=1, ge=1)
+    output: OutputTarget = Field(default_factory=OutputTarget)
 
 
 class GenerateMapRequest(BaseModel):
@@ -17,7 +24,7 @@ class GenerateMapRequest(BaseModel):
     DEFAULT_REDUCTION_METHOD: str = Field(default="NONE")
     USE_INCREMENTAL_SOLVER: bool = Field(default=False)
     INCREMENTAL_ASTAR_SCOPE: str = Field(default="GLOBAL")
-    OUTPUT_DIR: str = Field(default="")
+    OUTPUT_DIR: str = Field(default="results")
     MAP_DEFAULT_SEED: int | None = Field(default=None)
     MAP_ELEVATION_SCALE: float | None = Field(default=None, gt=0)
     MAP_ELEVATION_FREQ: float | None = Field(default=None, gt=0)
@@ -43,6 +50,7 @@ class SolveISPRequest(BaseModel):
     config: dict[str, Any] | None = None
     start: tuple[int, int] | None = None
     goal: tuple[int, int] | None = None
+    output: OutputTarget | None = None
 
 
 class SemanticModificationsData(BaseModel):
@@ -74,6 +82,7 @@ class ExportConfigRequest(BaseModel):
 
 class SaveConfigItem(BaseModel):
     name: str
+    automatic_name: bool = False
     config: dict[str, Any] | None = None
     start: tuple[int, int]
     goal: tuple[int, int]
@@ -81,7 +90,7 @@ class SaveConfigItem(BaseModel):
 
 
 class SaveConfigurationsRequest(BaseModel):
-    destination_dir: str
+    destination_dir: str = "configurations"
     configurations: list[SaveConfigItem] = Field(min_length=1)
 
 
@@ -95,5 +104,4 @@ class ImportConfigRequest(BaseModel):
 
 
 class BrowseRequest(BaseModel):
-    mode: str = "directory"
     title: str | None = None

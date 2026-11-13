@@ -30,25 +30,29 @@ def generate_map(verbose: bool = True, persist_artifacts: bool = True) -> Grid:
         )
 
     if persist_artifacts:
-        start, goal = prepare_endpoints(grid)
-
-        out_base = get_project_path(config.OUTPUT_DIR)
-        map_dir = out_base / MAP_DIRECTORY_NAME
-        map_dir.mkdir(parents=True, exist_ok=True)
-
-        map_json_path = map_dir / MAP_DATA_FILENAME
-        grid.save(map_json_path)
-
-        map_png_path = map_dir / MAP_IMAGE_FILENAME
-        render_tactical_map(
-            grid=grid,
-            title="Base map",
-            save_path=str(map_png_path),
-            endpoints=(start, goal),
-            subtitle=f"Seed: {grid.base_seed}",
-        )
-
-        if verbose:
-            print(f"Map saved: {map_json_path}")
-            print(f"Map render: {map_png_path}")
+        persist_map(grid, verbose=verbose)
     return grid
+
+
+def persist_map(
+    grid: Grid,
+    start: tuple[int, int] | None = None,
+    goal: tuple[int, int] | None = None,
+    verbose: bool = False,
+) -> None:
+    start, goal = prepare_endpoints(grid, start=start, goal=goal)
+    map_dir = get_project_path(config.OUTPUT_DIR) / MAP_DIRECTORY_NAME
+    map_dir.mkdir(parents=True, exist_ok=False)
+    map_json_path = map_dir / MAP_DATA_FILENAME
+    grid.save(map_json_path)
+    map_png_path = map_dir / MAP_IMAGE_FILENAME
+    render_tactical_map(
+        grid=grid,
+        title="Base map",
+        save_path=str(map_png_path),
+        endpoints=(start, goal),
+        subtitle=f"Seed: {grid.base_seed}",
+    )
+    if verbose:
+        print(f"Map saved: {map_json_path}")
+        print(f"Map render: {map_png_path}")

@@ -2,6 +2,7 @@ import type { QueueItem } from "../types";
 
 interface QueuePanelProps {
   scenarioMode?: boolean;
+  configurationDestination: string;
   queue: QueueItem[];
   workflowMode: "run" | "create";
   currentIndex: number;
@@ -16,6 +17,7 @@ interface QueuePanelProps {
 
 export function QueuePanel({
   scenarioMode = false,
+  configurationDestination,
   queue,
   workflowMode,
   currentIndex,
@@ -172,7 +174,7 @@ export function QueuePanel({
                 {scenarioMode && (
                   <span className="param-tag">Name: {item.scenarioTitle}</span>
                 )}
-                {workflowMode === "create" && item.configurationName && (
+                {!scenarioMode && item.configurationName && (
                   <span className="param-tag">
                     Name: {item.configurationName}
                   </span>
@@ -192,7 +194,10 @@ export function QueuePanel({
                     : "Monolithic"}
                 </span>
                 <span className="param-tag">
-                  Dir: {item.config.OUTPUT_DIR || "Not selected"}
+                  Dir:{" "}
+                  {workflowMode === "create"
+                    ? `${configurationDestination}/${item.configurationName}.json`
+                    : item.config.OUTPUT_DIR}
                 </span>
               </div>
 
@@ -214,8 +219,16 @@ export function QueuePanel({
                     e.stopPropagation();
                     onRemoveItem(item.id);
                   }}
-                  title="Remove configuration from queue"
-                  aria-label="Remove item"
+                  title={
+                    item.benchmarkGroup
+                      ? "Remove all ten combinations in this Benchmark group"
+                      : "Remove configuration from queue"
+                  }
+                  aria-label={
+                    item.benchmarkGroup
+                      ? "Remove Benchmark group"
+                      : "Remove item"
+                  }
                 >
                   &times;
                 </button>

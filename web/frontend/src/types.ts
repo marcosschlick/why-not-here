@@ -152,12 +152,21 @@ export interface SolveResponse {
   status: string;
   result: LastResult;
   artifacts: string[];
+  output_dir: string;
+}
+
+export interface OutputTarget {
+  directory: string;
+  name: string;
+  automatic_name: boolean;
 }
 
 export interface QueueItem {
   id: string;
   config: SystemConfig;
   configurationName?: string;
+  output?: OutputTarget;
+  benchmarkGroup?: string;
   scenarioTitle?: string;
   scenarioId?: number;
   status:
@@ -175,13 +184,6 @@ export interface QueueItem {
   error?: string;
 }
 
-export interface CheckDirResult {
-  exists: boolean;
-  file_count: number;
-  has_artifacts: boolean;
-  files: string[];
-}
-
 export interface ExportConfigPayload {
   config?: Partial<SystemConfig>;
   start: [number, number];
@@ -191,6 +193,7 @@ export interface ExportConfigPayload {
 
 export interface SaveConfigurationItem extends ExportConfigPayload {
   name: string;
+  automatic_name: boolean;
 }
 
 export interface SaveConfigurationsPayload {

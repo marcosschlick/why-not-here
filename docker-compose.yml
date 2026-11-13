@@ -34,9 +34,8 @@ services:
     volumes:
       - ./src:/app/src
       - ./web/api:/app/web/api
-      - ./maps:/app/maps
-      - ./output:/app/output
       - ./results:/app/results
+      - ./configurations:/app/configurations
     depends_on:
       db:
         condition: service_healthy

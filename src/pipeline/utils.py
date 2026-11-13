@@ -8,7 +8,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
 def get_project_path(rel_path: str | Path) -> Path:
-    p = Path(rel_path)
+    p = Path(rel_path).expanduser()
     if p.is_absolute():
         return p.resolve()
     return (ROOT_DIR / p).resolve()

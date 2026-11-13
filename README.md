@@ -63,10 +63,30 @@ export ADMIN_EXPORT_KEY=your_export_key
 database and user must already exist. The API creates its tables on startup
 and does not start if database initialization fails.
 
+In the simulation screen, **Create Configuration** defaults to `configurations/`
+and **Run Experiment** defaults to `results/`. Both provide an automatic
+`experiment-<H>x<W>-<YYYYMMDD-HHmmss>` name and editable name/directory fields.
+Missing directories are created. Configurations are saved as `<name>.json`;
+each execution gets its own `<name>/map/` and `<name>/results/` folders.
+Automatic collisions receive numeric suffixes; manual collisions show an error.
+Existing content is never deleted or overwritten. Previewing a map or importing
+JSON writes no artifacts; execution persists the displayed map in a fresh folder.
+Import JSON using the browser file picker. Directory paths can be typed directly,
+including when a native **Browse** dialog is unavailable.
+
+Enable **Benchmark** to create ten configurations or executions per map:
+monolithic and incremental, each with `NONE`, `PATH_ONLY`, `SPARSIFIED`, `BBOX`
+and `FLOODFILL`. Each group shares the exact map, seed, endpoints and one reviewed
+route. A batch of two maps creates twenty entries; seeds increment between maps.
+Imported configurations are also expanded. Names identify solver and reduction,
+results have separate directories, and removing a variant removes its group.
+Benchmark is unavailable for questionnaire scenarios.
+
 Use **Questionnaires** to create a draft and generate scenarios through the
 existing simulation, route and results screens. Generate maps individually or
 add or import configurations into a queue, then review routes and save scenarios.
 Automatic batch map generation is available outside questionnaire scenarios.
+
 Select three scenarios
 for explanations and three different scenarios for prediction, then save the
 protocol. The application generates all questions automatically. Preview either
@@ -139,6 +159,13 @@ expose the local dashboard, administrative API, or PostgreSQL through another
 proxy. `POST /api/questionnaires/{id}/close` permanently closes an active
 questionnaire: new submissions are rejected, and previously saved data remains
 available for export. An identical retry of a completed submission is accepted.
+
+The backend bind-mounts `./configurations` and `./results`, so default saved
+configurations and results remain on the host after container recreation.
+Relative paths resolve from the project root (`/app` inside the container).
+Custom directories in Compose refer to the container filesystem; add a bind mount
+when they must persist on the host. Local execution resolves relative paths from
+the repository root, independently of the terminal's current directory.
 
 PostgreSQL data is stored in the named `postgres_data` volume and persists
 across container restarts and recreation. The PostgreSQL image applies the
