@@ -10,6 +10,7 @@ import { RouteCanvas } from "./components/RouteCanvas";
 import { validateDrawingRoute } from "./utils/validateRoute";
 import {
   createExperimentItems,
+  groupQueue,
   reviewIndices,
   sameReviewGroup,
 } from "./utils/experiments";
@@ -1194,7 +1195,7 @@ export function App() {
               }}
               activeMode={activeTabMode}
               onSwitchMode={setActiveTabMode}
-              queueCount={queue.length}
+              queueCount={groupQueue(queue).length}
             />
 
             {activeTabMode === "queue" && (

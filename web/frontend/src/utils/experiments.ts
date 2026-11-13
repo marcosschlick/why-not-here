@@ -61,3 +61,14 @@ export function reviewIndices(queue: QueueItem[]): number[] {
     return [index];
   });
 }
+
+export function groupQueue(queue: QueueItem[]): QueueItem[][] {
+  const groups = new Map<string, QueueItem[]>();
+  for (const item of queue) {
+    const key = item.benchmarkGroup ?? item.id;
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+  return Array.from(groups.values());
+}

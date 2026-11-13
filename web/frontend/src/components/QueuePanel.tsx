@@ -1,4 +1,5 @@
 import type { QueueItem } from "../types";
+import { groupQueue } from "../utils/experiments";
 
 interface QueuePanelProps {
   scenarioMode?: boolean;
@@ -41,8 +42,15 @@ export function QueuePanel({
     );
   }
 
+  const groups = groupQueue(queue);
+  const currentGroupIndex = groups.findIndex((group) =>
+    group.includes(queue[currentIndex]),
+  );
   const completedCount = queue.filter(
-    (item) => item.status === "completed",
+    (item) =>
+      item.status === "completed" ||
+      item.status === "failed" ||
+      item.status === "saved",
   ).length;
   const progressPercent = Math.round((completedCount / queue.length) * 100);
 
@@ -56,7 +64,7 @@ export function QueuePanel({
               : workflowMode === "create"
                 ? "Configuration Queue"
                 : "Batch Execution Queue"}{" "}
-            ({queue.length} {queue.length === 1 ? "item" : "items"})
+            ({groups.length} {groups.length === 1 ? "item" : "items"})
           </h3>
           <p className="subtitle">
             {scenarioMode
@@ -85,11 +93,11 @@ export function QueuePanel({
           >
             {isProcessing
               ? workflowMode === "create"
-                ? `Preparing Routes (${currentIndex + 1}/${queue.length})...`
-                : `Running Queue (${currentIndex + 1}/${queue.length})...`
+                ? `Preparing Routes (${currentGroupIndex + 1}/${groups.length})...`
+                : `Running Queue (${currentGroupIndex + 1}/${groups.length})...`
               : workflowMode === "create" || scenarioMode
-                ? `Review Routes (${queue.length} ${queue.length === 1 ? "item" : "items"})`
-                : `Run Queue (${queue.length} ${queue.length === 1 ? "item" : "items"})`}
+                ? `Review Routes (${groups.length} ${groups.length === 1 ? "item" : "items"})`
+                : `Run Queue (${groups.length} ${groups.length === 1 ? "item" : "items"})`}
           </button>
         </div>
       </div>
@@ -123,7 +131,8 @@ export function QueuePanel({
         <div className="queue-progress-bar-container">
           <div className="queue-progress-info">
             <span>
-              Processing Item {currentIndex + 1} of {queue.length}
+              Processing Item {currentGroupIndex + 1} of {groups.length} (
+              {completedCount} of {queue.length} runs finished)
             </span>
             <span>{progressPercent}% Completed</span>
           </div>
@@ -143,8 +152,29 @@ export function QueuePanel({
       )}
 
       <div className="queue-items-list">
-        {queue.map((item, index) => {
-          const isCurrent = isProcessing && index === currentIndex;
+        {groups.map((group, index) => {
+          const item = group[0];
+          const isBenchmark = Boolean(item.benchmarkGroup);
+          const isCurrent = isProcessing && group.includes(queue[currentIndex]);
+          const active = group.find(
+            (entry) =>
+              entry.status === "solving" || entry.status === "generating_map",
+          );
+          const allFinished = group.every((entry) =>
+            ["completed", "failed", "saved"].includes(entry.status),
+          );
+          const status = !isBenchmark
+            ? item.status
+            : (active?.status ??
+              (allFinished
+                ? group.some((entry) => entry.status === "failed")
+                  ? "failed"
+                  : group.every((entry) => entry.status === "saved")
+                    ? "saved"
+                    : "completed"
+                : group.some((entry) => entry.status === "awaiting_route")
+                  ? "awaiting_route"
+                  : "pending"));
           const statusLabels: Record<string, string> = {
             pending: "Pending",
             generating_map: "Generating map...",
@@ -158,13 +188,13 @@ export function QueuePanel({
           return (
             <div
               key={item.id}
-              className={`queue-item-card ${isCurrent ? "current" : ""} status-${item.status}`}
+              className={`queue-item-card ${isCurrent ? "current" : ""} status-${status}`}
               onClick={() => onSelectItem && onSelectItem(item)}
             >
               <div className="queue-item-header">
                 <span className="queue-item-index">#{index + 1}</span>
-                <span className={`status-pill ${item.status}`}>
-                  {statusLabels[item.status] || item.status}
+                <span className={`status-pill ${status}`}>
+                  {statusLabels[status] || status}
                 </span>
               </div>
 
@@ -179,22 +209,33 @@ export function QueuePanel({
                   {item.config.CONNECTIVITY}-Connected
                 </span>
                 <span className="param-tag">
-                  Reduction: {item.config.DEFAULT_REDUCTION_METHOD}
+                  Seed: #{item.config.MAP_DEFAULT_SEED}
                 </span>
-                <span className="param-tag">
-                  {item.config.USE_INCREMENTAL_SOLVER
-                    ? "Incremental"
-                    : "Monolithic"}
-                </span>
-                {item.outputDir && (
+                {isBenchmark ? (
+                  <span className="param-tag">
+                    Benchmark · {group.length} combinations
+                  </span>
+                ) : (
+                  <>
+                    <span className="param-tag">
+                      Reduction: {item.config.DEFAULT_REDUCTION_METHOD}
+                    </span>
+                    <span className="param-tag">
+                      {item.config.USE_INCREMENTAL_SOLVER
+                        ? "Incremental"
+                        : "Monolithic"}
+                    </span>
+                  </>
+                )}
+                {!isBenchmark && item.outputDir && (
                   <span className="param-tag">Dir: {item.outputDir}</span>
                 )}
-                {item.savedFile && (
+                {!isBenchmark && item.savedFile && (
                   <span className="param-tag">Saved: {item.savedFile}</span>
                 )}
               </div>
 
-              {item.result && (
+              {!isBenchmark && item.result && (
                 <div className="queue-item-result-snippet">
                   <span>
                     Status: <strong>{item.result.solver_status}</strong> &bull;{" "}
