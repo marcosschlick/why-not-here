@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from statistics import fmean, median
 
-from web.api.study_protocol import ESS_ITEMS
+from web.api.rating_instrument import RATING_ITEMS
 
 STUDY_GROUPS = ("control", "experimental")
 
@@ -67,18 +67,18 @@ def valid_prediction_order(order, scenario_ids: set[int]) -> bool:
 
 
 def aggregate_results(participation: dict, scenario_ids: set[int], answers) -> dict:
-    ess_items = [
+    rating_items = [
         {
-            "item_id": f"ess_{index}",
-            "prompt": prompt,
+            **item.metadata(),
+            "prompt": item.prompt,
             "groups": {
                 group: {"distribution": [0] * 5, "responses": 0, "missing": 0}
                 for group in STUDY_GROUPS
             },
         }
-        for index, prompt in enumerate(ESS_ITEMS, start=1)
+        for item in RATING_ITEMS
     ]
-    items_by_id = {item["item_id"]: item for item in ess_items}
+    items_by_id = {item["item_id"]: item for item in rating_items}
     observations = {
         group: {
             metric: Observations()
@@ -123,7 +123,7 @@ def aggregate_results(participation: dict, scenario_ids: set[int], answers) -> d
     for group in STUDY_GROUPS:
         completed = participation["completed_by_group"][group]
         expected = 3 * completed
-        for item in ess_items:
+        for item in rating_items:
             counts = item["groups"][group]
             counts["missing"] = completed - counts["responses"]
         accuracy = observations[group]["accuracy"]
@@ -147,6 +147,6 @@ def aggregate_results(participation: dict, scenario_ids: set[int], answers) -> d
         }
     return {
         "participation": participation,
-        "ess_items": ess_items,
+        "rating_items": rating_items,
         "predictions": predictions,
     }

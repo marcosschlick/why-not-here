@@ -3,6 +3,8 @@ import os
 import psycopg
 from psycopg.rows import dict_row
 
+from web.api.rating_instrument import STUDY_STEP_COUNT
+
 
 def connect_database() -> psycopg.Connection:
     return psycopg.connect(
@@ -24,7 +26,7 @@ def initialize_database() -> None:
             title TEXT NOT NULL,
             description TEXT,
             status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'closed')),
-            protocol_version TEXT NOT NULL DEFAULT 'route-study-v2',
+            protocol_version TEXT NOT NULL DEFAULT 'route-study-v3',
             created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
             closed_at TIMESTAMPTZ,
             access_token TEXT UNIQUE,
@@ -60,7 +62,7 @@ def initialize_database() -> None:
             PRIMARY KEY (questionnaire_id, key)
         )
         """,
-        """
+        f"""
         CREATE TABLE IF NOT EXISTS participations (
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             questionnaire_id BIGINT NOT NULL REFERENCES questionnaires(id),
@@ -76,7 +78,7 @@ def initialize_database() -> None:
             scenario_order JSONB NOT NULL CHECK (jsonb_array_length(scenario_order) = 6),
             draft JSONB,
             draft_revision BIGINT NOT NULL DEFAULT 0 CHECK (draft_revision >= 0),
-            current_step SMALLINT NOT NULL DEFAULT 0 CHECK (current_step BETWEEN 0 AND 17),
+            current_step SMALLINT NOT NULL DEFAULT 0 CHECK (current_step BETWEEN 0 AND {STUDY_STEP_COUNT}),
             started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
             completed_at TIMESTAMPTZ,
             UNIQUE (questionnaire_id, submission_key)

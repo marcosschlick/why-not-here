@@ -98,7 +98,7 @@ Active and closed questionnaires show a read-only overview instead of disabled
 editing forms. Use **View scenarios** to inspect saved maps or open the existing
 participant preview. The participation panel shows completed, in-progress and
 total started participations and completed counts by group; use **Refresh results**
-to update them. **View results** expands descriptive ESS distributions, prediction
+to update them. **View results** expands descriptive item distributions, prediction
 matches, mean confidence and median decision time for completed participations.
 Only final submissions count as completed. Draft editing remains unchanged.
 
@@ -107,7 +107,8 @@ confidence (0 to 100) and a written reason before each of three explanations.
 A separate required open response after each explanation asks which
 characteristics explain the system’s choice. The control group receives the cost
 justification; the experimental group receives the textual and visual contrastive
-explanation. Eight adapted ESS items follow, then three new route predictions
+explanation. Fourteen adapted items selected from ESS, SCS and xHIS follow, all using a
+five-point agreement scale, then three new route predictions
 with confidence (0 to 100), without costs, explanations or correctness feedback.
 
 Confirmed answers and partial fields/timings are saved in PostgreSQL. Reloading
@@ -130,7 +131,10 @@ surrounding whitespace. The same key, name and email can resume that
 participation after closing the tab or clearing session storage.
 Answers remain stored in PostgreSQL, including unfinished participations.
 
-The `route-study-v2` questionnaire schema requires a fresh set of questionnaire
+The custom instrument is not a full or validated administration of the source
+scales. See [the selected items and original sources](docs/questionarios-avaliacao.md).
+
+The `route-study-v3` questionnaire schema requires a fresh set of questionnaire
 tables. There is no migration or
 compatibility with previous questionnaire schemas, and startup does not
 erase or convert existing data. See [Questionnaire protocol](docs/questionnaire.md)

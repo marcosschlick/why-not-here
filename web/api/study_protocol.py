@@ -8,22 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from src import config
 from src.visual.appearance import resolve_map_appearance
+from web.api.rating_instrument import INSTRUMENT_TITLE, QUESTION_COUNT, RATING_ITEMS
 
-PROTOCOL_VERSION = "route-study-v2"
-ESS_TITLE = "Explanation Satisfaction Scale (ESS), adapted for route planning"
-ESS_SOURCE = (
-    "Hoffman et al., Metrics for Explainable AI: Challenges and Prospects, Appendix C"
-)
-ESS_ITEMS = (
-    "From the explanations, I understand how the system chooses routes.",
-    "The explanations of how the system chooses routes are satisfying.",
-    "The explanations of how the system chooses routes have sufficient detail.",
-    "The explanations of how the system chooses routes seem complete.",
-    "The explanations tell me how to use the system’s route recommendations.",
-    "The explanations are useful for identifying the fastest route.",
-    "The explanations help me assess how accurately the system identifies the fastest route.",
-    "The explanations let me judge when I should and should not trust the system’s route choices.",
-)
+PROTOCOL_VERSION = "route-study-v3"
 StudyGroup = Literal["control", "experimental"]
 ScenarioId = Annotated[int, Field(strict=True, gt=0)]
 
@@ -75,13 +62,13 @@ def build_questions(payload: ProtocolInput):
                 "configuration": {},
             }
         )
-    for index, prompt in enumerate(ESS_ITEMS, start=1):
+    for item in RATING_ITEMS:
         questions.append(
             {
                 "type": "likert",
-                "prompt": prompt,
+                "prompt": item.prompt,
                 "scenario_id": None,
-                "configuration": {"min": 1, "max": 5, "item_id": f"ess_{index}"},
+                "configuration": {"min": 1, "max": 5, **item.metadata()},
             }
         )
     return [
@@ -177,7 +164,7 @@ def validate_scenario(data):
 def require_protocol(questions):
     selection = protocol_selection(questions)
     ids = selection["scenario_ids"]
-    if len(questions) != 14 or len(ids) != 6 or len(set(ids)) != 6:
+    if len(questions) != QUESTION_COUNT or len(ids) != 6 or len(set(ids)) != 6:
         raise HTTPException(
             status_code=422,
             detail="Select six different scenarios",
@@ -244,11 +231,16 @@ def serialize_step(questions, index, submission_key, group, scenario_ids):
         "prompt": question["prompt"],
     }
     if kind == "likert":
+        rating_questions = [q for q in questions if q["type"] == "likert"]
         step.update(
-            instrument=ESS_TITLE,
-            source=ESS_SOURCE,
-            item_id=question["configuration"]["item_id"],
-            item_number=int(question["configuration"]["item_id"].split("_")[1]),
+            instrument=INSTRUMENT_TITLE,
+            **{
+                key: value
+                for key, value in question["configuration"].items()
+                if key not in {"min", "max"}
+            },
+            item_number=rating_questions.index(question) + 1,
+            item_total=len(RATING_ITEMS),
         )
         return step
     data = question["data"]

@@ -2,7 +2,7 @@
 
 ## Protocol and administration
 
-`route-study-v2` is a fixed research protocol for non-specialists in autonomous
+`route-study-v3` is a fixed research protocol for non-specialists in autonomous
 navigation, following the experimental design in `refs/tcc_01.pdf`.
 It uses a pool of six distinct saved scenarios selected by the administrator.
 Every scenario belongs to the questionnaire and must contain a successful
@@ -23,8 +23,8 @@ simulation workflow. Automatic batch map generation is unavailable in this mode.
 }
 ```
 
-These numbers are example identifiers. Saving creates fourteen question records:
-six `route_scenario` records and eight Likert items. The participant sequence
+These numbers are example identifiers. Saving creates twenty question records:
+six `route_scenario` records and fourteen Likert items. The participant sequence
 assigns each scenario its assessment or prediction role using the stored order.
 Saving the same selection preserves question identifiers. A different selection
 replaces the generated questions while the questionnaire is still a draft.
@@ -89,7 +89,8 @@ The response contains only:
 
 - `participation`: `total`, `completed`, `in_progress`, and `completed_by_group`
   with Control and Experimental counts.
-- `ess_items`: eight `{item_id, prompt, groups}` records. Each group contains a
+- `rating_items`: fourteen records with `item_id`, `prompt`, `source_scale`,
+  `source_item_number`, `source`, `topic` and `groups`. Each group contains a
   five-element `distribution` of response counts for ratings 1 through 5,
   `responses` and `missing`.
 - `predictions`: one aggregate per group with `correct`, `proportion`,
@@ -103,8 +104,8 @@ answer fields and the metadata needed to distinguish phases are queried; maps,
 credentials and free-text answers are not loaded for analysis. Internal IDs used
 to count distinct contributing participants are never returned. No names,
 emails, individual keys, participant IDs, attempt UUIDs or free-text answers
-appear in the results payload or panel. Existing records and the database schema
-are not modified.
+appear in the results payload or panel. Results requests never modify existing
+records or the database schema.
 
 ### Inclusion and denominators
 
@@ -114,18 +115,19 @@ still counts as in progress. All response analyses include completed
 participations only. In-progress answers and drafts are excluded, including in
 closed questionnaires.
 
-For each ESS item and group, valid responses are integers from 1 to 5. The bar
+For each adapted rating item and group, valid responses are integers from 1 to 5. The bar
 and displayed percentages use the number of valid responses to that particular
 item in that group as the denominator. `missing` is the group's completed count
 minus the valid response count for the item, including absent or invalid values.
-All eight items are identified by their protocol IDs and text. No overall ESS
-score or combined ESS/SCS score is calculated.
+All fourteen items identify their source scale, original item number, topic and
+adapted text.
+No overall score, source-scale score or thematic-group score is calculated.
 
 A route answer belongs to prediction only if its scenario is one of the last
 three IDs in that participation's stored `scenario_order`. The order must have
 six distinct positive integer IDs matching the questionnaire's selected pool.
 An invalid order prevents classification of prediction answers; the participant
-remains in participation counts and any valid ESS responses remain eligible.
+remains in participation counts and any valid rating responses remain eligible.
 Question position alone cannot identify prediction because the scenario pool is
 randomized independently for each participation.
 
@@ -158,13 +160,13 @@ and five valid confidence values, confidence uses five observations and reports
 one missing or invalid observation out of six expected responses.
 
 Empty denominators produce `null` for proportions, means and medians. The UI
-shows **No valid responses**, not a fabricated 0% or zero average. ESS response
+shows **No valid responses**, not a fabricated 0% or zero average. Rating response
 counts remain zero when no valid responses exist; percentages are omitted.
 Only display formatting rounds values; the API retains unrounded aggregates.
 
 ### Interpretation and presentation
 
-The ESS uses two segmented bars per item, a labeled 1–5 legend and visible
+The adapted questionnaire uses two segmented bars per item, a labeled 1–5 legend and visible
 counts and percentages. Prediction proportion, confidence and median time use
 simple group comparison bars with explicit values, units and denominators.
 Figures can receive keyboard focus and their data are available as text without
@@ -180,7 +182,8 @@ independent participants. Groups can also receive different scenario mixes
 because of participant-level randomization; the aggregates are not adjusted for
 scenario difficulty.
 
-The adapted ESS has not been psychometrically validated. Prediction matches are
+The custom instrument has not been psychometrically validated and is not a
+full administration of any source scale. Prediction matches are
 not Policy Divergence, and initial route assessments do not constitute a
 pre-intervention prediction baseline. Self-reported confidence, decision time
 and open responses cannot establish objective comprehension or causal
@@ -209,7 +212,7 @@ show this section nor request its key list; existing key records remain stored.
 
 ## Participant sequence
 
-There are seventeen content steps and a final submission action:
+There are twenty-three content steps and a final submission action:
 
 1. For each of the first three scenarios, participants select the route they
    consider faster. They may change it until **Confirm route**. Confirmation
@@ -228,7 +231,7 @@ There are seventeen content steps and a final submission action:
    route choice?** The response must contain 20 to 1,000 characters after
    trimming and is stored separately as `post_explanation_reason`. The original
    pre-explanation justification is preserved.
-3. Participants rate eight required statements about the explanations on the
+3. Participants rate fourteen required statements about the explanations on the
    same five-point scale.
 4. In three unseen scenarios, participants predict which route the system would
    select. They can change the route until **Confirm route**, then must select
@@ -258,45 +261,78 @@ returns its completion screen.
 A/B route order is deterministic per original attempt UUID and question, and is
 stored with confirmed route answers. Identical styling is used before disclosure.
 Draft fields include a selected route, route confirmation state, confidence,
-initial or post-explanation reason, ESS rating and accumulated timing.
+initial or post-explanation reason, rating-item response and accumulated timing.
 
-## Adapted Explanation Satisfaction Scale
+## Adapted route explanation questionnaire
 
-The displayed title is **Explanation Satisfaction Scale (ESS), adapted for route
-planning**. The eight items preserve the dimensions of Appendix C in
-`refs/eval_hoffman2019.pdf`, adapting the referent to route decisions and the
-wording to the three explanations collectively:
+The displayed title is **Adapted route explanation questionnaire**. These fourteen
+items replace the previous eight-item ESS adaptation. They appear in the fixed
+order selected in [questionarios-avaliacao.md](questionarios-avaliacao.md), after
+the three explanations and before the prediction phase. That document provides
+the full original/adapted wording comparison and the five thematic groups.
 
-| Item | Dimension | Adapted statement |
+| Position | Source and persisted ID | Adapted statement |
 | --- | --- | --- |
-| ess_1 | Understanding | From the explanations, I understand how the system chooses routes. |
-| ess_2 | Satisfaction | The explanations of how the system chooses routes are satisfying. |
-| ess_3 | Detail | The explanations of how the system chooses routes have sufficient detail. |
-| ess_4 | Completeness | The explanations of how the system chooses routes seem complete. |
-| ess_5 | Use | The explanations tell me how to use the system’s route recommendations. |
-| ess_6 | Goal usefulness | The explanations are useful for identifying the fastest route. |
-| ess_7 | Perceived accuracy | The explanations help me assess how accurately the system identifies the fastest route. |
-| ess_8 | Calibrated reliance | The explanations let me judge when I should and should not trust the system’s route choices. |
+| 1 | ESS 1 (`ess_1`) | From the explanations, I understand how the route-planning system works. |
+| 2 | SCS 5 (`scs_5`) | I found the explanations helped me understand cause-and-effect relationships in the system’s route choices. |
+| 3 | xHIS 10 (`xhis_10`) | I understand why the system used specific information in its explanations. |
+| 4 | ESS 3 (`ess_3`) | The explanations of how the route-planning system works have sufficient detail. |
+| 5 | ESS 4 (`ess_4`) | The explanations of how the route-planning system works seem complete. |
+| 6 | SCS 7 (`scs_7`) | I did not find inconsistencies between explanations. |
+| 7 | ESS 2 (`ess_2`) | The explanations of how the route-planning system works are satisfying. |
+| 8 | xHIS 25 (`xhis_25`) | The explanations were useful. |
+| 9 | xHIS 18 (`xhis_18`) | The explanations were an important resource for me to answer the questions about the system’s route choices. |
+| 10 | ESS 5 (`ess_5`) | The explanations of how the route-planning system works tell me how to use it. |
+| 11 | SCS 6 (`scs_6`) | I was able to use the explanations with my existing knowledge. |
+| 12 | xHIS 12 (`xhis_12`) | I could have applied the system’s reasoning to new route-planning problems, even if it had not given me suggestions. |
+| 13 | ESS 7 (`ess_7`) | The explanations of the route-planning system show me how accurate it is. |
+| 14 | ESS 8 (`ess_8`) | The explanations let me judge when I should trust and not trust the route-planning system. |
+
+The sources are Hoffman et al., Appendix C (`refs/eval_hoffman2019.pdf`);
+Holzinger et al., Section 5 (`refs/eval_holzinger2020.pdf`); and Silva et al.,
+Section 4.9 (`refs/eval_silva2022.pdf`). Source scale, original item number,
+reference and topic are saved in each question's configuration alongside
+`item_id`, `min: 1` and `max: 5`. Presentation position is distinct from the
+original item number: ESS 7 is the thirteenth item in this custom instrument.
+Step serialization includes `item_number`, `item_total`, the custom `instrument`
+title and the persisted origin metadata. The results API uses `rating_items`,
+not the former ESS-only field.
 
 Response labels are 1: Strongly disagree; 2: Somewhat disagree; 3: Neither agree
-nor disagree; 4: Somewhat agree; 5: Strongly agree. All items use positive wording;
-none requires reverse scoring. This domain adaptation has not itself been
-psychometrically validated. Raw responses are stored without an automatic
-aggregate score or inferred claim of objective comprehension.
+nor disagree; 4: Somewhat agree; 5: Strongly agree. Every item is required, no
+value is preselected, and booleans, fractions or out-of-range values are rejected.
+ESS and SCS originally use five points; xHIS uses seven. Applying five points to
+all selected items deliberately changes the xHIS response scale.
+
+Selection retains items pertinent to the study while reducing repetition and
+response burden. ESS 6 is omitted because goal usefulness overlaps the selected
+xHIS usefulness and question-support items. Changes to wording are limited to
+the route-planning referent, the three explanations collectively and the task
+context. xHIS 18 concerns the questions answered after disclosure, not proof of
+help on earlier choices. xHIS 12 is hypothetical self-assessment, not measured
+transfer performance. Some conceptual overlap remains; this is a pragmatic
+selection, not a validated scale-reduction procedure.
+
+This is a custom adapted instrument, not a full administration or validated
+version of ESS, SCS or xHIS. Its thematic groups are organizational, not validated
+subscales. No overall score, original-scale score or topic score is calculated.
+SCS 7 expresses perceived consistency when endorsed, without reverse scoring.
+Raw ratings and descriptive distributions do not establish objective
+comprehension, actual planner accuracy or causal improvement.
 
 The reference set informs the implementation as follows:
 
 - Hoffman, *Metrics for Explainable AI: Challenges and Prospects*, Appendix C:
-  eight ESS items; satisfaction differs from mental models and performance.
+  seven selected ESS items; satisfaction differs from mental models and performance.
 - Korpan, *Evaluation of a Robot Navigator's Explanations*: a post-scenario survey
   and prediction of behavior in new scenarios; detailed explanations can affect
   perceived understanding differently from immediate comprehensibility.
 - Zou and Borst, *Algorithmic Transparency in Path Planning*: distinguish tested
   understanding, self-rated confidence (0 to 100) and response time.
 - Silva et al., *Evaluating the Objective and Subjective Impacts of xAI on
-  Human-Agent Interaction*: retain separate subjective and objective measures.
+  Human-Agent Interaction*: source of four selected xHIS items; retain separate subjective and objective measures.
 - Holzinger et al., *The System Causability Scale*: causal understanding is
-  contextual. This protocol uses ESS, not a combined ESS/SCS score.
+  contextual. Three SCS items are selected without calculating an SCS score.
 - Abuzied, *Closing the Transparency Gap*: explanation timing and prediction
   motivate measurement of policy alignment. Prediction accuracy here is a
   proportion of route choices matching the planner, not the article's KL-based
@@ -338,12 +374,12 @@ The reference set informs the implementation as follows:
   `decision_visible_duration_ms` and `choice_changed`. Durations are nonnegative
   integer milliseconds; selection durations are null until selection occurs,
   and decision duration is null until route confirmation. Partial route and
-  explanation values may omit required fields; ESS values may be null.
+  explanation values may omit required fields; rating-item values may be null.
   The response returns the new `draft_revision`. Exact retries are idempotent.
 - `POST /api/participate/{token}/steps/{step}/confirm` takes the same envelope
   with a complete `progress` snapshot. Route assessments require
   `{choice, confidence, reason}`; predictions require `{choice, confidence}`;
-  explanations require `{reason}`; ESS values are integers from 1 to 5.
+  explanations require `{reason}`; rating-item values are integers from 1 to 5.
   Route confirmation is required for route answers. Explanation reasons are
   stored separately from the prior assessment value.
 - Confirmation saves the response and timings, advances the step, increments
@@ -431,8 +467,13 @@ checkpoint without counting the absence.
 
 ## Replacing the local schema
 
-The current schema requires a fresh set of questionnaire tables. When replacing
-an older local installation, stop both backend services and explicitly remove
+The v3 schema requires a fresh set of questionnaire tables, including the
+`current_step` limit of 23 and the `route-study-v3` default. No migration or
+compatibility with the previous instrument is provided. Existing data is never
+automatically converted, deleted or relabeled as v3. The following replacement
+procedure is manual and destructive; it is not run by this change.
+
+When replacing an older local installation, stop both backend services and explicitly remove
 only the old questionnaire tables once, then restart the services:
 
 ```sql

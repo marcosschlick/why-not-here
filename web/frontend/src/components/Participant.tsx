@@ -42,6 +42,10 @@ type StudyStep = {
   instrument?: string;
   source?: string;
   item_number?: number;
+  item_total?: number;
+  source_scale?: string;
+  source_item_number?: number;
+  topic?: string;
 };
 type Study = {
   title: string;
@@ -317,7 +321,7 @@ function StudyForm({
   const phaseLabel = !step
     ? "Ready to submit"
     : step.type === "likert"
-      ? `Explanation satisfaction ${step.item_number} of 8`
+      ? `Explanation evaluation ${step.item_number} of ${step.item_total}`
       : step.type === "route_prediction"
         ? `Prediction ${step.scenario_number} of 3`
         : `${step.type === "explanation" ? "Explanation" : "Route selection"} ${step.scenario_number} of 3`;
@@ -520,6 +524,7 @@ function StudyForm({
               <p>{step.instrument}</p>
               <p className="qa-muted">
                 Rate the explanations received in the first three scenarios.{" "}
+                {step.source_scale} {step.source_item_number} · {step.topic}.{" "}
                 {step.source}.
               </p>
             </>
@@ -579,7 +584,7 @@ function StudyForm({
                   <label className="qa-option" key={label}>
                     <input
                       type="radio"
-                      name="ess-rating"
+                      name="instrument-rating"
                       checked={rating === index + 1}
                       onChange={() => progress.update({ value: index + 1 })}
                       required

@@ -33,6 +33,11 @@ type Question = {
   type: "route_scenario" | "likert";
   scenario_id: number | null;
   position: number;
+  configuration: {
+    source_scale?: string;
+    source_item_number?: number;
+    topic?: string;
+  };
 };
 type Questionnaire = {
   id: number;
@@ -781,6 +786,7 @@ export function QuestionnaireAdmin({
   );
   const editable = !selected || selected.status === "draft";
   const panelBusy = busy && !selecting;
+  const protocolComplete = selected?.questions.length === 20;
 
   return (
     <>
@@ -910,8 +916,7 @@ export function QuestionnaireAdmin({
                     <button
                       type="button"
                       disabled={
-                        !preview &&
-                        (hasUnsavedChanges || selected.questions.length !== 14)
+                        !preview && (hasUnsavedChanges || !protocolComplete)
                       }
                       onClick={() => setView(preview ? "overview" : "preview")}
                       className="qa-secondary qa-overview-action"
@@ -951,7 +956,7 @@ export function QuestionnaireAdmin({
               {selected?.status === "draft" && (
                 <button
                   type="button"
-                  disabled={panelBusy || selected.questions.length !== 14}
+                  disabled={panelBusy || !protocolComplete}
                   onClick={handleActivateQuestionnaire}
                 >
                   Activate questionnaire
@@ -1084,8 +1089,9 @@ export function QuestionnaireAdmin({
                     <p className="qa-muted">
                       Select six different saved scenarios. The system creates a
                       random order for each participant: three scenarios with
-                      explanations, eight adapted ESS items, then three unseen
-                      predictions. All six scenarios must support explanations.
+                      explanations, 14 adapted evaluation items, then three
+                      unseen predictions. All six scenarios must support
+                      explanations.
                     </p>
                     <form
                       onSubmit={saveProtocol}
@@ -1136,8 +1142,8 @@ export function QuestionnaireAdmin({
                       </button>
                     </form>
                     <p className="qa-muted" role="status">
-                      {selected.questions.length === 14
-                        ? "Protocol saved: 6 randomized scenarios and 8 adapted ESS items."
+                      {protocolComplete
+                        ? "Protocol saved: 6 randomized scenarios and 14 adapted evaluation items."
                         : "Save all six scenarios to enable preview and activation."}
                     </p>
                     {protocolDirty && (
@@ -1146,20 +1152,27 @@ export function QuestionnaireAdmin({
                         activating the questionnaire.
                       </p>
                     )}
-                    {selected.questions.length === 14 && (
+                    {protocolComplete && (
                       <details className="qa-instrument-details">
-                        <summary>View the eight adapted ESS items</summary>
+                        <summary>View the 14 adapted evaluation items</summary>
                         <p>
-                          Explanation Satisfaction Scale (ESS), adapted for
-                          route planning. Hoffman et al., Appendix C. Responses
-                          range from 1 (Strongly disagree) to 5 (Strongly
-                          agree).
+                          Adapted route explanation questionnaire, selected from
+                          ESS, SCS and xHIS. Responses range from 1 (Strongly
+                          disagree) to 5 (Strongly agree). This custom
+                          instrument has not been validated.
                         </p>
                         <ol>
                           {selected.questions
                             .filter((question) => question.type === "likert")
                             .map((question) => (
-                              <li key={question.id}>{question.prompt}</li>
+                              <li key={question.id}>
+                                <strong>
+                                  {question.configuration.source_scale}{" "}
+                                  {question.configuration.source_item_number}
+                                </strong>{" "}
+                                · {question.configuration.topic}:{" "}
+                                {question.prompt}
+                              </li>
                             ))}
                         </ol>
                       </details>

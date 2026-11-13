@@ -13,9 +13,12 @@ type PredictionResults = ObservationCounts & {
   confidence: ObservationCounts & { mean: number | null };
   decision_time: ObservationCounts & { median_seconds: number | null };
 };
-type EssItem = {
+type RatingItem = {
   item_id: string;
   prompt: string;
+  source_scale: string;
+  source_item_number: number;
+  topic: string;
   groups: GroupValues<{
     distribution: number[];
     responses: number;
@@ -29,7 +32,7 @@ type QuestionnaireResults = {
     in_progress: number;
     completed_by_group: GroupValues<number>;
   };
-  ess_items: EssItem[];
+  rating_items: RatingItem[];
   predictions: GroupValues<PredictionResults>;
 };
 
@@ -38,7 +41,7 @@ const GROUP_LABELS: GroupValues<string> = {
   control: "Control",
   experimental: "Experimental",
 };
-const ESS_LABELS = [
+const LIKERT_LABELS = [
   "Strongly disagree",
   "Somewhat disagree",
   "Neither agree nor disagree",
@@ -86,13 +89,16 @@ function GroupBar({
   );
 }
 
-function EssDistribution({ item }: { item: EssItem }) {
+function RatingDistribution({ item }: { item: RatingItem }) {
   const headingId = useId();
   return (
-    <figure className="qa-ess-item" tabIndex={0} aria-labelledby={headingId}>
+    <figure className="qa-rating-item" tabIndex={0} aria-labelledby={headingId}>
       <figcaption id={headingId}>
-        <span className="qa-overline">{item.item_id.replace("_", " ")}</span>
+        <span className="qa-overline">
+          {item.source_scale} {item.source_item_number}
+        </span>
         <h5>{item.prompt}</h5>
+        <p className="qa-muted">{item.topic}</p>
       </figcaption>
       {GROUPS.map((group) => {
         const counts = item.groups[group];
@@ -106,11 +112,11 @@ function EssDistribution({ item }: { item: EssItem }) {
               </span>
             </div>
             {counts.responses > 0 ? (
-              <div className="qa-ess-track" aria-hidden="true">
+              <div className="qa-rating-track" aria-hidden="true">
                 {counts.distribution.map((count, index) => (
                   <span
                     key={index}
-                    className={`qa-ess-level qa-ess-level-${index + 1}`}
+                    className={`qa-rating-level qa-rating-level-${index + 1}`}
                     style={{ width: `${(count / counts.responses) * 100}%` }}
                   />
                 ))}
@@ -119,14 +125,14 @@ function EssDistribution({ item }: { item: EssItem }) {
               <p className="qa-muted">No valid responses for this item.</p>
             )}
             <dl
-              className="qa-ess-counts"
+              className="qa-rating-counts"
               aria-label={`${GROUP_LABELS[group]} response distribution`}
             >
               {counts.distribution.map((count, index) => (
                 <div key={index}>
                   <dt>
                     <span
-                      className={`qa-ess-swatch qa-ess-level-${index + 1}`}
+                      className={`qa-rating-swatch qa-rating-level-${index + 1}`}
                       aria-hidden="true"
                     />
                     Rating {index + 1}
@@ -418,24 +424,21 @@ export function QuestionnaireResultsPanel({
                   Decision time is not reading time or a measure of attention.
                 </p>
                 <section
-                  className="qa-results-ess"
-                  aria-label="Adapted Explanation Satisfaction Scale results"
+                  className="qa-results-ratings"
+                  aria-label="Adapted explanation questionnaire results"
                 >
-                  <h4>
-                    Explanation Satisfaction Scale (ESS), adapted for route
-                    planning
-                  </h4>
+                  <h4>Adapted route explanation questionnaire</h4>
                   <p className="qa-muted">
-                    Distribution for each of the eight items. Percentages use
-                    valid responses to that item in each group. The adapted
-                    scale has not been psychometrically validated; no overall
-                    score is calculated.
+                    Distribution for each of the 14 selected ESS, SCS and xHIS
+                    items. Percentages use valid responses to that item in each
+                    group. The custom instrument has not been psychometrically
+                    validated; no overall score is calculated.
                   </p>
-                  <ol className="qa-ess-legend" aria-label="Response scale">
-                    {ESS_LABELS.map((label, index) => (
+                  <ol className="qa-rating-legend" aria-label="Response scale">
+                    {LIKERT_LABELS.map((label, index) => (
                       <li key={label}>
                         <span
-                          className={`qa-ess-swatch qa-ess-level-${index + 1}`}
+                          className={`qa-rating-swatch qa-rating-level-${index + 1}`}
                           aria-hidden="true"
                         />
                         <span>
@@ -444,9 +447,9 @@ export function QuestionnaireResultsPanel({
                       </li>
                     ))}
                   </ol>
-                  <div className="qa-ess-items">
-                    {results.ess_items.map((item) => (
-                      <EssDistribution key={item.item_id} item={item} />
+                  <div className="qa-rating-items">
+                    {results.rating_items.map((item) => (
+                      <RatingDistribution key={item.item_id} item={item} />
                     ))}
                   </div>
                 </section>
