@@ -133,13 +133,28 @@ export function Participant({
   token?: string;
   preview?: Preview;
 }) {
-  const [submissionKey] = useState(() => {
-    if (preview) return preview.submissionKey;
-    const key = `participation:${token}`;
-    const saved = sessionStorage.getItem(key) || attemptKey();
-    sessionStorage.setItem(key, saved);
-    return saved;
+  const [session, setSession] = useState<{
+    id: string;
+    started: boolean;
+  } | null>(() => {
+    if (preview) return null;
+    try {
+      const saved = JSON.parse(
+        sessionStorage.getItem(`participation-session:${token}`) || "null",
+      );
+      return saved &&
+        typeof saved.id === "string" &&
+        typeof saved.started === "boolean"
+        ? saved
+        : null;
+    } catch {
+      return null;
+    }
   });
+  const submissionKey = preview?.submissionKey ?? session?.id ?? "";
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [individualKey, setIndividualKey] = useState("");
   const [study, setStudy] = useState<Study | null>(null);
   const [choice, setChoice] = useState<number | null>(null);
   const [confidence, setConfidence] = useState<number | null>(null);
@@ -170,6 +185,7 @@ export function Participant({
   );
 
   useEffect(() => {
+    if (previewId == null && !session?.started) return;
     let cancelled = false;
     load()
       .then((data) => {
@@ -181,7 +197,7 @@ export function Participant({
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [load, previewId, session?.started]);
 
   const stopTiming = useCallback(() => {
     if (timer.current !== null) {
@@ -237,6 +253,52 @@ export function Participant({
     setRating(null);
     setAttempted(false);
     window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  async function start(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const pending = session ?? { id: attemptKey(), started: false };
+      sessionStorage.setItem(
+        `participation-session:${token}`,
+        JSON.stringify(pending),
+      );
+      setSession(pending);
+      const response = await fetch(
+        `/api/participate/${encodeURIComponent(token)}/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            email,
+            key: individualKey,
+            submission_key: pending.id,
+          }),
+        },
+      );
+      if (response.status === 410) setClosed(true);
+      const data = await readResponse<Study>(response);
+      const authenticated = { ...pending, started: true };
+      sessionStorage.setItem(
+        `participation-session:${token}`,
+        JSON.stringify(authenticated),
+      );
+      setSession(authenticated);
+      setIndividualKey("");
+      accept(data);
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Unable to start participation.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function confirm(event: FormEvent<HTMLFormElement>) {
@@ -367,6 +429,54 @@ export function Participant({
                 Restart preview
               </button>
             )}
+          </section>
+        ) : !preview && !session?.started ? (
+          <section className="qa-panel">
+            <h2>Start participation</h2>
+            <p>
+              Enter your name, email and individual key. Each key and email can
+              start only one participation in this questionnaire. Keep this tab
+              to resume your answers.
+            </p>
+            <form className="qa-form" onSubmit={start}>
+              <label>
+                Name
+                <input
+                  required
+                  maxLength={200}
+                  autoComplete="name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  disabled={busy}
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  type="email"
+                  required
+                  maxLength={254}
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  disabled={busy}
+                />
+              </label>
+              <label>
+                Individual key
+                <input
+                  required
+                  maxLength={100}
+                  autoComplete="off"
+                  value={individualKey}
+                  onChange={(event) => setIndividualKey(event.target.value)}
+                  disabled={busy}
+                />
+              </label>
+              <button type="submit" disabled={busy}>
+                {busy ? "Starting..." : "Start questionnaire"}
+              </button>
+            </form>
           </section>
         ) : !study ? (
           <section className="qa-panel" aria-busy={!error}>

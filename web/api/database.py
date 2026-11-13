@@ -53,10 +53,25 @@ def initialize_database() -> None:
         )
         """,
         """
+        CREATE TABLE IF NOT EXISTS participation_keys (
+            questionnaire_id BIGINT NOT NULL REFERENCES questionnaires(id),
+            key TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (questionnaire_id, key)
+        )
+        """,
+        """
         CREATE TABLE IF NOT EXISTS participations (
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             questionnaire_id BIGINT NOT NULL REFERENCES questionnaires(id),
             submission_key UUID NOT NULL,
+            participant_name TEXT NOT NULL,
+            participant_email TEXT NOT NULL,
+            participation_key TEXT NOT NULL,
+            FOREIGN KEY (questionnaire_id, participation_key)
+                REFERENCES participation_keys(questionnaire_id, key),
+            UNIQUE (questionnaire_id, participant_email),
+            UNIQUE (questionnaire_id, participation_key),
             study_group TEXT NOT NULL CHECK (study_group IN ('control', 'experimental')),
             current_step SMALLINT NOT NULL DEFAULT 0 CHECK (current_step BETWEEN 0 AND 17),
             started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,

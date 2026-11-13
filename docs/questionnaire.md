@@ -57,9 +57,14 @@ There are seventeen content steps and a final submission action:
 5. Participants submit to mark the already saved answers complete.
 
 The server permits only the current step. Confirmed responses cannot be edited,
-and participants cannot return to earlier explanations. The same attempt resumes
-after reloading in the same tab. New tabs or cleared session storage can create
-new attempts; the system does not identify a person across devices or sessions.
+and participants cannot return to earlier explanations. Before starting, each
+participant supplies a name, email and individual key. The key is consumed at
+start, even if the participant does not finish. Email addresses are trimmed and
+lowercased, and each email and key can belong to only one participation in the
+same questionnaire. No email ownership verification is performed.
+The same attempt resumes after reloading in the same tab. Closing the tab or
+clearing session storage loses access; the consumed key cannot start again in
+another session.
 Group assignment is stable per attempt. Route order is deterministic per attempt
 and question, with identical route styling before disclosure.
 
@@ -84,7 +89,7 @@ wording to the three explanations collectively:
 Response labels are 1: Strongly disagree; 2: Somewhat disagree; 3: Neither agree
 nor disagree; 4: Somewhat agree; 5: Strongly agree. All items use positive wording;
 none requires reverse scoring. This domain adaptation has not itself been
-psychometrically validated. Raw responses are exported without an automatic
+psychometrically validated. Raw responses are stored without an automatic
 aggregate score or inferred claim of objective comprehension.
 
 The reference set informs the implementation as follows:
@@ -115,9 +120,22 @@ The reference set informs the implementation as follows:
 
 ## APIs and preview
 
-- `GET /api/participate/{token}?submission_key={uuid}` opens or resumes an attempt
+- `POST /api/questionnaires/{id}/participation-keys` accepts `quantity` (an integer
+  from 1 to 1,000) and generates individual keys for a draft or active study.
+  `GET` on the same endpoint lists `key`, `created_at` and `used`. These are local
+  administrative endpoints; keys are not exposed through the participant API.
+- `POST /api/participate/{token}/start` accepts `name`, `email`, `key` and
+  `submission_key` (a browser-generated random UUID). It atomically reserves the
+  key and email, creates a participation and returns its current state. Retrying
+  with the same session and identical normalized data returns the same attempt.
+  Names are trimmed, nonempty and limited to 200 characters; emails are validated
+  and limited to 254 characters. Invalid keys return 401, used keys or emails 409,
+  and closed questionnaires 410. Validation failures do not consume keys.
+- `GET /api/participate/{token}?submission_key={uuid}` resumes an existing attempt
   and returns only its current `step`, `current_step`, `total_steps`, questionnaire
-  details and completion status. Public responses use `Cache-Control: no-store`.
+  details and completion status. It never creates a participation. Unknown
+  sessions cannot load steps, confirm answers or submit. Public state responses
+  use `Cache-Control: no-store`.
 - `POST /api/participate/{token}/steps/{step}/confirm` accepts `submission_key`,
   `value` and nonnegative integer `visible_duration_ms`. Steps are zero-based.
   Assessment values are objects; Likert values are integers from 1 to 5;
@@ -139,18 +157,18 @@ After activation, open the local participant link from the administration screen
 to exercise the real participation flow without a public URL. This link uses
 the current dashboard address and serves only this installation, not external
 participants. Confirmed steps are saved in PostgreSQL, and reloading the same
-browser tab resumes the attempt. Submit after the final step to include the
-participation in exports. The administrative preview never saves responses.
+browser tab resumes the attempt. Generate keys in administration and distribute
+one unused key to each participant along with the link. Key usage can be refreshed
+in administration. Submit after the final step to mark the saved participation
+complete. The administrative preview never saves responses or consumes keys.
 
-## Export and timing
+## Persistence and timing
 
-`GET /api/questionnaires/{id}/export` requires the configured `X-Export-Key`.
-Only completed participations are exported. The JSON includes protocol version,
-ordered selected scenarios, question prompts and ESS identifiers, adaptation
-metadata, scenario maps/costs/explanations, groups, raw responses and route order.
-For route responses, use `route_order[choice]` to recover whether the participant
-selected `optimal` or `alternative`. Prediction accuracy can be calculated from
-the three `route_prediction` records. Secrets and submission keys are excluded.
+Names, normalized emails and used keys are linked to participations in PostgreSQL.
+Answers and timing remain stored as steps are confirmed, including incomplete
+participations. The database enforces unique emails and keys per questionnaire.
+For route responses, `route_order[choice]` identifies `optimal` or `alternative`.
+The research protocol and timing fields remain unchanged.
 
 | Field | Meaning |
 | --- | --- |
@@ -166,3 +184,18 @@ Durations are milliseconds measured in the browser with `performance.now()`.
 They exclude hidden-tab intervals and pending requests. Timing checkpoints in
 session storage preserve accumulated exposure across reloads. They are client
 measurements rather than independently verified measures of attention.
+
+## Replacing the local schema
+
+The current schema requires a fresh set of questionnaire tables. When replacing
+an older local installation, stop both backend services and explicitly remove
+only the old questionnaire tables once, then restart the services:
+
+```sql
+DROP TABLE IF EXISTS answers, participations, participation_keys, questions,
+    scenarios, questionnaires;
+```
+
+This discards all old questionnaire data and responses. Initialization creates
+the new tables; it does not perform migrations or automatically erase data.
+Other database tables, simulation files and Docker volumes must be preserved.

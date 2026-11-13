@@ -56,7 +56,6 @@ export DB_PORT=5432
 export DB_USER=your_database_user
 export DB_PASSWORD=your_database_password
 export DB_NAME=your_database_name
-export ADMIN_EXPORT_KEY=your_export_key
 ```
 
 `DB_HOST` and `DB_PORT` default to `127.0.0.1` and `5432` when omitted. The
@@ -103,14 +102,17 @@ same browser tab resumes its server-controlled step; confirmed steps cannot be
 revisited. Group assignment and A/B route order stay stable for that attempt.
 After all steps, participants submit to mark the participation complete.
 
-Set `ADMIN_EXPORT_KEY` to enable protected JSON export using the administration
-screen or `GET /api/questionnaires/{id}/export` with the `X-Export-Key` header.
-Exports contain completed participations, groups, answers, route orders, timing,
-scenario data and protocol/instrument metadata. Tokens and submission keys are
-excluded. The export key does not protect other administrative endpoints.
+Generate individual keys in the questionnaire administration screen by entering
+a quantity from 1 to 1,000. Copy unused keys and give one to each participant
+along with the local participant link. The participant must enter a name, email
+and key before the study begins. A key is consumed when participation starts,
+and an email can be registered only once per questionnaire, ignoring case and
+surrounding whitespace. Reloading the same tab resumes that participation;
+closing the tab or clearing its session storage removes access to the attempt.
+Answers remain stored in PostgreSQL, including unfinished participations.
 
 The questionnaire schema requires an empty database. There is no migration or
-compatibility with the previous manual-question format, and startup does not
+compatibility with previous questionnaire schemas, and startup does not
 erase or convert existing data. See [Questionnaire protocol](docs/questionnaire.md)
 for the endpoints, instrument adaptation and timing definitions. Request schemas
 are also available at `http://localhost:8000/docs`.
@@ -143,7 +145,6 @@ Set `DB_USER`, `DB_PASSWORD`, and `DB_NAME` in the shell or in an untracked
 `.env` file in the project root. Optionally set `DB_PORT` to change the host
 port published by PostgreSQL; it defaults to `5432`. The backend connects
 to the database service on its internal port, independently of `DB_PORT`.
-Set `ADMIN_EXPORT_KEY` in the shell or `.env` to enable protected JSON export.
 For external access, set `PUBLIC_PARTICIPANT_URL` to the URL participants can
 reach, for example `http://YOUR_LAN_IP:5174`. The administration screen then
 also displays a public participant link. Recreate the frontend services after

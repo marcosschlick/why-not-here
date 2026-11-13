@@ -189,6 +189,10 @@ def delete_questionnaire(questionnaire_id: int):
                 "DELETE FROM scenarios WHERE questionnaire_id = %s", (questionnaire_id,)
             )
             connection.execute(
+                "DELETE FROM participation_keys WHERE questionnaire_id = %s",
+                (questionnaire_id,),
+            )
+            connection.execute(
                 "DELETE FROM questionnaires WHERE id = %s", (questionnaire_id,)
             )
     except errors.ForeignKeyViolation as error:

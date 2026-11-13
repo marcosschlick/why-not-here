@@ -44,6 +44,7 @@ type Questionnaire = {
   questions: Question[];
   protocol: Protocol;
 };
+type ParticipationKey = { key: string; used: boolean };
 type Summary = Omit<Questionnaire, "questions" | "protocol">;
 type Scenario = {
   id: number;
@@ -193,7 +194,10 @@ export function QuestionnaireAdmin({
   const [busy, setBusy] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [error, setError] = useState("");
-  const [exportKey, setExportKey] = useState("");
+  const [participationKeys, setParticipationKeys] = useState<
+    ParticipationKey[]
+  >([]);
+  const [keyQuantity, setKeyQuantity] = useState(10);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmation, setConfirmation] = useState<Pick<
     ConfirmModalProps,
@@ -282,9 +286,10 @@ export function QuestionnaireAdmin({
   );
   const loadQuestionnaire = useCallback(
     async (id: number, resetDetails = false) => {
-      const [questionnaire, summaries] = await Promise.all([
+      const [questionnaire, summaries, keys] = await Promise.all([
         api<Questionnaire>(`/questionnaires/${id}`),
         api<{ id: number }[]>(`/questionnaires/${id}/scenarios`),
+        api<ParticipationKey[]>(`/questionnaires/${id}/participation-keys`),
       ]);
       const details = await Promise.all(
         summaries.map((item) =>
@@ -292,6 +297,7 @@ export function QuestionnaireAdmin({
         ),
       );
       setSelected(questionnaire);
+      setParticipationKeys(keys);
       setProtocol(questionnaire.protocol);
       if (resetDetails) {
         setTitle(questionnaire.title);
@@ -349,7 +355,6 @@ export function QuestionnaireAdmin({
         await loadQuestionnaire(id, true);
         setSidebarOpen(false);
         sidebarToggleRef.current?.focus();
-        setExportKey("");
         setConfirmDelete(false);
         setPreview(false);
       }).finally(() => setSelecting(false));
@@ -358,7 +363,7 @@ export function QuestionnaireAdmin({
   function newDraft() {
     if (busy) return;
     confirmDiscard(() => {
-      setExportKey("");
+      setParticipationKeys([]);
       setConfirmDelete(false);
       setSelected(null);
       setTitle("");
@@ -383,33 +388,20 @@ export function QuestionnaireAdmin({
       await loadQuestionnaire(item.id, true);
     });
   }
-  function exportResults(event: FormEvent) {
+  function generateKeys(event: FormEvent) {
     event.preventDefault();
     if (!selected) return;
     void perform(async () => {
-      const response = await fetch(
-        `/api/questionnaires/${selected.id}/export`,
-        {
-          headers: { "X-Export-Key": exportKey },
-        },
+      await api<ParticipationKey[]>(
+        `/questionnaires/${selected.id}/participation-keys`,
+        "POST",
+        { quantity: keyQuantity },
       );
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(
-          typeof body?.detail === "string"
-            ? body.detail
-            : "Unable to export results.",
-        );
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `questionnaire-${selected.id}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      setExportKey("");
+      setParticipationKeys(
+        await api<ParticipationKey[]>(
+          `/questionnaires/${selected.id}/participation-keys`,
+        ),
+      );
     });
   }
   function saveProtocol(event: FormEvent) {
@@ -430,8 +422,7 @@ export function QuestionnaireAdmin({
     confirmDiscard(() => {
       setConfirmation({
         title: "Activate Questionnaire",
-        description:
-          "Activate this questionnaire? It can no longer be edited.",
+        description: "Activate this questionnaire? It can no longer be edited.",
         confirmLabel: "Activate Questionnaire",
         onConfirm: () => {
           setTitle(selected.title);
@@ -677,26 +668,83 @@ export function QuestionnaireAdmin({
                 </button>
               )}
               {selected && (
-                <form onSubmit={exportResults} className="qa-form">
-                  <label>
-                    Export key
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      required
-                      value={exportKey}
-                      onChange={(event) => setExportKey(event.target.value)}
-                      disabled={panelBusy}
-                    />
-                  </label>
+                <section aria-label="Individual participation keys">
+                  <h3>Individual participation keys</h3>
+                  <p className="qa-muted">
+                    Give one key to each participant. Starting consumes the key
+                    and reserves the email for this questionnaire. Participants
+                    can resume only in the same browser tab.
+                  </p>
+                  {selected.status !== "closed" && (
+                    <form onSubmit={generateKeys} className="qa-form">
+                      <label>
+                        Number of keys
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          max={1000}
+                          step={1}
+                          value={keyQuantity}
+                          onChange={(event) =>
+                            setKeyQuantity(Number(event.target.value))
+                          }
+                          disabled={panelBusy}
+                        />
+                      </label>
+                      <button type="submit" disabled={panelBusy}>
+                        Generate keys
+                      </button>
+                    </form>
+                  )}
                   <button
-                    type="submit"
+                    type="button"
                     className="qa-secondary"
                     disabled={panelBusy}
+                    onClick={() =>
+                      void perform(async () => {
+                        setParticipationKeys(
+                          await api<ParticipationKey[]>(
+                            `/questionnaires/${selected.id}/participation-keys`,
+                          ),
+                        );
+                      })
+                    }
                   >
-                    Download results (JSON)
+                    Refresh key usage
                   </button>
-                </form>
+                  {participationKeys.length > 0 && (
+                    <div className="qa-form">
+                      <label>
+                        Unused keys — select and copy to distribute
+                        <textarea
+                          readOnly
+                          rows={5}
+                          value={participationKeys
+                            .filter((item) => !item.used)
+                            .map((item) => item.key)
+                            .join("\n")}
+                          onFocus={(event) => event.currentTarget.select()}
+                        />
+                      </label>
+                      <p className="qa-muted" role="status">
+                        {participationKeys.filter((item) => item.used).length}{" "}
+                        used of {participationKeys.length} keys
+                      </p>
+                      <details>
+                        <summary>View all keys and usage</summary>
+                        <ul>
+                          {participationKeys.map((item) => (
+                            <li key={item.key}>
+                              <code>{item.key}</code> —{" "}
+                              {item.used ? "Used" : "Unused"}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    </div>
+                  )}
+                </section>
               )}
               {!preview && (
                 <form onSubmit={saveDraft} className="qa-form">

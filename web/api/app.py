@@ -17,7 +17,6 @@ if str(SRC_DIR) not in sys.path:
 from src.pipeline.storage import get_output_directory
 from src.pipeline.utils import get_project_path
 from web.api.database import initialize_database
-from web.api.exports import router as exports_router
 from web.api.participation import public_router
 from web.api.participation import router as participation_router
 from web.api.questionnaires import router as questionnaires_router
@@ -63,7 +62,6 @@ app.include_router(questionnaires_router)
 app.include_router(scenarios_router)
 app.include_router(participation_router)
 app.include_router(public_router)
-app.include_router(exports_router)
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
