@@ -93,6 +93,20 @@ def read_questionnaire(questionnaire_id: int):
         return questionnaire_details(connection, questionnaire_id)
 
 
+@router.get("/{questionnaire_id}/participation-summary")
+def read_participation_summary(questionnaire_id: int, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    with connect_database() as connection:
+        get_questionnaire(connection, questionnaire_id)
+        return connection.execute(
+            "SELECT count(*) AS total, "
+            "count(*) FILTER (WHERE completed_at IS NOT NULL) AS completed, "
+            "count(*) FILTER (WHERE completed_at IS NULL) AS in_progress "
+            "FROM participations WHERE questionnaire_id = %s",
+            (questionnaire_id,),
+        ).fetchone()
+
+
 @router.put("/{questionnaire_id}")
 def update_questionnaire(questionnaire_id: int, payload: QuestionnaireInput):
     with connect_database() as connection:

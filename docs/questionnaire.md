@@ -33,6 +33,30 @@ The schema is for an empty database. No migrations, legacy question types or
 legacy participation endpoints are provided. Database initialization never
 silently drops or converts existing tables.
 
+## Participation overview
+
+Draft questionnaires retain the title, description, study protocol and scenario
+editor. Active and closed questionnaires show a read-only title and description,
+participation counts and key management. Active studies also retain participant
+access and closure controls. Editing remains prohibited after activation.
+
+Use **View scenarios** to reveal the saved scenarios and maps without creation
+or rename controls. **Hide scenarios** returns to the overview. Participant
+preview remains available for both groups; opening preview and scenario views
+is mutually exclusive. Selecting another questionnaire returns to its overview.
+
+The participation panel shows **Completed**, **In progress** and **Total started**.
+It loads when the overview opens; **Refresh participation counts** reloads only
+the counts, without automatic polling. Completed means final submission has set
+`completed_at`; a participation with all steps answered but not yet submitted
+still counts as in progress. Closed studies retain counts of incomplete attempts.
+Loading is shown separately from a real zero, and errors can be retried locally.
+
+`GET /api/questionnaires/{id}/participation-summary` is a local administrative
+endpoint returning `{total, completed, in_progress}`. It uses `Cache-Control:
+no-store`, returns 404 for an unknown questionnaire and exposes no participant
+identities. No schema changes are required.
+
 ## Participant sequence
 
 There are seventeen content steps and a final submission action:

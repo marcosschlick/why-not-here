@@ -93,6 +93,12 @@ The address has no token; each participant's individual key identifies the study
 The local link uses the dashboard origin and is not for external access.
 No public participant URL is needed for local testing.
 
+Active and closed questionnaires show a read-only overview instead of disabled
+editing forms. Use **View scenarios** to inspect saved maps or open the existing
+participant preview. The participation panel shows completed, in-progress and
+total started participations; use **Refresh participation counts** to update it.
+Only final submissions count as completed. Draft editing remains unchanged.
+
 The fixed protocol collects a route choice, confidence (0 to 100), and a written
 reason before each of three explanations. The control group receives the cost
 justification; the experimental group receives the textual and visual contrastive
