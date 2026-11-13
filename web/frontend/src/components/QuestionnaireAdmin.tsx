@@ -142,6 +142,291 @@ async function api<T>(
   return response.status === 204 ? (undefined as T) : response.json();
 }
 
+function ParticipationKeysPanel({
+  questionnaireId,
+  disabled,
+}: {
+  questionnaireId: number;
+  disabled: boolean;
+}) {
+  const [keys, setKeys] = useState<ParticipationKey[] | null>(null);
+  const [operation, setOperation] = useState<
+    "loading" | "generating" | "copying" | null
+  >("loading");
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [showGenerator, setShowGenerator] = useState(false);
+  const [quantity, setQuantity] = useState(10);
+  const [filter, setFilter] = useState<"available" | "used">("available");
+  const [copiedKey, setCopiedKey] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const generateButtonRef = useRef<HTMLButtonElement>(null);
+  const busy = disabled || operation !== null;
+  const availableKeys = keys?.filter((item) => !item.used) ?? [];
+  const visibleKeys =
+    filter === "available"
+      ? availableKeys
+      : (keys?.filter((item) => item.used) ?? []);
+  const path = `/questionnaires/${questionnaireId}/participation-keys`;
+
+  useEffect(() => {
+    let cancelled = false;
+    api<ParticipationKey[]>(path)
+      .then((data) => {
+        if (!cancelled) setKeys(data);
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled)
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Unable to load participation keys.",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setOperation(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [path, refreshVersion]);
+
+  function resetFeedback() {
+    setCopiedKey("");
+    setMessage("");
+    setError("");
+  }
+
+  function closeGenerator() {
+    setShowGenerator(false);
+    requestAnimationFrame(() =>
+      generateButtonRef.current?.focus({ preventScroll: true }),
+    );
+  }
+
+  async function generateKeys(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setOperation("generating");
+    resetFeedback();
+    try {
+      const created = await api<ParticipationKey[]>(path, "POST", { quantity });
+      setKeys((current) => [...created, ...(current ?? [])]);
+      setFilter("available");
+      setMessage(
+        `${created.length} ${created.length === 1 ? "key" : "keys"} generated.`,
+      );
+      closeGenerator();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to generate participation keys.",
+      );
+    } finally {
+      setOperation(null);
+    }
+  }
+
+  async function copyKeys(items: ParticipationKey[]) {
+    if (busy || items.length === 0) return;
+    setOperation("copying");
+    resetFeedback();
+    try {
+      await navigator.clipboard.writeText(
+        items.map((item) => item.key).join("\n"),
+      );
+      if (items.length === 1) setCopiedKey(items[0].key);
+      setMessage(
+        items.length === 1
+          ? "Key copied."
+          : `${items.length} available keys copied.`,
+      );
+    } catch {
+      setError(
+        "Unable to copy participation keys. Allow clipboard access and try again.",
+      );
+    } finally {
+      setOperation(null);
+    }
+  }
+
+  return (
+    <section
+      className="qa-control-group qa-keys-panel"
+      aria-label="Participation keys"
+      aria-busy={operation !== null}
+    >
+      <div className="qa-heading">
+        <h3>Participation keys</h3>
+        <div className="qa-actions">
+          <button
+            type="button"
+            className="qa-overview-action"
+            ref={generateButtonRef}
+            hidden={showGenerator}
+            disabled={busy || keys === null}
+            aria-expanded={showGenerator}
+            aria-controls="participation-key-generator"
+            onClick={() => {
+              resetFeedback();
+              setShowGenerator(true);
+            }}
+          >
+            Generate keys
+          </button>
+          <button
+            type="button"
+            className="qa-secondary qa-overview-action"
+            disabled={busy}
+            onClick={() => {
+              resetFeedback();
+              setOperation("loading");
+              setRefreshVersion((current) => current + 1);
+            }}
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+      <p className="qa-muted">
+        Give one key to each participant. Keys are consumed when participation
+        starts.
+      </p>
+      <div id="participation-key-generator" hidden={!showGenerator}>
+        {showGenerator && (
+          <form className="qa-key-generator" onSubmit={generateKeys}>
+            <label htmlFor="participation-key-quantity">
+              Number of keys
+              <input
+                id="participation-key-quantity"
+                type="number"
+                required
+                min={1}
+                max={1000}
+                step={1}
+                autoFocus
+                value={quantity}
+                disabled={busy}
+                onChange={(event) => setQuantity(Number(event.target.value))}
+              />
+            </label>
+            <div className="qa-actions">
+              <button
+                type="submit"
+                className="qa-overview-action"
+                disabled={busy}
+              >
+                {operation === "generating" ? "Generating..." : "Generate"}
+              </button>
+              <button
+                type="button"
+                className="qa-secondary qa-overview-action"
+                disabled={busy}
+                onClick={() => {
+                  resetFeedback();
+                  closeGenerator();
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+      {keys !== null && (
+        <>
+          <div className="qa-key-toolbar">
+            <div
+              className="qa-actions"
+              role="group"
+              aria-label="Filter participation keys"
+            >
+              {(["available", "used"] as const).map((value) => (
+                <button
+                  type="button"
+                  key={value}
+                  className="qa-secondary qa-key-filter qa-overview-action"
+                  aria-pressed={filter === value}
+                  disabled={busy}
+                  onClick={() => {
+                    setFilter(value);
+                    resetFeedback();
+                  }}
+                >
+                  {value === "available" ? "Available" : "Used"} (
+                  {value === "available"
+                    ? availableKeys.length
+                    : keys.length - availableKeys.length}
+                  )
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="qa-secondary qa-key-bulk-copy"
+              disabled={busy || availableKeys.length === 0}
+              onClick={() => void copyKeys(availableKeys)}
+            >
+              Copy available keys
+            </button>
+          </div>
+          {visibleKeys.length > 0 ? (
+            <ul
+              className="qa-key-list"
+              aria-label={
+                filter === "available"
+                  ? "Available participation keys"
+                  : "Used participation keys"
+              }
+              tabIndex={0}
+            >
+              {visibleKeys.map((item) => (
+                <li key={item.key}>
+                  <code>{item.key}</code>
+                  {item.used ? (
+                    <span className="qa-key-used">Used</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="qa-secondary qa-overview-action qa-key-copy"
+                      disabled={busy}
+                      aria-label={
+                        copiedKey === item.key
+                          ? "Key copied"
+                          : `Copy key ${item.key}`
+                      }
+                      onClick={() => void copyKeys([item])}
+                    >
+                      {copiedKey === item.key ? "Copied" : "Copy"}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="qa-key-empty">
+              {keys.length === 0
+                ? "No keys yet. Generate a batch to get started."
+                : filter === "available"
+                  ? "No available keys. Generate more to invite participants."
+                  : "No keys have been used yet."}
+            </p>
+          )}
+        </>
+      )}
+      <p className="qa-muted" role="status">
+        {operation === "loading" ? "Loading participation keys..." : message}
+      </p>
+      {error && (
+        <p className="qa-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}
+
 type ParticipationSummary = {
   total: number;
   completed: number;
@@ -317,10 +602,6 @@ export function QuestionnaireAdmin({
   const [busy, setBusy] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [error, setError] = useState("");
-  const [participationKeys, setParticipationKeys] = useState<
-    ParticipationKey[]
-  >([]);
-  const [keyQuantity, setKeyQuantity] = useState(10);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmation, setConfirmation] = useState<Pick<
     ConfirmModalProps,
@@ -409,10 +690,9 @@ export function QuestionnaireAdmin({
   );
   const loadQuestionnaire = useCallback(
     async (id: number, resetDetails = false) => {
-      const [questionnaire, summaries, keys] = await Promise.all([
+      const [questionnaire, summaries] = await Promise.all([
         api<Questionnaire>(`/questionnaires/${id}`),
         api<{ id: number }[]>(`/questionnaires/${id}/scenarios`),
-        api<ParticipationKey[]>(`/questionnaires/${id}/participation-keys`),
       ]);
       const details = await Promise.all(
         summaries.map((item) =>
@@ -420,7 +700,6 @@ export function QuestionnaireAdmin({
         ),
       );
       setSelected(questionnaire);
-      setParticipationKeys(keys);
       setProtocol(questionnaire.protocol);
       if (resetDetails) {
         setView("overview");
@@ -487,7 +766,6 @@ export function QuestionnaireAdmin({
   function newDraft() {
     if (busy) return;
     confirmDiscard(() => {
-      setParticipationKeys([]);
       setCopyStatus("");
       setConfirmDelete(false);
       setSelected(null);
@@ -524,22 +802,6 @@ export function QuestionnaireAdmin({
         "Unable to copy the participant link. Allow clipboard access and try again.",
       );
     }
-  }
-  function generateKeys(event: FormEvent) {
-    event.preventDefault();
-    if (!selected) return;
-    void perform(async () => {
-      await api<ParticipationKey[]>(
-        `/questionnaires/${selected.id}/participation-keys`,
-        "POST",
-        { quantity: keyQuantity },
-      );
-      setParticipationKeys(
-        await api<ParticipationKey[]>(
-          `/questionnaires/${selected.id}/participation-keys`,
-        ),
-      );
-    });
   }
   function saveProtocol(event: FormEvent) {
     event.preventDefault();
@@ -832,6 +1094,11 @@ export function QuestionnaireAdmin({
                             `/questionnaires/${selected.id}/close`,
                             "POST",
                           );
+                          setSelected((current) =>
+                            current?.id === selected.id
+                              ? { ...current, status: "closed" }
+                              : current,
+                          );
                           await loadList();
                           await loadQuestionnaire(selected.id);
                         });
@@ -842,90 +1109,12 @@ export function QuestionnaireAdmin({
                   Close questionnaire
                 </button>
               )}
-              {selected && (
-                <section
-                  className="qa-control-group"
-                  aria-label="Individual participation keys"
-                >
-                  <h3>Individual participation keys</h3>
-                  <p className="qa-muted">
-                    Give one key to each participant. Starting consumes the key
-                    and reserves the email for this questionnaire. Participants
-                    can resume only in the same browser tab.
-                  </p>
-                  {selected.status !== "closed" && (
-                    <form
-                      onSubmit={generateKeys}
-                      className="qa-form qa-key-generation"
-                    >
-                      <label>
-                        Number of keys
-                        <input
-                          type="number"
-                          required
-                          min={1}
-                          max={1000}
-                          step={1}
-                          value={keyQuantity}
-                          onChange={(event) =>
-                            setKeyQuantity(Number(event.target.value))
-                          }
-                          disabled={panelBusy}
-                        />
-                      </label>
-                      <button type="submit" disabled={panelBusy}>
-                        Generate keys
-                      </button>
-                    </form>
-                  )}
-                  <button
-                    type="button"
-                    className="qa-secondary"
-                    disabled={panelBusy}
-                    onClick={() =>
-                      void perform(async () => {
-                        setParticipationKeys(
-                          await api<ParticipationKey[]>(
-                            `/questionnaires/${selected.id}/participation-keys`,
-                          ),
-                        );
-                      })
-                    }
-                  >
-                    Refresh key usage
-                  </button>
-                  {participationKeys.length > 0 && (
-                    <div className="qa-form">
-                      <label>
-                        Unused keys — select and copy to distribute
-                        <textarea
-                          readOnly
-                          rows={5}
-                          value={participationKeys
-                            .filter((item) => !item.used)
-                            .map((item) => item.key)
-                            .join("\n")}
-                          onFocus={(event) => event.currentTarget.select()}
-                        />
-                      </label>
-                      <p className="qa-muted" role="status">
-                        {participationKeys.filter((item) => item.used).length}{" "}
-                        used of {participationKeys.length} keys
-                      </p>
-                      <details>
-                        <summary>View all keys and usage</summary>
-                        <ul>
-                          {participationKeys.map((item) => (
-                            <li key={item.key}>
-                              <code>{item.key}</code> —{" "}
-                              {item.used ? "Used" : "Unused"}
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    </div>
-                  )}
-                </section>
+              {selected && selected.status !== "closed" && (
+                <ParticipationKeysPanel
+                  key={selected.id}
+                  questionnaireId={selected.id}
+                  disabled={panelBusy}
+                />
               )}
               {editable && !preview && (
                 <form onSubmit={saveDraft} className="qa-form">

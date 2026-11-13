@@ -37,7 +37,8 @@ silently drops or converts existing tables.
 
 Draft questionnaires retain the title, description, study protocol and scenario
 editor. Active and closed questionnaires show a read-only title and description,
-participation counts and key management. Active studies also retain participant
+participation counts. Draft and active questionnaires include key management;
+closed questionnaires omit it entirely. Active studies also retain participant
 access and closure controls. Editing remains prohibited after activation.
 
 Use **View scenarios** to reveal the saved scenarios and maps without creation
@@ -56,6 +57,25 @@ Loading is shown separately from a real zero, and errors can be retried locally.
 endpoint returning `{total, completed, in_progress}`. It uses `Cache-Control:
 no-store`, returns 404 for an unknown questionnaire and exposes no participant
 identities. No schema changes are required.
+
+## Participation keys
+
+Draft and active questionnaires show a compact **Participation keys** section.
+**Generate keys** opens an inline quantity form (default 10, range 1 to 1,000).
+**Cancel** closes it without creating keys. A successful generation closes the
+form and shows the new keys first under **Available** without copying them.
+
+The **Available** and **Used** filters show their counts and share one scrollable
+list. Available rows have a **Copy** button for individual distribution; used rows
+are read-only. **Copy available keys** is a secondary action that copies all
+available keys separated by newlines. The clipboard receives only key values,
+without labels. Copy and generation results are announced in the section;
+clipboard and request failures can be retried without leaving the questionnaire.
+
+**Refresh** reloads usage manually. Empty filters have their own empty states,
+and loading failures are not shown as an empty inventory. Selecting another
+questionnaire resets the form, filter and feedback. Closed questionnaires neither
+show this section nor request its key list; existing key records remain stored.
 
 ## Participant sequence
 

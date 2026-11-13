@@ -110,10 +110,12 @@ same browser tab resumes its server-controlled step; confirmed steps cannot be
 revisited. Group assignment and A/B route order stay stable for that attempt.
 After all steps, participants submit to mark the participation complete.
 
-Generate individual keys in the questionnaire administration screen by entering
-a quantity from 1 to 1,000. Copy unused keys and give one to each participant
-along with the local participant link. The participant must enter a name, email
-and key before the study begins. A key is consumed when participation starts,
+In **Participation keys**, use **Generate keys** to open the quantity form
+(default 10, range 1 to 1,000). Use **Copy** on an available key to give it to one
+participant along with the local participant link. **Available** and **Used**
+share one list; **Refresh** reloads usage and **Copy available keys** offers
+secondary batch copying. Closed questionnaires hide this section. The participant
+must enter a name, email and key before the study begins. A key is consumed when participation starts,
 and an email can be registered only once per questionnaire, ignoring case and
 surrounding whitespace. Reloading the same tab resumes that participation;
 closing the tab or clearing its session storage removes access to the attempt.
