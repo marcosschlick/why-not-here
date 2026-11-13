@@ -9,22 +9,17 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const [isRendered, setIsRendered] = useState<boolean>(isOpen);
   const [isVisible, setIsVisible] = useState<boolean>(isOpen);
 
-  if (isOpen && !isRendered) {
-    setIsRendered(true);
-  }
-  if (!isOpen && isVisible) {
-    setIsVisible(false);
-  }
-
   useEffect(() => {
     let timer: number | undefined;
     let animFrame: number | undefined;
 
     if (isOpen) {
+      setIsRendered(true);
       animFrame = window.requestAnimationFrame(() => {
         setIsVisible(true);
       });
     } else if (isRendered) {
+      setIsVisible(false);
       timer = window.setTimeout(() => {
         setIsRendered(false);
       }, 160);
@@ -63,11 +58,14 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="about-modal-header">
-          <div className="about-modal-badge-row">
-            <span className="about-tag-pill">XAIP Research</span>
-            <span className="about-tag-pill highlight">
-              Inverse Optimization
-            </span>
+          <div className="about-header-block">
+            <h2 id="about-modal-title" className="about-paper-title">
+              Why Not Here?
+            </h2>
+            <p className="about-paper-subtitle">
+              Contrastive Explanations for 2D Grid Navigation via Inverse
+              Shortest Path (ISP)
+            </p>
           </div>
           <button
             type="button"
@@ -80,21 +78,11 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
         </div>
 
         <div className="about-modal-body">
-          <div className="about-header-block">
-            <h2 id="about-modal-title" className="about-paper-title">
-              Why Not Here?
-            </h2>
-            <p className="about-paper-subtitle">
-              Contrastive Explanations for 2D Grid Navigation via Inverse
-              Shortest Path (ISP)
-            </p>
-          </div>
-
           <div className="about-core-question-card">
             <div className="about-question-icon">?</div>
             <div className="about-question-content">
               <span className="about-question-lead">
-                Core Contrastive Question:
+                Core Contrastive Question
               </span>
               <p className="about-question-text">
                 &ldquo;Why was the optimal route{" "}
@@ -109,38 +97,53 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
             <div className="about-mechanic-card">
               <div className="mechanic-header">
                 <span className="mechanic-num">1</span>
-                <h3>Optimal Planning (A*)</h3>
+                <h3>Optimal Planning (A* / Dijkstra)</h3>
               </div>
               <p>
                 Computes the least-cost path (
-                <strong className="symbol-opt">p*</strong>) considering
-                distance, terrain traversal friction, elevation slope, and
-                obstacle clearance penalties.
+                <strong className="symbol-opt">p*</strong>) over 2D grids
+                accounting for distance, terrain friction, elevation slope,
+                robot speed, physical obstacles, and impassable biomes (water,
+                dense forest).
               </p>
             </div>
 
             <div className="about-mechanic-card">
               <div className="mechanic-header">
-                <span className="mechanic-num accent-lobster">2</span>
-                <h3>Inverse Optimization (ISP / MILP)</h3>
+                <span className="mechanic-num">2</span>
+                <h3>Semantic ISP (MILP)</h3>
               </div>
               <p>
-                Formulates a Mixed-Integer Linear Program (MILP) to identify
-                minimal environmental modifications that would make the
-                alternative route (
-                <strong className="symbol-user">p&apos;</strong>) optimal.
+                Solves a Mixed-Integer Linear Program to find minimal
+                interventions making{" "}
+                <strong className="symbol-user">p&apos;</strong> optimal:
+                terrain changes, obstacle removal, slope leveling, opening
+                impassable terrain, and speed adjustments.
               </p>
             </div>
 
             <div className="about-mechanic-card">
               <div className="mechanic-header">
-                <span className="mechanic-num accent-navy">3</span>
-                <h3>Scalability Strategies</h3>
+                <span className="mechanic-num">3</span>
+                <h3>Scalability &amp; Certification</h3>
               </div>
               <p>
-                Leverages graph reduction (Bounding Box, Reachable Set) and
-                incremental iterative cutting-plane solvers to ensure
-                computational tractability on 2D grids.
+                Supports graph reduction (Bounding Box, Reachable Set, Path
+                Only, Sparsified), incremental cutting-plane solving, and batch
+                runs—distinguishing globally certified solutions from unverified
+                candidates.
+              </p>
+            </div>
+
+            <div className="about-mechanic-card">
+              <div className="mechanic-header">
+                <span className="mechanic-num">4</span>
+                <h3>Human-Subjects Questionnaires</h3>
+              </div>
+              <p>
+                Enables structured evaluation studies using saved simulation
+                scenarios, combining explanation assessment and route prediction
+                tasks for participants.
               </p>
             </div>
           </div>
@@ -174,7 +177,7 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
             className="btn btn-primary btn-sm"
             onClick={onClose}
           >
-            Got it
+            Close
           </button>
         </div>
       </div>
