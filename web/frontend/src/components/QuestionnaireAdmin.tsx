@@ -62,7 +62,13 @@ type Scenario = {
     alternative_path?: Point[];
   };
 };
-function participantLink(token: string): string | null {
+function localParticipantLink(token: string): string {
+  const url = new URL(window.location.href);
+  url.hash = `/participate/${token}`;
+  return url.toString();
+}
+
+function publicParticipantLink(token: string): string | null {
   const base = import.meta.env.VITE_PUBLIC_BASE_URL;
   if (!base) return null;
   try {
@@ -165,6 +171,9 @@ export function QuestionnaireAdmin({
 }) {
   const [list, setList] = useState<Summary[]>([]);
   const [selected, setSelected] = useState<Questionnaire | null>(null);
+  const publicLink = selected?.access_token
+    ? publicParticipantLink(selected.access_token)
+    : null;
   const [sidebarOpen, setSidebarOpen] = useState(
     initialQuestionnaireId === null,
   );
@@ -618,23 +627,28 @@ export function QuestionnaireAdmin({
                   Activate questionnaire
                 </button>
               )}
-              {selected?.status === "active" &&
-                selected.access_token &&
-                (participantLink(selected.access_token) ? (
+              {selected?.status === "active" && selected.access_token && (
+                <>
                   <label className="qa-form">
-                    Participant link
+                    Local participant link
                     <input
                       readOnly
-                      value={participantLink(selected.access_token) || ""}
+                      value={localParticipantLink(selected.access_token)}
                       onFocus={(event) => event.currentTarget.select()}
                     />
                   </label>
-                ) : (
-                  <p className="qa-notice">
-                    Configure PUBLIC_PARTICIPANT_URL to create the participant
-                    link.
-                  </p>
-                ))}
+                  {publicLink && (
+                    <label className="qa-form">
+                      Public participant link
+                      <input
+                        readOnly
+                        value={publicLink}
+                        onFocus={(event) => event.currentTarget.select()}
+                      />
+                    </label>
+                  )}
+                </>
+              )}
               {selected?.status === "active" && (
                 <button
                   type="button"

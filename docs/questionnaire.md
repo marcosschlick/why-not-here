@@ -134,6 +134,13 @@ The reference set informs the implementation as follows:
 Administrative preview is available only through the local API. The public API
 and participant-only frontend expose only participation endpoints.
 
+After activation, open the local participant link from the administration screen
+to exercise the real participation flow without a public URL. This link uses
+the current dashboard address and serves only this installation, not external
+participants. Confirmed steps are saved in PostgreSQL, and reloading the same
+browser tab resumes the attempt. Submit after the final step to include the
+participation in exports. The administrative preview never saves responses.
+
 ## Export and timing
 
 `GET /api/questionnaires/{id}/export` requires the configured `X-Export-Key`.

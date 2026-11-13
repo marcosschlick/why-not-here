@@ -87,7 +87,10 @@ Automatic batch map generation is available outside questionnaire scenarios.
 Select three scenarios
 for explanations and three different scenarios for prediction, then save the
 protocol. The application generates all questions automatically. Preview either
-group before activating the draft and sharing its participant link.
+group before activating the draft. The preview does not save answers. After
+activation, open the **Local participant link** in the same installation to
+test the real participant flow. The link uses the dashboard address and is not
+for external access. No public participant URL is needed for local testing.
 
 The fixed protocol collects a route choice, confidence (0 to 100), and a written
 reason before each of three explanations. The control group receives the cost
@@ -116,13 +119,19 @@ are also available at `http://localhost:8000/docs`.
 # Terminal 1: Local backend API (port 8000)
 ./venv/bin/python -B -m uvicorn web.api.app:app --host 127.0.0.1 --port 8000 --no-proxy-headers --reload
 
-# Terminal 2: Participant backend (port 8001, local proxy target only)
+# Terminal 2: Local dashboard (port 5173)
+cd web/frontend && npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+For external participants, restart the dashboard with
+`VITE_PUBLIC_BASE_URL=http://YOUR_LAN_IP:5174` in its environment and start the
+separate participant services:
+
+```bash
+# Participant backend (port 8001, local proxy target only)
 ./venv/bin/python -B -m uvicorn web.api.public_app:app --host 127.0.0.1 --port 8001 --no-proxy-headers --reload
 
-# Terminal 3: Local dashboard (port 5173)
-cd web/frontend && VITE_PUBLIC_BASE_URL=http://YOUR_LAN_IP:5174 npm run dev -- --host 127.0.0.1 --port 5173
-
-# Terminal 4: Participant frontend (port 5174)
+# Participant frontend (port 5174)
 cd web/frontend && VITE_PUBLIC_ONLY=true VITE_BACKEND_URL=http://127.0.0.1:8001 VITE_PUBLIC_BASE_URL=http://YOUR_LAN_IP:5174 npm run dev -- --host 0.0.0.0 --port 5174
 ```
 
@@ -135,10 +144,10 @@ Set `DB_USER`, `DB_PASSWORD`, and `DB_NAME` in the shell or in an untracked
 port published by PostgreSQL; it defaults to `5432`. The backend connects
 to the database service on its internal port, independently of `DB_PORT`.
 Set `ADMIN_EXPORT_KEY` in the shell or `.env` to enable protected JSON export.
-Set `PUBLIC_PARTICIPANT_URL` to the URL participants can reach, for example
-`http://YOUR_LAN_IP:5174`. The local administration screen uses this URL to
-build participant links; without it the link is unavailable. Recreate the
-frontend services after changing the URL.
+For external access, set `PUBLIC_PARTICIPANT_URL` to the URL participants can
+reach, for example `http://YOUR_LAN_IP:5174`. The administration screen then
+also displays a public participant link. Recreate the frontend services after
+changing the URL. Local participation does not require this setting.
 
 Run the entire stack (PostgreSQL + backend API + frontend) with:
 
