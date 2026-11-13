@@ -97,7 +97,9 @@ No public participant URL is needed for local testing.
 Active and closed questionnaires show a read-only overview instead of disabled
 editing forms. Use **View scenarios** to inspect saved maps or open the existing
 participant preview. The participation panel shows completed, in-progress and
-total started participations; use **Refresh participation counts** to update it.
+total started participations and completed counts by group; use **Refresh results**
+to update them. **View results** expands descriptive ESS distributions, prediction
+matches, mean confidence and median decision time for completed participations.
 Only final submissions count as completed. Draft editing remains unchanged.
 
 The fixed protocol allows route changes until **Confirm route**, then collects

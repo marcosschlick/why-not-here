@@ -7,6 +7,11 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from web.api.database import connect_database
+from web.api.questionnaire_results import (
+    aggregate_results,
+    participation_counts,
+    read_completed_answers,
+)
 from web.api.study_protocol import (
     PROTOCOL_VERSION,
     ProtocolInput,
@@ -99,13 +104,32 @@ def read_participation_summary(questionnaire_id: int, response: Response):
     response.headers["Cache-Control"] = "no-store"
     with connect_database() as connection:
         get_questionnaire(connection, questionnaire_id)
-        return connection.execute(
-            "SELECT count(*) AS total, "
-            "count(*) FILTER (WHERE completed_at IS NOT NULL) AS completed, "
-            "count(*) FILTER (WHERE completed_at IS NULL) AS in_progress "
-            "FROM participations WHERE questionnaire_id = %s",
-            (questionnaire_id,),
-        ).fetchone()
+        counts = participation_counts(connection, questionnaire_id)
+        return {key: counts[key] for key in ("total", "completed", "in_progress")}
+
+
+@router.get("/{questionnaire_id}/results")
+def read_questionnaire_results(questionnaire_id: int, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    with connect_database() as connection:
+        connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        questionnaire = get_questionnaire(connection, questionnaire_id)
+        if questionnaire["status"] not in {"active", "closed"}:
+            raise HTTPException(
+                status_code=409,
+                detail="Results are available for active or closed questionnaires",
+            )
+        questions = read_questions(
+            connection, questionnaire_id, include_scenarios=False
+        )
+        scenario_ids = {
+            q["scenario_id"] for q in questions if q["type"] == "route_scenario"
+        }
+        return aggregate_results(
+            participation_counts(connection, questionnaire_id),
+            scenario_ids,
+            read_completed_answers(connection, questionnaire_id),
+        )
 
 
 @router.put("/{questionnaire_id}")

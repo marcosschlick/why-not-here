@@ -51,8 +51,10 @@ preview remains available for both groups; opening preview and scenario views
 is mutually exclusive. Selecting another questionnaire returns to its overview.
 
 The participation panel shows **Completed**, **In progress** and **Total started**.
-It loads when the overview opens; **Refresh participation counts** reloads only
-the counts, without automatic polling. Completed means final submission has set
+It loads with the results snapshot when the overview opens. **Refresh results**
+updates counts and analyses together, without automatic polling. **View results**
+expands the charts in place; **Hide results** collapses them without another
+request. Completed means final submission has set
 `completed_at`; a participation with all steps answered but not yet submitted
 still counts as in progress. Closed studies retain counts of incomplete attempts.
 Loading is shown separately from a real zero, and errors can be retried locally.
@@ -61,6 +63,130 @@ Loading is shown separately from a real zero, and errors can be retried locally.
 endpoint returning `{total, completed, in_progress}`. It uses `Cache-Control:
 no-store`, returns 404 for an unknown questionnaire and exposes no participant
 identities. No schema changes are required.
+
+## Administrative study results
+
+Active and closed questionnaires include an expandable **Study results** panel
+beside the existing participation controls. It starts collapsed and uses a
+single results request for both participation counts and response analyses.
+The general counts are not duplicated in another panel. Completed counts for
+Control and Experimental appear alongside the existing totals.
+
+**Refresh results** explicitly reloads the whole snapshot. There is no polling
+or refresh when expanding or collapsing the charts. Loading and initial request
+failure are distinct from real zero counts. Errors offer **Try again**; a failed
+refresh retains the previous snapshot and identifies it as previous results.
+Selecting another questionnaire resets the results and expansion state.
+
+`GET /api/questionnaires/{id}/results` is available only in the local
+administrative API. It returns 404 for an unknown questionnaire and 409 for a
+draft, with `Cache-Control: no-store`. The public participant API and its frontend
+proxy do not expose this endpoint. The existing `participation-summary` endpoint
+retains its `{total, completed, in_progress}` contract and shares the counting
+logic with the results endpoint.
+
+The response contains only:
+
+- `participation`: `total`, `completed`, `in_progress`, and `completed_by_group`
+  with Control and Experimental counts.
+- `ess_items`: eight `{item_id, prompt, groups}` records. Each group contains a
+  five-element `distribution` of response counts for ratings 1 through 5,
+  `responses` and `missing`.
+- `predictions`: one aggregate per group with `correct`, `proportion`,
+  `responses`, `participants` and `missing`; `confidence` adds its `mean` to
+  its own response, participant and missing counts; `decision_time` adds
+  `median_seconds` to its own counts.
+
+All queries are restricted to the selected questionnaire. Counts and answers
+are read from one consistent, read-only transaction snapshot. Only scalar
+answer fields and the metadata needed to distinguish phases are queried; maps,
+credentials and free-text answers are not loaded for analysis. Internal IDs used
+to count distinct contributing participants are never returned. No names,
+emails, individual keys, participant IDs, attempt UUIDs or free-text answers
+appear in the results payload or panel. Existing records and the database schema
+are not modified.
+
+### Inclusion and denominators
+
+Participation totals include all started attempts. A participation is completed
+only when `completed_at` is non-null; confirming every step without submitting
+still counts as in progress. All response analyses include completed
+participations only. In-progress answers and drafts are excluded, including in
+closed questionnaires.
+
+For each ESS item and group, valid responses are integers from 1 to 5. The bar
+and displayed percentages use the number of valid responses to that particular
+item in that group as the denominator. `missing` is the group's completed count
+minus the valid response count for the item, including absent or invalid values.
+All eight items are identified by their protocol IDs and text. No overall ESS
+score or combined ESS/SCS score is calculated.
+
+A route answer belongs to prediction only if its scenario is one of the last
+three IDs in that participation's stored `scenario_order`. The order must have
+six distinct positive integer IDs matching the questionnaire's selected pool.
+An invalid order prevents classification of prediction answers; the participant
+remains in participation counts and any valid ESS responses remain eligible.
+Question position alone cannot identify prediction because the scenario pool is
+randomized independently for each participation.
+
+An accuracy observation requires an integer `choice` of 0 or 1 and a stored
+`route_order` equal to either `["optimal", "alternative"]` or
+`["alternative", "optimal"]`. It is correct when `route_order[choice]` is
+`"optimal"`. Thus neither A nor B is assumed to be optimal. Missing or invalid
+route order is excluded without reconstructing it from the UUID.
+
+The proportion is `correct / responses` over valid prediction choices within
+the group. For example, four matches among six valid predictions give 66.7%.
+`participants` counts completed participants contributing at least one valid
+observation, rather than assuming that all completed participants contributed
+three valid observations.
+
+Prediction confidence is the arithmetic mean of integer values from 0 to 100.
+Zero is a valid confidence value. Decision time is the median of nonnegative
+integer `decision_visible_duration_ms` values, converted to seconds by dividing
+by 1,000. Zero is also a valid recorded duration. No elapsed wall-clock time,
+reading duration or other timing field substitutes for missing decision time.
+This interval runs from scenario presentation to **Confirm route**, excluding
+confidence, justification, hidden-tab intervals and time away between visits.
+
+Accuracy, confidence and decision time are validated independently. A missing
+confidence does not remove a valid accuracy observation or decision time.
+Each metric reports its own valid response and distinct participant counts.
+For predictions, `missing` is three times the group's completed count minus
+that metric's valid response count. For example, with two completed participants
+and five valid confidence values, confidence uses five observations and reports
+one missing or invalid observation out of six expected responses.
+
+Empty denominators produce `null` for proportions, means and medians. The UI
+shows **No valid responses**, not a fabricated 0% or zero average. ESS response
+counts remain zero when no valid responses exist; percentages are omitted.
+Only display formatting rounds values; the API retains unrounded aggregates.
+
+### Interpretation and presentation
+
+The ESS uses two segmented bars per item, a labeled 1–5 legend and visible
+counts and percentages. Prediction proportion, confidence and median time use
+simple group comparison bars with explicit values, units and denominators.
+Figures can receive keyboard focus and their data are available as text without
+hovering or distinguishing colors. The panel wraps on smaller screens and adds
+no charting dependency.
+
+These results are descriptive, including with very small samples. Sample sizes
+must accompany interpretation; the panel applies no significance tests,
+confidence intervals or causal claims. Confidence means and time medians pool
+valid responses rather than first averaging each participant's three responses.
+The three predictions from a participant are repeated observations, not three
+independent participants. Groups can also receive different scenario mixes
+because of participant-level randomization; the aggregates are not adjusted for
+scenario difficulty.
+
+The adapted ESS has not been psychometrically validated. Prediction matches are
+not Policy Divergence, and initial route assessments do not constitute a
+pre-intervention prediction baseline. Self-reported confidence, decision time
+and open responses cannot establish objective comprehension or causal
+improvement. Decision time is not pure reading time and does not independently
+measure attention. The planned inferential analyses described in section 4.3 of
+`refs/tcc_01.pdf` are outside this descriptive panel.
 
 ## Participation keys
 

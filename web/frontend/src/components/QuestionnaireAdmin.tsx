@@ -10,6 +10,7 @@ import type { FormEvent } from "react";
 import { ConfirmModal } from "./ConfirmModal";
 import type { ConfirmModalProps } from "./ConfirmModal";
 import { Participant } from "./Participant";
+import { QuestionnaireResultsPanel } from "./QuestionnaireResultsPanel";
 import { ScenarioMapView } from "./ScenarioMapView";
 import { Topbar } from "./Topbar";
 import type {
@@ -425,95 +426,6 @@ function ParticipationKeysPanel({
   );
 }
 
-type ParticipationSummary = {
-  total: number;
-  completed: number;
-  in_progress: number;
-};
-
-function ParticipationSummaryPanel({
-  questionnaireId,
-}: {
-  questionnaireId: number;
-}) {
-  const [summary, setSummary] = useState<ParticipationSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [refreshVersion, setRefreshVersion] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    api<ParticipationSummary>(
-      `/questionnaires/${questionnaireId}/participation-summary`,
-    )
-      .then((data) => {
-        if (!cancelled) setSummary(data);
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Unable to load participation counts.",
-          );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [questionnaireId, refreshVersion]);
-
-  return (
-    <section
-      className="qa-control-group qa-participation-summary"
-      aria-label="Participation counts"
-      aria-busy={loading}
-    >
-      <div className="qa-heading">
-        <h3>Participation</h3>
-        <button
-          type="button"
-          className="qa-secondary qa-overview-action"
-          disabled={loading}
-          onClick={() => {
-            setLoading(true);
-            setError("");
-            setRefreshVersion((current) => current + 1);
-          }}
-        >
-          Refresh participation counts
-        </button>
-      </div>
-      <dl className="qa-participation-counts">
-        <div className="qa-completed-count">
-          <dt>Completed</dt>
-          <dd>{summary?.completed ?? "—"}</dd>
-        </div>
-        <div>
-          <dt>In progress</dt>
-          <dd>{summary?.in_progress ?? "—"}</dd>
-        </div>
-        <div>
-          <dt>Total started</dt>
-          <dd>{summary?.total ?? "—"}</dd>
-        </div>
-      </dl>
-      {loading && (
-        <p className="qa-muted" role="status">
-          Loading participation counts...
-        </p>
-      )}
-      {error && (
-        <p className="qa-error" role="alert">
-          {error}
-        </p>
-      )}
-    </section>
-  );
-}
-
 const ScenarioMap = memo(function ScenarioMap({
   scenario,
 }: {
@@ -562,7 +474,6 @@ export function QuestionnaireAdmin({
   onOpenAbout,
   onCreateScenario,
   initialQuestionnaireId,
-  initialScenarioId,
 }: {
   currentStep: "config" | "route_canvas" | "results";
   hasMapData: boolean;
@@ -570,7 +481,6 @@ export function QuestionnaireAdmin({
   onSelectStep: (step: "config" | "route_canvas" | "results") => void;
   onCreateScenario: (id: number, title: string) => void;
   initialQuestionnaireId: number | null;
-  initialScenarioId: number | null;
   onOpenAbout: () => void;
 }) {
   const [list, setList] = useState<Summary[]>([]);
@@ -708,9 +618,7 @@ export function QuestionnaireAdmin({
       }
       setScenarios(details);
       setSelectedScenario((previous) =>
-        details.some((item) => item.id === previous)
-          ? previous
-          : details[0]?.id || null,
+        details.some((item) => item.id === previous) ? previous : null,
       );
     },
     [],
@@ -724,11 +632,8 @@ export function QuestionnaireAdmin({
     if (initialQuestionnaireId === null) return;
     Promise.resolve()
       .then(() => loadQuestionnaire(initialQuestionnaireId, true))
-      .then(() => {
-        if (initialScenarioId !== null) setSelectedScenario(initialScenarioId);
-      })
       .catch((reason: Error) => setError(reason.message));
-  }, [initialQuestionnaireId, initialScenarioId, loadQuestionnaire]);
+  }, [initialQuestionnaireId, loadQuestionnaire]);
   async function perform(action: () => Promise<void>, message = "Working…") {
     if (busy) return;
     setActivity(message);
@@ -770,6 +675,7 @@ export function QuestionnaireAdmin({
       setTitle("");
       setDescription("");
       setScenarios([]);
+      setSelectedScenario(null);
       setRenamingScenario(null);
       setScenarioName("");
       setProtocol(emptyProtocol);
@@ -1037,7 +943,7 @@ export function QuestionnaireAdmin({
                 </div>
               </div>
               {selected && !editable && (
-                <ParticipationSummaryPanel
+                <QuestionnaireResultsPanel
                   key={`${selected.id}:${selected.status}`}
                   questionnaireId={selected.id}
                 />
@@ -1316,14 +1222,18 @@ export function QuestionnaireAdmin({
                                     aria-pressed={
                                       selectedScenario === scenario.id
                                     }
-                                    aria-label={`View scenario ${scenario.title}`}
+                                    aria-label={`${selectedScenario === scenario.id ? "Hide" : "View"} scenario ${scenario.title}`}
                                     onClick={() =>
-                                      setSelectedScenario(scenario.id)
+                                      setSelectedScenario((previous) =>
+                                        previous === scenario.id
+                                          ? null
+                                          : scenario.id,
+                                      )
                                     }
                                     disabled={panelBusy}
                                   >
                                     {selectedScenario === scenario.id
-                                      ? "Viewing"
+                                      ? "Hide"
                                       : "View"}
                                   </button>
                                   {editable && (

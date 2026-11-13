@@ -76,7 +76,6 @@ export function App() {
   const [adminQuestionnaire, setAdminQuestionnaire] = useState<number | null>(
     null,
   );
-  const [adminScenario, setAdminScenario] = useState<number | null>(null);
   const [scenarioTitle, setScenarioTitle] = useState("");
   const [questionnaireTitle, setQuestionnaireTitle] = useState("");
   const [savingScenario, setSavingScenario] = useState(false);
@@ -181,7 +180,6 @@ export function App() {
     setQuestionnaireTitle(title);
     setScenarioQueue([]);
     setAdminQuestionnaire(id);
-    setAdminScenario(null);
     setScenarioTitle("");
     setScenarioConfigDirty(false);
     setMapData(null);
@@ -197,7 +195,7 @@ export function App() {
     setShowAdmin(false);
   }
 
-  function returnToAdmin(scenarioId: number | null = null) {
+  function returnToAdmin() {
     if (simulationSnapshot) {
       setMapData(simulationSnapshot.map);
       setUserPath(simulationSnapshot.path);
@@ -211,7 +209,6 @@ export function App() {
       setActiveBatchResultIndex(simulationSnapshot.resultIndex);
       setConfig(simulationSnapshot.config);
     }
-    setAdminScenario(scenarioId);
     setScenarioQuestionnaire(null);
     setQuestionnaireTitle("");
     setSimulationSnapshot(null);
@@ -249,7 +246,6 @@ export function App() {
     }
     setSavingScenario(true);
     setErrorMessage(null);
-    let lastSavedId: number | null = null;
     let failed = false;
     for (const item of candidates) {
       const map = item.mapData;
@@ -293,7 +289,6 @@ export function App() {
           );
         }
         const saved = await response.json();
-        lastSavedId = saved.id;
         if (isBatchMode)
           setScenarioQueue((previous) =>
             previous.map((entry) =>
@@ -320,7 +315,7 @@ export function App() {
             candidates.some((candidate) => candidate.id === item.id),
         ))
     ) {
-      returnToAdmin(lastSavedId);
+      returnToAdmin();
     } else if (!failed) {
       setSuccessMessage(
         "Successful scenarios saved. Review or retry the remaining items.",
@@ -1063,11 +1058,9 @@ export function App() {
           hasMapData={hasMapData}
           hasResults={hasResults}
           initialQuestionnaireId={adminQuestionnaire}
-          initialScenarioId={adminScenario}
           onCreateScenario={startScenario}
           onSelectStep={(step) => {
             setAdminQuestionnaire(null);
-            setAdminScenario(null);
             setShowAdmin(false);
             handleSelectStep(step);
           }}
