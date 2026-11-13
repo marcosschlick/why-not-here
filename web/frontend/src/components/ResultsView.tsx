@@ -718,8 +718,8 @@ export function ResultsView({
                   : "Monolithic MILP"}
               </span>
               <span className="loading-param-chip">
-                Grid: {activeBatchItem.config.MAP_W}×
-                {activeBatchItem.config.MAP_H} (Seed:{" "}
+                Grid: {activeBatchItem.config.MAP_H}×
+                {activeBatchItem.config.MAP_W} (Seed:{" "}
                 {activeBatchItem.config.MAP_DEFAULT_SEED})
               </span>
             </div>

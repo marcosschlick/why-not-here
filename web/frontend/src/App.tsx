@@ -1734,7 +1734,7 @@ export function App() {
                     </span>
                   )}
                   <span className="loading-param-chip">
-                    Grid Dimension: {w}×{h} (Seed: {seed})
+                    Grid Dimension: {h}×{w} (Seed: {seed})
                   </span>
                 </div>
               );
