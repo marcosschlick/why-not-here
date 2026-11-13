@@ -21,17 +21,15 @@ import "./questionnaire-admin.css";
 
 type Point = [number, number];
 type Protocol = {
-  explanation_scenario_ids: number[];
-  prediction_scenario_ids: number[];
+  scenario_ids: number[];
 };
 const emptyProtocol: Protocol = {
-  explanation_scenario_ids: [],
-  prediction_scenario_ids: [],
+  scenario_ids: [],
 };
 type Question = {
   id: number;
   prompt: string;
-  type: "route_assessment" | "likert" | "route_prediction";
+  type: "route_scenario" | "likert";
   scenario_id: number | null;
   position: number;
 };
@@ -1178,77 +1176,62 @@ export function QuestionnaireAdmin({
                   <section className="qa-panel" aria-busy={panelBusy}>
                     <h2>Study protocol</h2>
                     <p className="qa-muted">
-                      Select six different saved scenarios. The system creates
-                      the route decisions, explanations, eight adapted ESS
-                      items, and predictions automatically.
+                      Select six different saved scenarios. The system creates a
+                      random order for each participant: three scenarios with
+                      explanations, eight adapted ESS items, then three unseen
+                      predictions. All six scenarios must support explanations.
                     </p>
                     <form
                       onSubmit={saveProtocol}
                       className="qa-form qa-protocol-form"
                     >
-                      {(
-                        [
-                          "explanation_scenario_ids",
-                          "prediction_scenario_ids",
-                        ] as const
-                      ).map((phase) => (
-                        <fieldset
-                          key={phase}
-                          className="qa-fieldset"
-                          disabled={panelBusy}
-                        >
-                          <legend>
-                            {phase === "explanation_scenario_ids"
-                              ? "Scenarios with explanations"
-                              : "New scenarios for prediction"}
-                          </legend>
-                          <div className="qa-fields">
-                            {[0, 1, 2].map((index) => (
-                              <label key={index}>
-                                Scenario {index + 1}
-                                <select
-                                  required
-                                  value={protocol[phase][index] || ""}
-                                  onChange={(event) =>
-                                    setProtocol((current) => {
-                                      const ids = [...current[phase]];
-                                      ids[index] = Number(event.target.value);
-                                      return { ...current, [phase]: ids };
-                                    })
-                                  }
-                                >
-                                  <option value="">
-                                    Select a saved scenario
+                      <fieldset className="qa-fieldset" disabled={panelBusy}>
+                        <legend>Scenario pool</legend>
+                        <div className="qa-fields">
+                          {[0, 1, 2, 3, 4, 5].map((index) => (
+                            <label key={index}>
+                              Scenario {index + 1}
+                              <select
+                                required
+                                value={protocol.scenario_ids[index] || ""}
+                                onChange={(event) =>
+                                  setProtocol((current) => {
+                                    const ids = [...current.scenario_ids];
+                                    ids[index] = Number(event.target.value);
+                                    return { scenario_ids: ids };
+                                  })
+                                }
+                              >
+                                <option value="">
+                                  Select a saved scenario
+                                </option>
+                                {scenarios.map((scenario) => (
+                                  <option
+                                    key={scenario.id}
+                                    value={scenario.id}
+                                    disabled={
+                                      scenario.id !==
+                                        protocol.scenario_ids[index] &&
+                                      protocol.scenario_ids.includes(
+                                        scenario.id,
+                                      )
+                                    }
+                                  >
+                                    {scenario.title}
                                   </option>
-                                  {scenarios.map((scenario) => (
-                                    <option
-                                      key={scenario.id}
-                                      value={scenario.id}
-                                      disabled={
-                                        scenario.id !==
-                                          protocol[phase][index] &&
-                                        [
-                                          ...protocol.explanation_scenario_ids,
-                                          ...protocol.prediction_scenario_ids,
-                                        ].includes(scenario.id)
-                                      }
-                                    >
-                                      {scenario.title}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                            ))}
-                          </div>
-                        </fieldset>
-                      ))}
+                                ))}
+                              </select>
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
                       <button type="submit" disabled={panelBusy}>
                         Save protocol
                       </button>
                     </form>
                     <p className="qa-muted" role="status">
                       {selected.questions.length === 14
-                        ? "Protocol saved: 3 route assessments, 8 adapted ESS items, and 3 predictions."
+                        ? "Protocol saved: 6 randomized scenarios and 8 adapted ESS items."
                         : "Save all six scenarios to enable preview and activation."}
                     </p>
                     {protocolDirty && (

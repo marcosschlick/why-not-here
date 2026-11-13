@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import re
 import secrets
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Path, Response
@@ -12,17 +12,21 @@ from pydantic import (
     ConfigDict,
     Field,
     StringConstraints,
-    ValidationError,
     field_validator,
 )
 
 from web.api.database import connect_database
+from web.api.participation_progress import (
+    StepProgress,
+    normalized_answer,
+    validate_progress,
+)
 from web.api.questionnaires import get_questionnaire, require_draft
 from web.api.study_protocol import (
-    RouteAssessment,
     read_questions,
     require_protocol,
     route_order,
+    scenario_order,
     serialize_step,
     study_steps,
 )
@@ -97,9 +101,9 @@ def generate_participation_keys(
         return keys
 
 
-class StepConfirmationInput(SubmissionInput):
-    value: Any = None
-    visible_duration_ms: int = Field(strict=True, ge=0)
+class StepProgressInput(SubmissionInput):
+    revision: int = Field(strict=True, ge=0)
+    progress: StepProgress
 
 
 @router.post("/questionnaires/{questionnaire_id}/activate")
@@ -143,7 +147,7 @@ def active_questionnaire(connection, token):
 
 def participation_record(connection, questionnaire, submission_key):
     participation = connection.execute(
-        "SELECT id, study_group, current_step, completed_at FROM participations WHERE questionnaire_id = %s AND submission_key = %s FOR UPDATE",
+        "SELECT id, study_group, scenario_order, current_step, completed_at, draft, draft_revision FROM participations WHERE questionnaire_id = %s AND submission_key = %s FOR UPDATE",
         (questionnaire["id"], submission_key),
     ).fetchone()
     if questionnaire["status"] == "closed" and (
@@ -166,7 +170,9 @@ def public_state(questionnaire, questions, participation, submission_key):
         "protocol_version": questionnaire["protocol_version"],
         "submission_completed": completed,
         "current_step": participation["current_step"],
-        "total_steps": len(study_steps(questions)),
+        "total_steps": len(study_steps(questions, participation["scenario_order"])),
+        "draft": participation["draft"],
+        "draft_revision": participation["draft_revision"],
         "step": None
         if completed
         else serialize_step(
@@ -174,6 +180,7 @@ def public_state(questionnaire, questions, participation, submission_key):
             participation["current_step"],
             submission_key,
             participation["study_group"],
+            participation["scenario_order"],
         ),
     }
 
@@ -192,71 +199,66 @@ def start_participation(payload: ParticipationStartInput, response: Response):
         token = target["access_token"]
         questionnaire = active_questionnaire(connection, token)
         existing = connection.execute(
-            "SELECT participant_name, participant_email, participation_key FROM participations "
-            "WHERE questionnaire_id = %s AND submission_key = %s",
-            (questionnaire["id"], payload.submission_key),
+            "SELECT participant_name, participant_email, submission_key FROM participations "
+            "WHERE questionnaire_id = %s AND participation_key = %s FOR UPDATE",
+            (questionnaire["id"], payload.key),
         ).fetchone()
+        submission_key = payload.submission_key
         if existing is not None:
-            if (
-                existing["participant_name"],
-                existing["participant_email"],
-                existing["participation_key"],
-            ) != (payload.name, payload.email, payload.key):
+            if (existing["participant_name"], existing["participant_email"]) != (
+                payload.name,
+                payload.email,
+            ):
                 raise HTTPException(
-                    status_code=409,
-                    detail="This session already belongs to another participation",
+                    status_code=401,
+                    detail="Name, email and individual key must match the original participation",
                 )
+            submission_key = existing["submission_key"]
         else:
             if questionnaire["status"] != "active":
                 raise HTTPException(
                     status_code=410, detail="This questionnaire is closed"
                 )
             if connection.execute(
-                "SELECT 1 FROM participations WHERE questionnaire_id = %s AND participation_key = %s",
-                (questionnaire["id"], payload.key),
+                "SELECT 1 FROM participations WHERE questionnaire_id = %s AND "
+                "(participant_email = %s OR submission_key = %s)",
+                (questionnaire["id"], payload.email, submission_key),
             ).fetchone():
                 raise HTTPException(
                     status_code=409,
-                    detail="This participation key has already been used",
+                    detail="This email or session already belongs to another participation",
                 )
-            if connection.execute(
-                "SELECT 1 FROM participations WHERE questionnaire_id = %s AND participant_email = %s",
-                (questionnaire["id"], payload.email),
-            ).fetchone():
-                raise HTTPException(
-                    status_code=409,
-                    detail="This email has already been used for this questionnaire",
-                )
-            require_protocol(read_questions(connection, questionnaire["id"]))
+            questions = read_questions(connection, questionnaire["id"])
+            require_protocol(questions)
             digest = hmac.new(
                 questionnaire["group_secret"].encode(),
-                str(payload.submission_key).encode(),
+                str(submission_key).encode(),
                 hashlib.sha256,
             ).digest()
             group = "experimental" if digest[0] & 1 else "control"
             connection.execute(
-                "INSERT INTO participations (questionnaire_id, submission_key, participant_name, participant_email, participation_key, study_group) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
+                "INSERT INTO participations (questionnaire_id, submission_key, participant_name, participant_email, participation_key, study_group, scenario_order) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 (
                     questionnaire["id"],
-                    payload.submission_key,
+                    submission_key,
                     payload.name,
                     payload.email,
                     payload.key,
                     group,
+                    Jsonb(scenario_order(questions, submission_key)),
                 ),
             )
-        participation = participation_record(
-            connection, questionnaire, payload.submission_key
-        )
+        participation = participation_record(connection, questionnaire, submission_key)
         return {
             **public_state(
                 questionnaire,
                 read_questions(connection, questionnaire["id"]),
                 participation,
-                payload.submission_key,
+                submission_key,
             ),
             "access_token": token,
+            "submission_key": submission_key,
         }
 
 
@@ -270,29 +272,62 @@ def get_public_questionnaire(token: str, submission_key: UUID, response: Respons
         return public_state(questionnaire, questions, participation, submission_key)
 
 
-def normalized_answer(kind, value):
-    if kind == "route_assessment":
-        try:
-            return RouteAssessment.model_validate(value).model_dump()
-        except ValidationError as error:
+def current_step(questions, participation, index):
+    steps = study_steps(questions, participation["scenario_order"])
+    if index >= len(steps):
+        raise HTTPException(status_code=422, detail="Invalid study step")
+    return steps[index]
+
+
+def require_revision(participation, revision):
+    if revision != participation["draft_revision"]:
+        raise HTTPException(
+            status_code=409,
+            detail="Progress changed in another session. Reload this questionnaire before continuing.",
+        )
+
+
+@public_router.put("/participate/{token}/steps/{step}/draft")
+def save_step_draft(
+    token: str,
+    step: Annotated[int, Path(ge=0)],
+    payload: StepProgressInput,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
+    with connect_database() as connection:
+        questionnaire = active_questionnaire(connection, token)
+        participation = participation_record(
+            connection, questionnaire, payload.submission_key
+        )
+        if (
+            participation["completed_at"] is not None
+            or step != participation["current_step"]
+        ):
             raise HTTPException(
-                status_code=422,
-                detail="Choose a route, select an integer confidence from 0 to 100, and provide a reason of 20 to 1000 characters",
-            ) from error
-    if kind == "likert" and type(value) is int and 1 <= value <= 5:
-        return value
-    if kind == "route_prediction" and type(value) is int and value in (0, 1):
-        return value
-    if kind == "explanation" and value is None:
-        return None
-    raise HTTPException(status_code=422, detail="Invalid answer for this step")
+                status_code=409, detail="Only the current unfinished step can be saved"
+            )
+        questions = read_questions(
+            connection, questionnaire["id"], include_scenarios=False
+        )
+        kind, _ = current_step(questions, participation, step)
+        draft = payload.progress.model_dump()
+        if participation["draft"] == draft:
+            return {"draft_revision": participation["draft_revision"]}
+        require_revision(participation, payload.revision)
+        validate_progress(kind, payload.progress, participation["draft"])
+        return connection.execute(
+            "UPDATE participations SET draft = %s, draft_revision = draft_revision + 1 "
+            "WHERE id = %s RETURNING draft_revision",
+            (Jsonb(draft), participation["id"]),
+        ).fetchone()
 
 
 @public_router.post("/participate/{token}/steps/{step}/confirm")
 def confirm_step(
     token: str,
-    step: Annotated[int, Path(ge=0, le=16)],
-    payload: StepConfirmationInput,
+    step: Annotated[int, Path(ge=0)],
+    payload: StepProgressInput,
     response: Response,
 ):
     response.headers["Cache-Control"] = "no-store"
@@ -302,23 +337,27 @@ def confirm_step(
             connection, questionnaire, payload.submission_key
         )
         questions = read_questions(connection, questionnaire["id"])
-        steps = study_steps(questions)
-        kind, question = steps[step]
-        value = normalized_answer(kind, payload.value)
+        kind, question = current_step(questions, participation, step)
+        value = normalized_answer(kind, payload.progress.value)
         if step > participation["current_step"]:
             raise HTTPException(
                 status_code=409, detail="Complete the current step before continuing"
             )
         if step < participation["current_step"]:
             saved = connection.execute(
-                "SELECT value, explanation_completed_at FROM answers WHERE participation_id = %s AND question_id = %s",
+                "SELECT value, post_explanation_reason FROM answers WHERE participation_id = %s AND question_id = %s",
                 (participation["id"], question["id"]),
             ).fetchone()
-            if (
-                saved is None
-                or (kind == "explanation" and saved["explanation_completed_at"] is None)
-                or (kind != "explanation" and saved["value"] != value)
-            ):
+            previous = (
+                (
+                    {"reason": saved["post_explanation_reason"]}
+                    if kind == "explanation"
+                    else saved["value"]
+                )
+                if saved
+                else None
+            )
+            if previous != value:
                 raise HTTPException(
                     status_code=409,
                     detail="This step was already confirmed with a different answer",
@@ -326,12 +365,20 @@ def confirm_step(
             return public_state(
                 questionnaire, questions, participation, payload.submission_key
             )
+        require_revision(participation, payload.revision)
+        value = validate_progress(
+            kind, payload.progress, participation["draft"], complete=True
+        )
+        progress = payload.progress
         if kind == "explanation":
             connection.execute(
-                "UPDATE answers SET explanation_visible_duration_ms = %s, visible_duration_ms = visible_duration_ms + %s, explanation_completed_at = CURRENT_TIMESTAMP WHERE participation_id = %s AND question_id = %s",
+                "UPDATE answers SET post_explanation_reason = %s, explanation_visible_duration_ms = %s, "
+                "visible_duration_ms = visible_duration_ms + %s, explanation_completed_at = CURRENT_TIMESTAMP "
+                "WHERE participation_id = %s AND question_id = %s",
                 (
-                    payload.visible_duration_ms,
-                    payload.visible_duration_ms,
+                    value["reason"],
+                    progress.visible_duration_ms,
+                    progress.visible_duration_ms,
                     participation["id"],
                     question["id"],
                 ),
@@ -339,7 +386,9 @@ def confirm_step(
         else:
             is_route = kind in {"route_assessment", "route_prediction"}
             connection.execute(
-                "INSERT INTO answers (participation_id, question_id, value, route_order, visible_duration_ms, decision_visible_duration_ms) VALUES (%s, %s, %s, %s, %s, %s)",
+                "INSERT INTO answers (participation_id, question_id, value, route_order, visible_duration_ms, "
+                "decision_visible_duration_ms, first_selection_visible_duration_ms, final_selection_visible_duration_ms, choice_changed) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     participation["id"],
                     question["id"],
@@ -347,14 +396,23 @@ def confirm_step(
                     Jsonb(route_order(payload.submission_key, question["id"]))
                     if is_route
                     else None,
-                    payload.visible_duration_ms,
-                    payload.visible_duration_ms if is_route else None,
+                    progress.visible_duration_ms,
+                    progress.decision_visible_duration_ms,
+                    progress.first_selection_visible_duration_ms,
+                    progress.final_selection_visible_duration_ms,
+                    progress.choice_changed if is_route else None,
                 ),
             )
         participation["current_step"] += 1
+        participation["draft"] = None
+        participation["draft_revision"] += 1
         connection.execute(
-            "UPDATE participations SET current_step = %s WHERE id = %s",
-            (participation["current_step"], participation["id"]),
+            "UPDATE participations SET current_step = %s, draft = NULL, draft_revision = %s WHERE id = %s",
+            (
+                participation["current_step"],
+                participation["draft_revision"],
+                participation["id"],
+            ),
         )
         return public_state(
             questionnaire, questions, participation, payload.submission_key
@@ -370,7 +428,12 @@ def submit_answers(token: str, payload: SubmissionInput):
         )
         if participation["completed_at"] is not None:
             return {"status": "completed", "participation_id": participation["id"]}
-        if participation["current_step"] != 17:
+        questions = read_questions(
+            connection, questionnaire["id"], include_scenarios=False
+        )
+        if participation["current_step"] != len(
+            study_steps(questions, participation["scenario_order"])
+        ):
             raise HTTPException(
                 status_code=409, detail="Complete every step before submitting"
             )

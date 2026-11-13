@@ -31,6 +31,7 @@ interface TacticalMapCanvasProps {
   onPointerMove?: (event: ReactPointerEvent<HTMLCanvasElement>) => void;
   onPointerUp?: (event: ReactPointerEvent<HTMLCanvasElement>) => void;
   onPointerLeave?: () => void;
+  onRendered?: () => void;
 }
 
 type Rgb = [number, number, number];
@@ -548,6 +549,7 @@ export function TacticalMapCanvas({
   onPointerMove,
   onPointerUp,
   onPointerLeave,
+  onRendered,
 }: TacticalMapCanvasProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -809,6 +811,8 @@ export function TacticalMapCanvas({
     ctx.strokeStyle = rgba(GOAL_EDGE_RGB);
     ctx.lineWidth = effectiveCellSize * CELL_EDGE_WIDTH;
     ctx.stroke();
+    const frame = requestAnimationFrame(() => onRendered?.());
+    return () => cancelAnimationFrame(frame);
   }, [
     cellSize,
     deviceScale,
@@ -830,6 +834,7 @@ export function TacticalMapCanvas({
     userPath,
     w,
     zoomLevel,
+    onRendered,
   ]);
 
   useEffect(() => {

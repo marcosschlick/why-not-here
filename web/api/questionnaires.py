@@ -15,6 +15,7 @@ from web.api.study_protocol import (
     protocol_selection,
     read_questions,
     require_protocol,
+    scenario_order,
     serialize_step,
     study_steps,
     validate_scenario,
@@ -120,7 +121,7 @@ def update_questionnaire(questionnaire_id: int, payload: QuestionnaireInput):
 
 @router.put("/{questionnaire_id}/protocol")
 def save_protocol(questionnaire_id: int, payload: ProtocolInput):
-    ids = payload.explanation_scenario_ids + payload.prediction_scenario_ids
+    ids = payload.scenario_ids
     if len(set(ids)) != 6:
         raise HTTPException(
             status_code=422, detail="All six scenarios must be different"
@@ -136,10 +137,7 @@ def save_protocol(questionnaire_id: int, payload: ProtocolInput):
                 status_code=422, detail="Select six scenarios from this questionnaire"
             )
         for scenario in scenarios:
-            validate_scenario(
-                scenario["data"],
-                explanation=scenario["id"] in payload.explanation_scenario_ids,
-            )
+            validate_scenario(scenario["data"])
         existing = read_questions(connection, questionnaire_id)
         if protocol_selection(existing) != payload.model_dump():
             connection.execute(
@@ -166,20 +164,23 @@ def preview_questionnaire(
     questionnaire_id: int,
     group: StudyGroup,
     submission_key: UUID,
-    step: Annotated[int, Query(ge=0, le=17)] = 0,
+    step: Annotated[int, Query(ge=0)] = 0,
 ):
     with connect_database() as connection:
         questionnaire = get_questionnaire(connection, questionnaire_id)
         questions = read_questions(connection, questionnaire_id)
         require_protocol(questions)
+        order = scenario_order(questions, submission_key)
         return {
             "title": questionnaire["title"],
             "description": questionnaire["description"],
             "protocol_version": questionnaire["protocol_version"],
             "submission_completed": False,
             "current_step": step,
-            "total_steps": len(study_steps(questions)),
-            "step": serialize_step(questions, step, submission_key, group),
+            "total_steps": len(study_steps(questions, order)),
+            "draft": None,
+            "draft_revision": 0,
+            "step": serialize_step(questions, step, submission_key, group, order),
         }
 
 

@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from src import config
 from src.visual.appearance import resolve_map_appearance
 
-PROTOCOL_VERSION = "route-study-v1"
+PROTOCOL_VERSION = "route-study-v2"
 ESS_TITLE = "Explanation Satisfaction Scale (ESS), adapted for route planning"
 ESS_SOURCE = (
     "Hoffman et al., Metrics for Explainable AI: Challenges and Prospects, Appendix C"
@@ -31,38 +31,46 @@ ScenarioId = Annotated[int, Field(strict=True, gt=0)]
 class ProtocolInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    explanation_scenario_ids: list[ScenarioId] = Field(min_length=3, max_length=3)
-    prediction_scenario_ids: list[ScenarioId] = Field(min_length=3, max_length=3)
+    scenario_ids: list[ScenarioId] = Field(min_length=6, max_length=6)
 
 
-class RouteAssessment(BaseModel):
+class RoutePrediction(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     choice: int = Field(strict=True, ge=0, le=1)
     confidence: int = Field(strict=True, ge=0, le=100)
-    reason: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=20, max_length=1000)
-    ]
+
+
+ReasonText = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=20, max_length=1000)
+]
+
+
+class ExplanationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: ReasonText
+
+
+class RouteAssessment(RoutePrediction):
+    reason: ReasonText
 
 
 def protocol_selection(questions):
     return {
-        "explanation_scenario_ids": [
-            q["scenario_id"] for q in questions if q["type"] == "route_assessment"
-        ],
-        "prediction_scenario_ids": [
-            q["scenario_id"] for q in questions if q["type"] == "route_prediction"
+        "scenario_ids": [
+            q["scenario_id"] for q in questions if q["type"] == "route_scenario"
         ],
     }
 
 
 def build_questions(payload: ProtocolInput):
     questions = []
-    for scenario_id in payload.explanation_scenario_ids:
+    for scenario_id in payload.scenario_ids:
         questions.append(
             {
-                "type": "route_assessment",
-                "prompt": "Which route do you think is faster?",
+                "type": "route_scenario",
+                "prompt": "Route scenario",
                 "scenario_id": scenario_id,
                 "configuration": {},
             }
@@ -76,29 +84,21 @@ def build_questions(payload: ProtocolInput):
                 "configuration": {"min": 1, "max": 5, "item_id": f"ess_{index}"},
             }
         )
-    for scenario_id in payload.prediction_scenario_ids:
-        questions.append(
-            {
-                "type": "route_prediction",
-                "prompt": "Which route do you think the system would choose?",
-                "scenario_id": scenario_id,
-                "configuration": {},
-            }
-        )
     return [
         {**question, "position": index}
         for index, question in enumerate(questions, start=1)
     ]
 
 
-def read_questions(connection, questionnaire_id):
-    return connection.execute(
-        "SELECT q.id, q.prompt, q.type, q.configuration, q.scenario_id, q.position, "
-        "s.data, s.configuration AS scenario_configuration FROM questions q "
-        "LEFT JOIN scenarios s ON s.id = q.scenario_id AND s.questionnaire_id = q.questionnaire_id "
-        "WHERE q.questionnaire_id = %s ORDER BY q.position",
-        (questionnaire_id,),
-    ).fetchall()
+def read_questions(connection, questionnaire_id, *, include_scenarios=True):
+    query = "SELECT q.id, q.prompt, q.type, q.configuration, q.scenario_id, q.position"
+    if include_scenarios:
+        query += ", s.data, s.configuration AS scenario_configuration"
+    query += " FROM questions q "
+    if include_scenarios:
+        query += "LEFT JOIN scenarios s ON s.id = q.scenario_id AND s.questionnaire_id = q.questionnaire_id "
+    query += "WHERE q.questionnaire_id = %s ORDER BY q.position"
+    return connection.execute(query, (questionnaire_id,)).fetchall()
 
 
 def valid_point(point):
@@ -148,7 +148,7 @@ def validate_route(value, data):
     return connectivity in (4, 8)
 
 
-def validate_scenario(data, *, explanation=False):
+def validate_scenario(data):
     if (
         not valid_scenario_map(data)
         or not all(
@@ -165,7 +165,7 @@ def validate_scenario(data, *, explanation=False):
         raise HTTPException(
             status_code=422, detail="Scenario calculation must be successful"
         )
-    if explanation and any(
+    if any(
         not isinstance(data.get(key), str) or not data[key].strip()
         for key in ("cost_baseline_text", "explanation_text")
     ):
@@ -176,11 +176,11 @@ def validate_scenario(data, *, explanation=False):
 
 def require_protocol(questions):
     selection = protocol_selection(questions)
-    ids = selection["explanation_scenario_ids"] + selection["prediction_scenario_ids"]
+    ids = selection["scenario_ids"]
     if len(questions) != 14 or len(ids) != 6 or len(set(ids)) != 6:
         raise HTTPException(
             status_code=422,
-            detail="Select three explanation scenarios and three different prediction scenarios",
+            detail="Select six different scenarios",
         )
     expected = build_questions(ProtocolInput(**selection))
     for question, template in zip(questions, expected, strict=True):
@@ -189,17 +189,35 @@ def require_protocol(questions):
                 status_code=422, detail="Questionnaire protocol is incomplete"
             )
         if question["scenario_id"] is not None:
-            validate_scenario(
-                question["data"], explanation=question["type"] == "route_assessment"
-            )
+            validate_scenario(question["data"])
 
 
-def study_steps(questions):
+def scenario_order(questions, submission_key):
+    ids = protocol_selection(questions)["scenario_ids"]
+    return sorted(
+        ids,
+        key=lambda scenario_id: hashlib.sha256(
+            f"{submission_key}:scenario:{scenario_id}".encode()
+        ).digest(),
+    )
+
+
+def study_steps(questions, order):
+    scenarios = {
+        q["scenario_id"]: q for q in questions if q["type"] == "route_scenario"
+    }
     steps = []
-    for question in questions:
-        steps.append((question["type"], question))
-        if question["type"] == "route_assessment":
-            steps.append(("explanation", question))
+    for scenario_id in order[:3]:
+        steps.extend(
+            (
+                ("route_assessment", scenarios[scenario_id]),
+                ("explanation", scenarios[scenario_id]),
+            )
+        )
+    steps.extend(("likert", q) for q in questions if q["type"] == "likert")
+    steps.extend(
+        ("route_prediction", scenarios[scenario_id]) for scenario_id in order[3:]
+    )
     return steps
 
 
@@ -212,8 +230,10 @@ def resolve_scenario_terrain_colors(configuration):
     return configuration.get("TERRAIN_COLORS") or config.TERRAIN_COLORS
 
 
-def serialize_step(questions, index, submission_key, group):
-    steps = study_steps(questions)
+def serialize_step(questions, index, submission_key, group, scenario_ids):
+    steps = study_steps(questions, scenario_ids)
+    if index < 0 or index > len(steps):
+        raise HTTPException(status_code=422, detail="Invalid study step")
     if index == len(steps):
         return None
     kind, question = steps[index]
@@ -228,15 +248,17 @@ def serialize_step(questions, index, submission_key, group):
             instrument=ESS_TITLE,
             source=ESS_SOURCE,
             item_id=question["configuration"]["item_id"],
-            item_number=question["position"] - 3,
+            item_number=int(question["configuration"]["item_id"].split("_")[1]),
         )
         return step
     data = question["data"]
     order = route_order(submission_key, question["id"])
-    step["scenario_number"] = (
-        question["position"]
-        if kind != "route_prediction"
-        else question["position"] - 11
+    scenario_index = scenario_ids.index(question["scenario_id"])
+    step["scenario_number"] = scenario_index % 3 + 1
+    step["prompt"] = (
+        "Which route do you think the system would choose?"
+        if kind == "route_prediction"
+        else "Which route do you think is faster?"
     )
     step["scenario"] = {
         "map": data["map"],
@@ -250,6 +272,9 @@ def serialize_step(questions, index, submission_key, group):
     }
     if kind == "explanation":
         step["prompt"] = "Explanation of the system’s route choice"
+        step["response_prompt"] = (
+            "After reading the explanation, which characteristics explain the system’s route choice?"
+        )
         step["justification"] = data[
             "cost_baseline_text" if group == "control" else "explanation_text"
         ]

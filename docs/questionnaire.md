@@ -2,11 +2,15 @@
 
 ## Protocol and administration
 
-`route-study-v1` is a fixed research protocol for non-specialists in autonomous
+`route-study-v2` is a fixed research protocol for non-specialists in autonomous
 navigation, following the experimental design in `refs/tcc_01.pdf`.
-It uses six distinct saved scenarios in administrator-selected order. Scenarios
-belong to the questionnaire and contain a successful calculation, a map and two
-distinct routes. The first three also require both group explanations.
+It uses a pool of six distinct saved scenarios selected by the administrator.
+Every scenario belongs to the questionnaire and must contain a successful
+calculation, a valid map, two distinct routes and both group explanations.
+At participation start, the six scenarios are shuffled using a random attempt
+UUID and their order is stored in `participations.scenario_order`. The first
+three are used for assessments with explanations; the remaining three are used
+for predictions. The administrator does not assign scenarios to phases.
 Generate maps individually or add or import configurations into a queue, then
 review routes, calculate results and name saved scenarios using the existing
 simulation workflow. Automatic batch map generation is unavailable in this mode.
@@ -15,13 +19,13 @@ simulation workflow. Automatic batch map generation is unavailable in this mode.
 
 ```json
 {
-  "explanation_scenario_ids": [1, 2, 3],
-  "prediction_scenario_ids": [4, 5, 6]
+  "scenario_ids": [1, 2, 3, 4, 5, 6]
 }
 ```
 
 These numbers are example identifiers. Saving creates fourteen question records:
-three route assessments, eight Likert items and three route predictions.
+six `route_scenario` records and eight Likert items. The participant sequence
+assigns each scenario its assessment or prediction role using the stored order.
 Saving the same selection preserves question identifiers. A different selection
 replaces the generated questions while the questionnaire is still a draft.
 Prompts, item order and scale bounds cannot be edited manually.
@@ -81,36 +85,54 @@ show this section nor request its key list; existing key records remain stored.
 
 There are seventeen content steps and a final submission action:
 
-1. For each of three scenarios, participants choose the route they consider
-   faster, select an integer confidence from 0 to 100, and explain their choice
-   in 20 to 1,000 characters, excluding surrounding whitespace. No value is
-   preselected. All three fields are required and
-   saved together as `{choice, confidence, reason}`. `choice` is the displayed
-   route index (0 for A, 1 for B).
-2. After each assessment is saved, its explanation is shown on a separate step.
+1. For each of the first three scenarios, participants select the route they
+   consider faster. They may change it until **Confirm route**. Confirmation
+   locks the route and then reveals integer confidence from 0 to 100 and a
+   justification of 20 to 1,000 characters, excluding surrounding whitespace.
+   No route or confidence is preselected. The full answer is stored as
+   `{choice, confidence, reason}`; `choice` is the displayed route index
+   (0 for A, 1 for B). The route confirmation is an internal phase, not an
+   additional content step.
+2. After each assessment, its explanation is shown on a separate step.
    Control participants receive `cost_baseline_text`. Experimental participants
    receive `explanation_text` and the contrastive map with semantic interventions.
    The explanation compares the saved optimal/alternative routes regardless of
-   which route the participant selected; the participant's text is not used to
-   generate a different explanation.
-3. Participants rate eight statements about the explanations received, each on
-   the same five-point scale. Every item is required.
-4. In three unseen prediction scenarios, participants choose the route they
-   believe the system would select. No cost, explanation, route identity or
-   correctness feedback is delivered during this phase, including after choices.
+   the participant's choice. On this same step, participants must answer:
+   **After reading the explanation, which characteristics explain the system’s
+   route choice?** The response must contain 20 to 1,000 characters after
+   trimming and is stored separately as `post_explanation_reason`. The original
+   pre-explanation justification is preserved.
+3. Participants rate eight required statements about the explanations on the
+   same five-point scale.
+4. In three unseen scenarios, participants predict which route the system would
+   select. They can change the route until **Confirm route**, then must select
+   integer confidence from 0 to 100 in that prediction. Prediction answers are
+   `{choice, confidence}`. No cost, explanation, route identity or correctness
+   feedback is delivered, including after confirmation.
 5. Participants submit to mark the already saved answers complete.
 
-The server permits only the current step. Confirmed responses cannot be edited,
-and participants cannot return to earlier explanations. Before starting, each
-participant supplies a name, email and individual key. The key is consumed at
-start, even if the participant does not finish. Email addresses are trimmed and
-lowercased, and each email and key can belong to only one participation in the
-same questionnaire. No email ownership verification is performed.
-The same attempt resumes after reloading in the same tab. Closing the tab or
-clearing session storage loses access; the consumed key cannot start again in
-another session.
-Group assignment is stable per attempt. Route order is deterministic per attempt
-and question, with identical route styling before disclosure.
+The server permits only the current step. Confirmed steps cannot be edited or
+revisited. Closing a questionnaire rejects unfinished participations; completed
+submissions remain idempotent.
+
+Before starting or resuming, participants enter their individual key, original
+name and email at the same `/questionnaire` address. Names are trimmed and must
+match the original spelling and case; emails are trimmed and lowercased. Each
+key and email can belong to only one participation per questionnaire. The key
+is reserved at the first start, but can authenticate that same participation
+again. No email ownership verification is performed.
+
+Retaking the form with matching details returns the original attempt UUID,
+group, scenario order, current step and saved draft. This works after closing
+the tab, clearing session storage, or opening another browser. Reloading the
+original tab also resumes automatically. A recovery never creates a second
+participation or repeats group or scenario assignment. A completed participation
+returns its completion screen.
+
+A/B route order is deterministic per original attempt UUID and question, and is
+stored with confirmed route answers. Identical styling is used before disclosure.
+Draft fields include a selected route, route confirmation state, confidence,
+initial or post-explanation reason, ESS rating and accumulated timing.
 
 ## Adapted Explanation Satisfaction Scale
 
@@ -156,8 +178,9 @@ The reference set informs the implementation as follows:
   a separate pre-intervention prediction baseline.
 - Fernández-Becerra et al., *Generating Trustworthy and Context-Aware
   Explanations*: preserve original scenario facts and explanations for inspection
-  of factual grounding. Open responses before disclosure capture participants'
-  initial reasoning; they do not establish a causal post-explanation improvement.
+  of factual grounding. Separate open responses before and after disclosure
+  capture initial reasoning and reported characteristics of the system's choice;
+  this pairing alone does not establish causal improvement.
 - Chen et al., *Towards Transparent Robotic Planning via Contrastive
   Explanations*: explanation content and reading time can have different effects;
   do not assume shorter explanations necessarily improve every outcome.
@@ -168,34 +191,46 @@ The reference set informs the implementation as follows:
   from 1 to 1,000) and generates individual keys for a draft or active study.
   `GET` on the same endpoint lists `key`, `created_at` and `used`. These are local
   administrative endpoints; keys are not exposed through the participant API.
-- `POST /api/participate/start` accepts `name`, `email`, `key` and
-  `submission_key` (a browser-generated random UUID). The globally unique key
-  identifies the questionnaire. It atomically reserves the key and email, creates
-  a participation and returns its current state plus an internal `access_token`.
-  The token is kept in the tab's session storage for subsequent API requests;
-  it never appears in the participant page address. Retrying
-  with the same session and identical normalized data returns the same attempt.
-  Names are trimmed, nonempty and limited to 200 characters; emails are validated
-  and limited to 254 characters. Invalid keys return 401, used keys or emails 409,
-  and closed questionnaires 410. Validation failures do not consume keys.
-- `GET /api/participate/{token}?submission_key={uuid}` resumes an existing attempt
-  and returns only its current `step`, `current_step`, `total_steps`, questionnaire
-  details and completion status. It never creates a participation. Unknown
-  sessions cannot load steps, confirm answers or submit. Public state responses
-  use `Cache-Control: no-store`.
-- `POST /api/participate/{token}/steps/{step}/confirm` accepts `submission_key`,
-  `value` and nonnegative integer `visible_duration_ms`. Steps are zero-based.
-  Assessment values are objects; Likert values are integers from 1 to 5;
-  prediction values are 0 or 1. Explanation steps use `value: null`.
-- Confirming a step atomically saves its answer/timing and advances progress.
-  An identical retry returns current progress without modifying the saved timing.
-  A different answer for a confirmed step or a future step returns HTTP 409.
+- `POST /api/participate/start` accepts `name`, `email`, `key` and a random
+  browser-generated `submission_key` UUID. An unused globally unique key
+  identifies its study and atomically reserves the key and email. A used key
+  with the same normalized name/email recovers its original participation,
+  ignoring the newly supplied UUID. The response includes current public state,
+  the original `submission_key` and an internal `access_token`. Credentials never
+  appear in the participant URL. Names are nonempty and limited to 200
+  characters; valid emails are limited to 254. Invalid keys or mismatched
+  recovery details return 401; duplicate email/session returns 409; closed
+  unfinished studies return 410. Validation failures do not consume keys.
+- `GET /api/participate/{token}?submission_key={uuid}` returns questionnaire
+  details, `current_step`, `total_steps`, the current `step`, completion status,
+  `draft` and `draft_revision`. It never creates a participation or returns
+  another participant's state. Public state uses `Cache-Control: no-store`.
+- `PUT /api/participate/{token}/steps/{step}/draft` accepts `submission_key`,
+  `revision` and `progress`. A progress object contains `value`,
+  `visible_duration_ms`, `route_confirmed`,
+  `first_selection_visible_duration_ms`, `final_selection_visible_duration_ms`,
+  `decision_visible_duration_ms` and `choice_changed`. Durations are nonnegative
+  integer milliseconds; selection durations are null until selection occurs,
+  and decision duration is null until route confirmation. Partial route and
+  explanation values may omit required fields; ESS values may be null.
+  The response returns the new `draft_revision`. Exact retries are idempotent.
+- `POST /api/participate/{token}/steps/{step}/confirm` takes the same envelope
+  with a complete `progress` snapshot. Route assessments require
+  `{choice, confidence, reason}`; predictions require `{choice, confidence}`;
+  explanations require `{reason}`; ESS values are integers from 1 to 5.
+  Route confirmation is required for route answers. Explanation reasons are
+  stored separately from the prior assessment value.
+- Confirmation saves the response and timings, advances the step, increments
+  the revision and clears the draft in one transaction. Repeating an identical
+  confirmed answer returns current progress without modifying saved timing.
+  A different confirmed answer, future step or stale revision returns 409.
+  After route confirmation, drafts cannot alter the choice or selection times.
 - `POST /api/participate/{token}/submit` accepts only `submission_key` and succeeds
-  once all seventeen steps are confirmed. Identical retries are idempotent.
+  once all content steps are confirmed. Identical retries are idempotent.
 - `GET /api/questionnaires/{id}/preview?group=control&step=0&submission_key={uuid}`
-  renders any valid preview step through the same serializer used by participation.
-  The group can also be `experimental`. Preview never creates participations or
-  answers; its progression is kept in the administrator's browser.
+  uses the same step construction and serializer. Its order is reproducible for
+  the preview UUID and shared between group previews. Preview creates no
+  participations, drafts or answers and consumes no individual key.
 
 Administrative preview is available only through the local API. The public API
 and participant-only frontend expose only participation endpoints.
@@ -208,34 +243,65 @@ identifies the study, allowing multiple active questionnaires at the same addres
 This link uses the current dashboard origin and serves only this installation,
 not external participants. Optional public participation controls use the same
 path on the configured public origin. Previous token-based links are not supported.
-Confirmed steps are saved in PostgreSQL, and reloading the same browser tab resumes
-the attempt. Generate keys in administration and distribute
+Confirmed steps and partial progress are saved in PostgreSQL. Participants can
+resume from the same address using the original name, email and key. Generate
+keys in administration and distribute
 one unused key to each participant along with the link. Key usage can be refreshed
 in administration. Submit after the final step to mark the saved participation
 complete. The administrative preview never saves responses or consumes keys.
 
 ## Persistence and timing
 
-Names, normalized emails and used keys are linked to participations in PostgreSQL.
-Answers and timing remain stored as steps are confirmed, including incomplete
-participations. The database enforces unique emails and keys per questionnaire.
-For route responses, `route_order[choice]` identifies `optimal` or `alternative`.
-The research protocol and timing fields remain unchanged.
+PostgreSQL links the name, normalized email and individual key to one
+participation. `scenario_order` stores the six scenario IDs in presentation order.
+`draft` stores the current partial progress and `draft_revision` prevents stale
+updates. Confirmed answers remain stored even if the participation is incomplete.
+For route answers, `route_order[choice]` identifies `optimal` or `alternative`.
 
 | Field | Meaning |
 | --- | --- |
-| started_at | Server time when the attempt was first opened |
+| started_at | Server time of the first participation start; unchanged on recovery |
 | completed_at | Server time of final submission |
-| confirmed_at | Server time when the response was saved |
-| explanation_completed_at | Server time when the explanation was acknowledged |
-| visible_duration_ms | Accumulated foreground viewing time for a question, including its explanation if applicable |
-| decision_visible_duration_ms | Foreground time for the route decision, including confidence/reason for assessments; null for Likert items |
-| explanation_visible_duration_ms | Foreground reading time on an explanation step; null for questions without an explanation |
+| confirmed_at | Server time when the full response was saved |
+| explanation_completed_at | Server time when the post-explanation response was confirmed |
+| post_explanation_reason | Required response after disclosure, separate from the original reason |
+| visible_duration_ms | Total foreground exposure and response time, including the explanation step for assessments |
+| first_selection_visible_duration_ms | Active time from scenario presentation to the first route selection |
+| final_selection_visible_duration_ms | Active time from presentation to the last effective route selection before route confirmation |
+| choice_changed | Whether any route change occurred, including A → B → A |
+| decision_visible_duration_ms | Active time from presentation until Confirm route; excludes confidence and justification |
+| explanation_visible_duration_ms | Foreground time for the explanation step, including both reading and the post-explanation response |
 
-Durations are milliseconds measured in the browser with `performance.now()`.
-They exclude hidden-tab intervals and pending requests. Timing checkpoints in
-session storage preserve accumulated exposure across reloads. They are client
-measurements rather than independently verified measures of attention.
+Selection metrics are null for non-route questions. With no change, first and
+final selection times are equal. Selecting an already selected route does not
+change either metric. Waiting before confirming the selected route affects the
+decision duration but not final selection time. Confidence and justification
+only appear after route confirmation, so neither affects selection or decision
+metrics. Explanation duration must not be interpreted as pure reading time.
+
+Browser durations use `performance.now()` and start after the route maps are
+drawn and their scenario is presented in the visible tab. Other steps start
+after presentation. Hidden-tab intervals, blocking request waits, initial map
+loading and time away between visits are excluded. Resuming restores accumulated
+milliseconds and starts a fresh foreground interval; wall-clock timestamps are
+never subtracted to calculate response times. These client measurements do not
+independently verify attention.
+
+Field changes are autosaved after 500 ms without another change. Active timing
+is checkpointed every second, with another checkpoint on hiding or leaving the
+page. Background saves do not block interaction or pause viewing time. A local
+session cache assists reloads while its revision matches the server. Reopening
+in a different tab or browser uses the server draft. No credentials are stored
+in the draft cache.
+
+Save failures retain the fields and show retry feedback. Writes are serialized,
+and ambiguous network failures retry the same snapshot before later updates.
+A stale revision blocks further editing and offers **Reload saved progress**;
+the server's newer state is authoritative. Normal step confirmation flushes
+partial progress before sending the complete response. Leaving during an
+in-flight request, an abrupt process termination or loss of connectivity may
+lose changes that were not yet synchronized; recovery restores the last saved
+checkpoint without counting the absence.
 
 ## Replacing the local schema
 

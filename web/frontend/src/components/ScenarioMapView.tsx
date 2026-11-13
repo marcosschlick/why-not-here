@@ -11,6 +11,7 @@ type ScenarioMapViewProps = {
   optimalPath?: GridPoint[];
   modifications?: SemanticModificationsData | null;
   alternativePathLabel?: string;
+  onRendered?: () => void;
 };
 
 export function ScenarioMapView({
@@ -19,6 +20,7 @@ export function ScenarioMapView({
   optimalPath = [],
   modifications,
   alternativePathLabel,
+  onRendered,
 }: ScenarioMapViewProps) {
   const [wrapper, setWrapper] = useState<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -93,7 +95,11 @@ export function ScenarioMapView({
           </button>
         </div>
       </div>
-      <div className="canvas-wrapper" ref={setWrapper} style={{ aspectRatio: `${mapData.w} / ${mapData.h}` }}>
+      <div
+        className="canvas-wrapper"
+        ref={setWrapper}
+        style={{ aspectRatio: `${mapData.w} / ${mapData.h}` }}
+      >
         <TacticalMapCanvas
           mapData={mapData}
           userPath={userPath}
@@ -104,6 +110,7 @@ export function ScenarioMapView({
           hoveredCell={hoveredCell}
           onPointerMove={inspectCell}
           onPointerLeave={() => setHoveredCell(null)}
+          onRendered={onRendered}
         />
       </div>
       <div className="canvas-footer-info">

@@ -83,9 +83,10 @@ existing simulation, route and results screens. Generate maps individually or
 add or import configurations into a queue, then review routes and save scenarios.
 Automatic batch map generation is available outside questionnaire scenarios.
 
-Select three scenarios
-for explanations and three different scenarios for prediction, then save the
-protocol. The application generates all questions automatically. Preview either
+Select six different scenarios, all supporting both group explanations, then
+save the protocol. Each participation receives a stored random order: the first
+three scenarios are used with explanations and the remaining three for prediction.
+The application generates all questions automatically. Preview either
 group before activating the draft. The preview does not save answers. After
 activation, use **Open questionnaire** under **Local participation** to open
 `/questionnaire` in a new tab, or **Copy link** to share its local address.
@@ -99,15 +100,20 @@ participant preview. The participation panel shows completed, in-progress and
 total started participations; use **Refresh participation counts** to update it.
 Only final submissions count as completed. Draft editing remains unchanged.
 
-The fixed protocol collects a route choice, confidence (0 to 100), and a written
-reason before each of three explanations. The control group receives the cost
+The fixed protocol allows route changes until **Confirm route**, then collects
+confidence (0 to 100) and a written reason before each of three explanations.
+A separate required open response after each explanation asks which
+characteristics explain the system’s choice. The control group receives the cost
 justification; the experimental group receives the textual and visual contrastive
 explanation. Eight adapted ESS items follow, then three new route predictions
-without costs, explanations or correctness feedback.
+with confidence (0 to 100), without costs, explanations or correctness feedback.
 
-Confirmed answers are saved at each step. Reloading the same participation in the
-same browser tab resumes its server-controlled step; confirmed steps cannot be
-revisited. Group assignment and A/B route order stay stable for that attempt.
+Confirmed answers and partial fields/timings are saved in PostgreSQL. Reloading
+the same tab resumes automatically; reopening `/questionnaire` and entering the
+original name, email and key also recovers the attempt in another tab or browser.
+Confirmed steps cannot be revisited. Group, scenario order and A/B route order
+remain stable. Selection times exclude confidence, justification, hidden-tab
+intervals and time away between visits.
 After all steps, participants submit to mark the participation complete.
 
 In **Participation keys**, use **Generate keys** to open the quantity form
@@ -115,13 +121,15 @@ In **Participation keys**, use **Generate keys** to open the quantity form
 participant along with the local participant link. **Available** and **Used**
 share one list; **Refresh** reloads usage and **Copy available keys** offers
 secondary batch copying. Closed questionnaires hide this section. The participant
-must enter a name, email and key before the study begins. A key is consumed when participation starts,
+must enter a name, email and key before the study begins. A key is reserved when
+participation starts,
 and an email can be registered only once per questionnaire, ignoring case and
-surrounding whitespace. Reloading the same tab resumes that participation;
-closing the tab or clearing its session storage removes access to the attempt.
+surrounding whitespace. The same key, name and email can resume that
+participation after closing the tab or clearing session storage.
 Answers remain stored in PostgreSQL, including unfinished participations.
 
-The questionnaire schema requires an empty database. There is no migration or
+The `route-study-v2` questionnaire schema requires a fresh set of questionnaire
+tables. There is no migration or
 compatibility with previous questionnaire schemas, and startup does not
 erase or convert existing data. See [Questionnaire protocol](docs/questionnaire.md)
 for the endpoints, instrument adaptation and timing definitions. Request schemas
