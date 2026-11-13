@@ -214,11 +214,6 @@ export function ResultsView({
       ? "completed"
       : "pending";
   const isSolving = isBatch ? currentStatus === "solving" : false;
-  const isPending =
-    isBatch &&
-    (currentStatus === "pending" ||
-      currentStatus === "generating_map" ||
-      currentStatus === "awaiting_route");
 
   useEffect(() => {
     const wrapper = mapCanvasContainer;
@@ -292,27 +287,66 @@ export function ResultsView({
     return null;
   }
 
-  const isOptimal = currentResult?.solver_status === "OPTIMAL";
+  const hasModifications = (modifications: SemanticModificationsData | null | undefined) => {
+    if (!modifications) return false;
+    const count =
+      modifications.terrain +
+      modifications.obstacle +
+      modifications.slope +
+      (modifications.opened_terrain ?? 0) +
+      (modifications.robot_speed ?? 0);
+    return (
+      count > 0 ||
+      (modifications.terrain_nodes?.length ?? 0) > 0 ||
+      (modifications.obstacle_nodes?.length ?? 0) > 0 ||
+      (modifications.slope_edges?.length ?? 0) > 0 ||
+      (modifications.opened_terrain_nodes?.length ?? 0) > 0 ||
+      (modifications.robot_speed_edges?.length ?? 0) > 0
+    );
+  };
+
+  type RunOutcome =
+    | "queued"
+    | "solving"
+    | "certified"
+    | "candidate"
+    | "infeasible"
+    | "error";
+
+  const getRunOutcome = (
+    status: string | null | undefined,
+    result: {
+      success?: boolean;
+      solver_status?: string;
+      modifications?: SemanticModificationsData | null;
+    } | null | undefined,
+  ): RunOutcome => {
+    if (status === "solving") return "solving";
+    if (status === "pending" || status === "generating_map" || status === "awaiting_route") {
+      return "queued";
+    }
+    if (result?.solver_status === "OPTIMAL" && result?.success !== false) {
+      return "certified";
+    }
+    if (result?.solver_status === "INFEASIBLE") {
+      return "infeasible";
+    }
+    if (hasModifications(result?.modifications)) {
+      return "candidate";
+    }
+    if (status === "failed" || result?.success === false) {
+      return "error";
+    }
+    return "certified";
+  };
+
+  const currentOutcome = getRunOutcome(currentStatus, currentResult);
   const isFailed =
-    currentResult?.success === false || currentStatus === "failed";
+    currentOutcome === "candidate" ||
+    currentOutcome === "infeasible" ||
+    currentOutcome === "error";
   const currentModifications = currentResult?.modifications ?? null;
-  const currentModificationCount = currentModifications
-    ? currentModifications.terrain +
-      currentModifications.obstacle +
-      currentModifications.slope +
-      (currentModifications?.opened_terrain ?? 0) +
-      (currentModifications.robot_speed ?? 0)
-    : 0;
-  const hasCandidateModifications =
-    currentModificationCount > 0 ||
-    (currentModifications?.terrain_nodes?.length ?? 0) > 0 ||
-    (currentModifications?.obstacle_nodes?.length ?? 0) > 0 ||
-    (currentModifications?.slope_edges?.length ?? 0) > 0 ||
-    (currentModifications?.opened_terrain_nodes.length ?? 0) > 0 ||
-    (currentModifications?.robot_speed_edges?.length ?? 0) > 0;
-  const isInfeasible = currentResult?.solver_status === "INFEASIBLE";
-  const isCandidateSolution =
-    isFailed && !isOptimal && hasCandidateModifications;
+  const hasCandidateModifications = hasModifications(currentModifications);
   const visibleModifications: SemanticModificationsData | null =
     hasCandidateModifications ? currentModifications : null;
   const explanationText = currentResult
@@ -479,10 +513,21 @@ export function ResultsView({
           >
             {batchQueue.map((item, idx) => {
               const isSelected = idx === currentBatchIdx;
-              const isDone =
-                item.status === "completed" || item.status === "saved";
-              const isRunning = item.status === "solving";
-              const isItemFailed = item.status === "failed";
+              const outcome = getRunOutcome(item.status, item.result);
+              const tabLabel =
+                item.status === "saved"
+                  ? "Saved"
+                  : outcome === "certified"
+                    ? "Certified"
+                    : outcome === "candidate"
+                      ? "Candidate"
+                      : outcome === "infeasible"
+                        ? "Infeasible"
+                        : outcome === "error"
+                          ? "Error"
+                          : outcome === "solving"
+                            ? "Solving"
+                            : "Queued";
               return (
                 <button
                   key={item.id}
@@ -495,16 +540,8 @@ export function ResultsView({
                   <span className="batch-tab-title">
                     Run {idx + 1}: {item.config.MAP_H}x{item.config.MAP_W}
                   </span>
-                  <span className={`batch-tab-badge status-${item.status}`}>
-                    {isDone
-                      ? item.status === "saved"
-                        ? "Saved"
-                        : "Ready"
-                      : isRunning
-                        ? "Solving"
-                        : isItemFailed
-                          ? "Failed"
-                          : "Queued"}
+                  <span className={`batch-tab-badge status-${outcome}`}>
+                    {tabLabel}
                   </span>
                 </button>
               );
@@ -520,25 +557,19 @@ export function ResultsView({
               ? `Results & Metrics — Run ${currentBatchIdx + 1} of ${batchQueue!.length}`
               : "Results & Metrics"}
           </h2>
-          <span
-            className={`status-pill large ${
-              isOptimal
-                ? "optimal"
-                : isFailed
-                  ? "failed"
-                  : isSolving
-                    ? "running"
-                    : "neutral"
-            }`}
-          >
+          <span className={`status-pill large ${currentOutcome}`}>
             Solver:{" "}
-            {isSolving
+            {currentOutcome === "solving"
               ? "OPTIMIZING..."
-              : isPending
+              : currentOutcome === "queued"
                 ? "QUEUED"
-                : currentStatus === "failed"
-                  ? "FAILED"
-                  : currentResult?.solver_status || "COMPLETED"}
+                : currentOutcome === "certified"
+                  ? "OPTIMAL (CERTIFIED)"
+                  : currentOutcome === "candidate"
+                    ? "CANDIDATE (UNVERIFIED)"
+                    : currentOutcome === "infeasible"
+                      ? "INFEASIBLE"
+                      : "ERROR"}
           </span>
         </div>
 
@@ -564,9 +595,14 @@ export function ResultsView({
               </p>
             </div>
             <div className="results-map-controls">
-              {isCandidateSolution && (
-                <span className="candidate-solution-badge">
+              {currentOutcome === "candidate" && (
+                <span className="candidate-solution-badge candidate">
                   CANDIDATE SOLUTION (NOT GLOBALLY CERTIFIED)
+                </span>
+              )}
+              {currentOutcome === "infeasible" && (
+                <span className="candidate-solution-badge infeasible">
+                  NO FEASIBLE INTERVENTION
                 </span>
               )}
               <div className="zoom-controls-bar">
@@ -609,9 +645,9 @@ export function ResultsView({
 
           {!hasCandidateModifications && (
             <p className="results-map-notice">
-              {isInfeasible
+              {currentOutcome === "infeasible"
                 ? "No valid modifications could be calculated; the alternative route is shown."
-                : isOptimal
+                : currentOutcome === "certified"
                   ? "The certified solution requires no semantic modifications."
                   : "No valid semantic modifications were returned; the alternative route is shown."}
             </p>
