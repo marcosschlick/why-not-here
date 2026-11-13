@@ -212,27 +212,7 @@ kbd,
 }
 .topbar-actions-group {
   justify-content: flex-end;
-  gap: 0.625rem;
-}
-.topbar-context-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.4rem 0.625rem;
-  color: var(--text-inverse);
-  background: color-mix(in srgb, var(--shadow-grey) 34%, transparent);
-  border: 1px solid color-mix(in srgb, var(--bright-snow) 18%, transparent);
-  border-radius: var(--radius-round);
-  font-size: 0.7rem;
-  font-weight: 650;
-}
-.context-chip-dot {
-  width: 0.45rem;
-  height: 0.45rem;
-  background: var(--azure-blue);
-  border-radius: var(--radius-round);
-  box-shadow: 0 0 0 0.25rem
-    color-mix(in srgb, var(--azure-blue) 18%, transparent);
+  gap: 0.5rem;
 }
 .topbar-segmented-stepper {
   gap: 0.25rem;
@@ -295,7 +275,8 @@ kbd,
   cursor: not-allowed;
   opacity: 0.54;
 }
-.btn-about,
+.btn-topbar-questionnaires,
+.btn-topbar-about,
 .btn,
 .btn-zoom,
 .btn-remove-item,
@@ -303,22 +284,55 @@ kbd,
   border: 1px solid transparent;
   cursor: pointer;
 }
-.btn-about {
+.btn-topbar-questionnaires {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.45rem;
   min-height: 2.25rem;
-  padding: 0.375rem 0.625rem;
+  padding: 0.375rem 0.75rem;
   color: var(--text-inverse);
-  background: color-mix(in srgb, var(--bright-snow) 10%, transparent);
-  border-color: color-mix(in srgb, var(--bright-snow) 21%, transparent);
+  background: color-mix(in srgb, var(--shadow-grey) 24%, transparent);
+  border-color: color-mix(in srgb, var(--bright-snow) 22%, transparent);
   border-radius: var(--radius-md);
   font-size: 0.75rem;
   font-weight: 650;
   transition:
     transform var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+.btn-topbar-questionnaires .topbar-btn-icon {
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+.btn-topbar-questionnaires.active {
+  color: var(--bright-snow);
+  background: var(--azure-blue);
+  border-color: color-mix(in srgb, var(--bright-snow) 35%, transparent);
+  box-shadow: var(--shadow-xs);
+}
+.btn-topbar-questionnaires.active .topbar-btn-icon {
+  opacity: 1;
+}
+.btn-topbar-about {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.625rem;
+  color: color-mix(in srgb, var(--bright-snow) 82%, var(--azure-blue));
+  background: transparent;
+  border-color: color-mix(in srgb, var(--bright-snow) 16%, transparent);
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 .about-btn-icon {
   color: var(--azure-blue);
@@ -1518,7 +1532,6 @@ kbd,
 }
 
 .toggle-label,
-.context-chip-label,
 .batch-tab-title {
   font-size: 0.78rem;
   font-weight: 650;
@@ -2348,9 +2361,13 @@ kbd,
     color: var(--text-structural);
     background: var(--bright-snow);
   }
-  .btn-about:hover {
-    background: color-mix(in srgb, var(--bright-snow) 16%, transparent);
-    border-color: color-mix(in srgb, var(--bright-snow) 36%, transparent);
+  .btn-topbar-questionnaires:not(.active):hover {
+    background: color-mix(in srgb, var(--bright-snow) 18%, transparent);
+    border-color: color-mix(in srgb, var(--bright-snow) 38%, transparent);
+  }
+  .btn-topbar-about:hover {
+    color: var(--bright-snow);
+    background: color-mix(in srgb, var(--bright-snow) 10%, transparent);
   }
   .mode-tab:not(.active):hover,
   .btn-zoom:not(:disabled):hover {
@@ -2412,7 +2429,8 @@ kbd,
 }
 .stepper-tab:active:not(:disabled),
 .btn:active:not(:disabled),
-.btn-about:active,
+.btn-topbar-questionnaires:active,
+.btn-topbar-about:active,
 .btn-zoom:active:not(:disabled),
 .mode-tab:active,
 .artifact-item:active,
@@ -2449,9 +2467,6 @@ kbd,
   }
   .stepper-tab {
     flex: 0 0 auto;
-  }
-  .topbar-context-chip {
-    order: 3;
   }
   .canvas-header-card,
   .canvas-status-banner,
@@ -2508,7 +2523,7 @@ kbd,
   .brand-logo-frame {
     width: min(15rem, 100%);
   }
-  .btn-about span:last-child,
+  .btn-topbar-about span:last-child,
   .stepper-label {
     display: none;
   }
@@ -2561,7 +2576,8 @@ kbd,
   }
   .stepper-tab,
   .btn,
-  .btn-about,
+  .btn-topbar-questionnaires,
+  .btn-topbar-about,
   .btn-zoom,
   .mode-tab,
   .solver-param-chip,

@@ -145,16 +145,22 @@ const ScenarioMap = memo(function ScenarioMap({
 });
 
 export function QuestionnaireAdmin({
-  onBack,
+  currentStep,
+  hasMapData,
+  hasResults,
+  onSelectStep,
   onOpenAbout,
   onCreateScenario,
   initialQuestionnaireId,
   initialScenarioId,
 }: {
+  currentStep: "config" | "route_canvas" | "results";
+  hasMapData: boolean;
+  hasResults: boolean;
+  onSelectStep: (step: "config" | "route_canvas" | "results") => void;
   onCreateScenario: (id: number, title: string) => void;
   initialQuestionnaireId: number | null;
   initialScenarioId: number | null;
-  onBack: () => void;
   onOpenAbout: () => void;
 }) {
   const [list, setList] = useState<Summary[]>([]);
@@ -475,8 +481,12 @@ export function QuestionnaireAdmin({
   return (
     <>
       <Topbar
-        view="admin"
-        onBack={() => confirmDiscard(onBack)}
+        activeView="admin"
+        currentStep={currentStep}
+        hasMapData={hasMapData}
+        hasResults={hasResults}
+        onSelectStep={(step) => confirmDiscard(() => onSelectStep(step))}
+        onOpenAdmin={() => {}}
         onOpenAbout={onOpenAbout}
       />
       <div className="qa-app">

@@ -1072,17 +1072,67 @@ export function App() {
     }
   }
 
+  const hasMapData = Boolean(mapData);
+  const hasResults = Boolean(lastResult || (isBatchMode && queue.length > 0));
+
+  function handleSelectStep(step: "config" | "route_canvas" | "results") {
+    if (isSolvingISP || isGeneratingMap || savingScenario) return;
+    if (currentStep === "route_canvas" && isBatchMode) {
+      setQueue((previous) =>
+        previous.map((item) =>
+          sameReviewGroup(item, queue[batchReviewIndex]) && !item.scenarioId
+            ? { ...item, userPath }
+            : item,
+        ),
+      );
+    }
+    if (
+      step === "route_canvas" &&
+      isBatchMode &&
+      queue[batchReviewIndex]?.scenarioId
+    ) {
+      const index = queue.findIndex((item) => !item.scenarioId && item.mapData);
+      if (index < 0) return;
+      const item = queue[index];
+      setBatchReviewIndex(index);
+      setMapData(item.mapData!);
+      setUserPath(item.userPath ?? item.mapData!.auto_path);
+    }
+    if (
+      scenarioQuestionnaire !== null &&
+      currentStep === "config" &&
+      step !== "config" &&
+      scenarioConfigDirty
+    ) {
+      setConfirmation({
+        title: "Discard Configuration Changes",
+        description: "Discard changes to the configuration?",
+        confirmLabel: "Discard Changes",
+        onConfirm: () => {
+          setScenarioConfigDirty(false);
+          setCurrentStep(step);
+        },
+      });
+      return;
+    }
+    setCurrentStep(step);
+  }
+
   if (showAdmin) {
     return (
       <>
         <QuestionnaireAdmin
+          currentStep={currentStep}
+          hasMapData={hasMapData}
+          hasResults={hasResults}
           initialQuestionnaireId={adminQuestionnaire}
           initialScenarioId={adminScenario}
           onCreateScenario={startScenario}
-          onBack={() => {
+          onSelectStep={(step) => {
             setAdminQuestionnaire(null);
             setAdminScenario(null);
             setShowAdmin(false);
+            handleSelectStep(step);
           }}
           onOpenAbout={() => setIsAboutOpen(true)}
         />
@@ -1097,66 +1147,11 @@ export function App() {
   return (
     <div className="app-layout">
       <Topbar
+        activeView="simulation"
         currentStep={currentStep}
-        onSelectStep={(step) => {
-          if (isSolvingISP || isGeneratingMap || savingScenario) return;
-          if (currentStep === "route_canvas" && isBatchMode) {
-            setQueue((previous) =>
-              previous.map((item) =>
-                sameReviewGroup(item, queue[batchReviewIndex]) &&
-                !item.scenarioId
-                  ? { ...item, userPath }
-                  : item,
-              ),
-            );
-          }
-          if (
-            step === "route_canvas" &&
-            isBatchMode &&
-            queue[batchReviewIndex]?.scenarioId
-          ) {
-            const index = queue.findIndex(
-              (item) => !item.scenarioId && item.mapData,
-            );
-            if (index < 0) return;
-            const item = queue[index];
-            setBatchReviewIndex(index);
-            setMapData(item.mapData!);
-            setUserPath(item.userPath ?? item.mapData!.auto_path);
-          }
-          if (
-            scenarioQuestionnaire !== null &&
-            currentStep === "config" &&
-            step !== "config" &&
-            scenarioConfigDirty
-          ) {
-            setConfirmation({
-              title: "Discard Configuration Changes",
-              description: "Discard changes to the configuration?",
-              confirmLabel: "Discard Changes",
-              onConfirm: () => {
-                setScenarioConfigDirty(false);
-                setCurrentStep(step);
-              },
-            });
-            return;
-          }
-          setCurrentStep(step);
-        }}
-        hasMapData={Boolean(mapData)}
-        hasResults={Boolean(lastResult || (isBatchMode && queue.length > 0))}
-        activeReductionMethod={
-          isBatchMode && queue[activeBatchResultIndex]
-            ? queue[activeBatchResultIndex].config.DEFAULT_REDUCTION_METHOD
-            : mapData?.config.DEFAULT_REDUCTION_METHOD ||
-              config?.DEFAULT_REDUCTION_METHOD
-        }
-        isIncrementalActive={
-          isBatchMode && queue[activeBatchResultIndex]
-            ? queue[activeBatchResultIndex].config.USE_INCREMENTAL_SOLVER
-            : mapData?.config.USE_INCREMENTAL_SOLVER ||
-              config?.USE_INCREMENTAL_SOLVER
-        }
+        onSelectStep={handleSelectStep}
+        hasMapData={hasMapData}
+        hasResults={hasResults}
         onOpenAbout={() => setIsAboutOpen(true)}
         onOpenAdmin={() => {
           if (isSolvingISP || isGeneratingMap || savingScenario) return;
