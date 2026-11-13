@@ -8,7 +8,7 @@ The system answers _"Why was the optimal path $p^*$ chosen instead of the user-e
 
 ## Project Structure
 
-- `src/`: Core scientific modules (A\*, Dijkstra, procedural map generation, ISP formulation, reduction strategies, incremental solver).
+- `src/`: Core scientific modules (A\*, procedural map generation, ISP formulation, reduction strategies, incremental solver).
 - `web/api/`: FastAPI backend service exposing endpoints for simulations and experiments.
 - `web/frontend/`: React + TypeScript interactive dashboard for map exploration and path comparison.
 - `docs/`: Parameter configuration reference (`config.md`) and design palette tokens (`palette.md`).

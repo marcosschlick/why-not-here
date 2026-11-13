@@ -38,7 +38,6 @@ CONFIG_REGISTRY = {
     "MAP_ROUGHNESS_THRESHOLDS": "config_map.py",
     "MAP_MIN_MAIN_COMPONENT_RATIO": "config_map.py",
     "MAP_MAX_GENERATION_ATTEMPTS": "config_map.py",
-    "DEFAULT_PLANNER": "config_planning.py",
     "BASE_TERRAIN": "config_terrain.py",
     "TERRAINS": "config_terrain.py",
     "TERRAIN_COLORS": "config_terrain.py",
@@ -112,7 +111,6 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
     candidate["DEFAULT_SOLVER"] = solver
 
     for key, allowed in (
-        ("DEFAULT_PLANNER", {"ASTAR", "DIJKSTRA"}),
         (
             "DEFAULT_REDUCTION_METHOD",
             {"NONE", "BBOX", "FLOODFILL", "SPARSIFIED", "PATH_ONLY"},

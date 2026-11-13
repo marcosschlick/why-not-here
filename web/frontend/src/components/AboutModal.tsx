@@ -97,7 +97,7 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
             <div className="about-mechanic-card">
               <div className="mechanic-header">
                 <span className="mechanic-num">1</span>
-                <h3>Optimal Planning (A* / Dijkstra)</h3>
+                <h3>Optimal Planning (A*)</h3>
               </div>
               <p>
                 Computes the least-cost path (

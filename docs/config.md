@@ -64,11 +64,10 @@ Defines traversability speeds, slope thresholds, and mechanical limits based on 
 
 ## 4. Path Planning (`src/config/config_planning.py`)
 
-Configures forward heuristic search algorithms and default routing endpoints.
+Uses A* for forward path planning and configures default routing endpoints.
 
 | Parameter         | Type                      | Default Value | Description                                                             |
 | :---------------- | :------------------------ | :------------ | :---------------------------------------------------------------------- |
-| `DEFAULT_PLANNER` | `str`                     | `"ASTAR"`     | Default path planning algorithm (`"ASTAR"` or `"DIJKSTRA"`).            |
 | `START_COORD`     | `tuple[int, int] \| None` | `None`        | Fixed start coordinate `(row, col)`, or `None` for top-left default.    |
 | `GOAL_COORD`      | `tuple[int, int] \| None` | `None`        | Fixed goal coordinate `(row, col)`, or `None` for bottom-right default. |
 
@@ -151,7 +150,7 @@ The backend reserves a unique directory under `results/` for each execution and 
 
 Runs store the base map in `map/` (`map.png`, `map.json`) and ISP images in `results/` (`optimal_path.png`, `alternative_path.png`, `path_comparison.png`, `changes.png`, `changes_and_paths.png`, `log.txt`). The three route images are always written; change images are written when candidate modifications are returned. CLI experiment execution also reserves a unique directory under `results/`. Standalone CLI map generation and saved-map ISP use the internal current directory, initially `results/`, and do not overwrite existing artifact directories.
 
-Old experiment configurations containing `OUTPUT_DIR` and API calls containing removed destination or file-name fields are unsupported and must be recreated in the current format. No migration or automatic conversion is provided.
+Old experiment configurations containing `DEFAULT_PLANNER` or `OUTPUT_DIR` and API calls containing removed destination or file-name fields are unsupported and must be recreated in the current format. No migration or automatic conversion is provided.
 
 ### Simulation Benchmark
 
@@ -181,7 +180,6 @@ Standardizes export, import, and reproduction of experiments across both the Web
 | `MAX_ISP_ITERATIONS`                          | `int`               | Maximum cutting-plane iterations.                                                                                                      |
 | `INCREMENTAL_ASTAR_SCOPE`                     | `str`               | A\* search scope (`"GLOBAL"` or `"SUBGRAPH"`).                                                                                         |
 | `DEFAULT_REDUCTION_METHOD`                    | `str`               | Active reduction method (`"NONE"`, `"BBOX"`, `"FLOODFILL"`, `"SPARSIFIED"`, `"PATH_ONLY"`).                                            |
-| `DEFAULT_PLANNER`                             | `str`               | Path planner algorithm (`"ASTAR"` or `"DIJKSTRA"`).                                                                                    |
 | `start`                                       | `[row, col]`        | Origin coordinate pair.                                                                                                                |
 | `goal`                                        | `[row, col]`        | Destination coordinate pair.                                                                                                           |
 | `MAP_PROFILE_VERSION`                         | `"perlin-v7"` | Required current generation profile identifier. |

@@ -11,7 +11,7 @@ from src.incremental import (
 from src.isp.precheck import validate_alternative_path
 from src.isp.solver import ISPSolver
 from src.pipeline.storage import get_output_directory
-from src.planning import plan_path
+from src.planning import astar
 from src.reduction import create_reduced_graph
 from src.visual.plotter import render_tactical_map
 
@@ -93,9 +93,7 @@ def run_isp(
     grid = Grid.load(map_json_path)
     start, goal = prepare_endpoints(grid, start=start, goal=goal)
 
-    p_star, cost_star, expanded = plan_path(
-        grid, start, goal, algorithm=config.DEFAULT_PLANNER
-    )
+    p_star, cost_star, expanded = astar(grid, start, goal)
     if not p_star:
         print("Error: No traversable path found between start and goal.")
         return None
@@ -130,7 +128,7 @@ def run_isp(
     cost_user_orig = ISPValidator.compute_path_cost(grid, p_user)
 
     path_metrics = measure_paths(p_star, p_user, grid.cell_size)
-    msg_star = f"Optimal path ({config.DEFAULT_PLANNER}): {len(p_star)} points, {len(p_star) - 1} edges (cost: {cost_star:.2f}s, expanded: {expanded} nodes)"
+    msg_star = f"Optimal path (A*): {len(p_star)} points, {len(p_star) - 1} edges (cost: {cost_star:.2f}s, expanded: {expanded} nodes)"
     log_lines.append(msg_star)
     if verbose:
         print(msg_star)
@@ -271,7 +269,7 @@ def run_isp(
         optimal_path=p_star,
         title="Optimal path",
         save_path=str(optimal_image),
-        subtitle=f"Planner: {config.DEFAULT_PLANNER}",
+        subtitle="Planner: A*",
     )
 
     render_tactical_map(

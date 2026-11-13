@@ -74,9 +74,6 @@ export function ConfigForm({
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const [planner, setPlanner] = useState<string>(
-    initialConfig?.DEFAULT_PLANNER ?? "ASTAR",
-  );
   const [solver, setSolver] = useState<string>(
     initialConfig?.DEFAULT_SOLVER ?? "HIGHS",
   );
@@ -123,7 +120,6 @@ export function ConfigForm({
       DEFAULT_REDUCTION_METHOD: reductionMethod,
       USE_INCREMENTAL_SOLVER: useIncremental,
       MAP_DEFAULT_SEED: Number(mapSeed),
-      DEFAULT_PLANNER: planner,
       DEFAULT_SOLVER: solver,
       SOLVER_TIMEOUT_SEC: Number(solverTimeout),
       CLOSED_LOOP_TIMEOUT_SEC: Number(closedLoopTimeout),
@@ -458,7 +454,7 @@ export function ConfigForm({
                   Advanced Settings
                 </span>
                 <span className="advanced-summary-desc">
-                  Planner, solver limits and map seed
+                  Solver limits and map seed
                 </span>
               </div>
             </div>
@@ -478,18 +474,17 @@ export function ConfigForm({
                   </h4>
                   <div className="form-grid">
                     <div className="form-group">
-                      <label htmlFor="defaultPlanner">
-                        <span>Default Planner</span>
-                        <span className="form-group-hint">Shortest path</span>
+                      <label htmlFor="mapSeed">
+                        <span>Map Default Seed</span>
+                        <span className="form-group-hint">Noise RNG seed</span>
                       </label>
-                      <select
-                        id="defaultPlanner"
-                        value={planner}
-                        onChange={(e) => setPlanner(e.target.value)}
-                      >
-                        <option value="ASTAR">ASTAR</option>
-                        <option value="DIJKSTRA">DIJKSTRA</option>
-                      </select>
+                      <input
+                        id="mapSeed"
+                        type="number"
+                        value={mapSeed}
+                        onChange={(e) => setMapSeed(Number(e.target.value))}
+                        required
+                      />
                     </div>
 
                     <div className="form-group">
@@ -542,25 +537,6 @@ export function ConfigForm({
                         onChange={(e) =>
                           setClosedLoopTimeout(Number(e.target.value))
                         }
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="advanced-group">
-                  <h4 className="advanced-group-title">Map &amp; Grid</h4>
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label htmlFor="mapSeed">
-                        <span>Map Default Seed</span>
-                        <span className="form-group-hint">Noise RNG seed</span>
-                      </label>
-                      <input
-                        id="mapSeed"
-                        type="number"
-                        value={mapSeed}
-                        onChange={(e) => setMapSeed(Number(e.target.value))}
                         required
                       />
                     </div>

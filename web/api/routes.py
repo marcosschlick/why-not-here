@@ -33,7 +33,7 @@ from src.pipeline.utils import (
     get_project_path,
     prepare_endpoints,
 )
-from src.planning import plan_path
+from src.planning import astar
 from src.visual.appearance import resolve_map_appearance
 from src.visual.layers import find_steep_cells
 
@@ -206,9 +206,7 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
                 or "Alternative route is invalid for the imported map.",
             )
 
-        optimal_path, optimal_cost, _ = plan_path(
-            grid, start, goal, algorithm=config.DEFAULT_PLANNER
-        )
+        optimal_path, optimal_cost, _ = astar(grid, start, goal)
 
         safe_optimal_cost = (
             round(optimal_cost, 4)
@@ -285,9 +283,7 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
         )
         start, goal = prepare_endpoints(grid)
         auto_path = create_alternative_path(grid, start, goal)
-        optimal_path, optimal_cost, _ = plan_path(
-            grid, start, goal, algorithm=config.DEFAULT_PLANNER
-        )
+        optimal_path, optimal_cost, _ = astar(grid, start, goal)
 
         safe_optimal_cost = (
             round(optimal_cost, 4)

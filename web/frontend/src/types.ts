@@ -46,7 +46,6 @@ export interface SystemConfig {
   DEFAULT_REDUCTION_METHOD: string;
   USE_INCREMENTAL_SOLVER: boolean;
   MAP_DEFAULT_SEED: number;
-  DEFAULT_PLANNER?: string;
   DEFAULT_SOLVER?: string;
   SOLVER_TIMEOUT_SEC?: number;
   CLOSED_LOOP_TIMEOUT_SEC?: number;
