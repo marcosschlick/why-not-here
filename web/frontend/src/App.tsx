@@ -1308,16 +1308,21 @@ export function App() {
                 isBatchMode && queue.length > 1
                   ? (() => {
                       const currentBatchItem = queue[batchReviewIndex];
-                      const matchingBatchIndices = currentBatchItem
-                        ? queue
-                            .map((item, idx) => ({ item, idx }))
-                            .filter(
-                              ({ idx, item }) =>
-                                idx !== batchReviewIndex &&
-                                !item.scenarioId &&
-                                isSameMap(item.config, currentBatchItem.config),
-                            )
-                        : [];
+                      const matchingBatchIndices =
+                        currentBatchItem && !currentBatchItem.benchmarkGroup
+                          ? queue
+                              .map((item, idx) => ({ item, idx }))
+                              .filter(
+                                ({ idx, item }) =>
+                                  idx !== batchReviewIndex &&
+                                  !item.scenarioId &&
+                                  !item.benchmarkGroup &&
+                                  isSameMap(
+                                    item.config,
+                                    currentBatchItem.config,
+                                  ),
+                              )
+                          : [];
 
                       const isCurrentRouteComplete =
                         userPath.length > 0 &&
@@ -1517,57 +1522,62 @@ export function App() {
 
         {currentStep === "results" && (
           <div key="step-results" className="step-container results-step">
-            {isBatchMode && !isSolvingISP && queue[activeBatchResultIndex] && (
-              <div className="qa-panel qa-form scenario-save-form">
-                {queue[activeBatchResultIndex].error && (
-                  <p role="alert">{queue[activeBatchResultIndex].error}</p>
-                )}
-                {scenarioQuestionnaire !== null && (
-                  <div className="form-group">
-                    <label htmlFor="batch-scenario-name">Scenario name</label>
-                    <input
-                      id="batch-scenario-name"
-                      value={queue[activeBatchResultIndex].scenarioTitle ?? ""}
-                      disabled={
-                        Boolean(queue[activeBatchResultIndex].scenarioId) ||
-                        savingScenario
-                      }
-                      onChange={(event) => {
-                        const title = event.target.value;
-                        setScenarioQueue((previous) =>
-                          previous.map((item, index) =>
-                            index === activeBatchResultIndex
-                              ? { ...item, scenarioTitle: title }
-                              : item,
-                          ),
-                        );
-                      }}
-                    />
-                  </div>
-                )}
-                {queue[activeBatchResultIndex].scenarioId && (
-                  <p role="status">Saved to questionnaire</p>
-                )}
-                {scenarioQuestionnaire !== null && (
-                  <form onSubmit={saveScenario}>
-                    <button
-                      type="submit"
-                      className="btn btn-vibrant"
-                      disabled={
-                        savingScenario ||
-                        !queue.some(
-                          (item) => item.result?.success && !item.scenarioId,
-                        )
-                      }
-                    >
-                      {savingScenario
-                        ? "Saving scenarios..."
-                        : "Save successful scenarios"}
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
+            {scenarioQuestionnaire !== null &&
+              isBatchMode &&
+              !isSolvingISP &&
+              queue[activeBatchResultIndex] && (
+                <div className="qa-panel qa-form scenario-save-form">
+                  {queue[activeBatchResultIndex].error && (
+                    <p role="alert">{queue[activeBatchResultIndex].error}</p>
+                  )}
+                  {scenarioQuestionnaire !== null && (
+                    <div className="form-group">
+                      <label htmlFor="batch-scenario-name">Scenario name</label>
+                      <input
+                        id="batch-scenario-name"
+                        value={
+                          queue[activeBatchResultIndex].scenarioTitle ?? ""
+                        }
+                        disabled={
+                          Boolean(queue[activeBatchResultIndex].scenarioId) ||
+                          savingScenario
+                        }
+                        onChange={(event) => {
+                          const title = event.target.value;
+                          setScenarioQueue((previous) =>
+                            previous.map((item, index) =>
+                              index === activeBatchResultIndex
+                                ? { ...item, scenarioTitle: title }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                    </div>
+                  )}
+                  {queue[activeBatchResultIndex].scenarioId && (
+                    <p role="status">Saved to questionnaire</p>
+                  )}
+                  {scenarioQuestionnaire !== null && (
+                    <form onSubmit={saveScenario}>
+                      <button
+                        type="submit"
+                        className="btn btn-vibrant"
+                        disabled={
+                          savingScenario ||
+                          !queue.some(
+                            (item) => item.result?.success && !item.scenarioId,
+                          )
+                        }
+                      >
+                        {savingScenario
+                          ? "Saving scenarios..."
+                          : "Save successful scenarios"}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
 
             {scenarioQuestionnaire !== null &&
               !isBatchMode &&

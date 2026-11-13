@@ -868,6 +868,10 @@ export function ResultsView({
         </div>
       )}
 
+      {activeBatchItem?.error && !currentResult && (
+        <p role="alert">{activeBatchItem.error}</p>
+      )}
+
       {currentResult && explanationText && (
         <div className="report-card result-explanation-card">
           <div className="report-card-header">

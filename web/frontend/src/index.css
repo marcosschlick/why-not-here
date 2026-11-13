@@ -2653,7 +2653,8 @@ kbd,
 }
 
 .config-step .form-group input:disabled,
-.config-step .form-group select:disabled {
+.config-step .form-group select:disabled,
+.config-step .strategy-column .toggle-btn:disabled {
   color: var(--text-muted);
   background: var(--config-surface-soft);
   border-color: var(--config-border);
