@@ -87,9 +87,11 @@ Select three scenarios
 for explanations and three different scenarios for prediction, then save the
 protocol. The application generates all questions automatically. Preview either
 group before activating the draft. The preview does not save answers. After
-activation, open the **Local participant link** in the same installation to
-test the real participant flow. The link uses the dashboard address and is not
-for external access. No public participant URL is needed for local testing.
+activation, use **Open questionnaire** under **Local participation** to open
+`/questionnaire` in a new tab, or **Copy link** to share its local address.
+The address has no token; each participant's individual key identifies the study.
+The local link uses the dashboard origin and is not for external access.
+No public participant URL is needed for local testing.
 
 The fixed protocol collects a route choice, confidence (0 to 100), and a written
 reason before each of three explanations. The control group receives the cost
@@ -147,8 +149,8 @@ port published by PostgreSQL; it defaults to `5432`. The backend connects
 to the database service on its internal port, independently of `DB_PORT`.
 For external access, set `PUBLIC_PARTICIPANT_URL` to the URL participants can
 reach, for example `http://YOUR_LAN_IP:5174`. The administration screen then
-also displays a public participant link. Recreate the frontend services after
-changing the URL. Local participation does not require this setting.
+also displays controls to open or copy the public `/questionnaire` link.
+Recreate the frontend services after changing the URL. Local participation does not require this setting.
 
 Run the entire stack (PostgreSQL + backend API + frontend) with:
 

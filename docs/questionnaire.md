@@ -124,9 +124,12 @@ The reference set informs the implementation as follows:
   from 1 to 1,000) and generates individual keys for a draft or active study.
   `GET` on the same endpoint lists `key`, `created_at` and `used`. These are local
   administrative endpoints; keys are not exposed through the participant API.
-- `POST /api/participate/{token}/start` accepts `name`, `email`, `key` and
-  `submission_key` (a browser-generated random UUID). It atomically reserves the
-  key and email, creates a participation and returns its current state. Retrying
+- `POST /api/participate/start` accepts `name`, `email`, `key` and
+  `submission_key` (a browser-generated random UUID). The globally unique key
+  identifies the questionnaire. It atomically reserves the key and email, creates
+  a participation and returns its current state plus an internal `access_token`.
+  The token is kept in the tab's session storage for subsequent API requests;
+  it never appears in the participant page address. Retrying
   with the same session and identical normalized data returns the same attempt.
   Names are trimmed, nonempty and limited to 200 characters; emails are validated
   and limited to 254 characters. Invalid keys return 401, used keys or emails 409,
@@ -153,11 +156,16 @@ The reference set informs the implementation as follows:
 Administrative preview is available only through the local API. The public API
 and participant-only frontend expose only participation endpoints.
 
-After activation, open the local participant link from the administration screen
-to exercise the real participation flow without a public URL. This link uses
-the current dashboard address and serves only this installation, not external
-participants. Confirmed steps are saved in PostgreSQL, and reloading the same
-browser tab resumes the attempt. Generate keys in administration and distribute
+After activation, use **Open questionnaire** under **Local participation** in
+administration to open `/questionnaire` in a new tab. **Copy link** copies its
+absolute local address and confirms success; clipboard failures are reported.
+The path contains no token, query or fragment. A participant's individual key
+identifies the study, allowing multiple active questionnaires at the same address.
+This link uses the current dashboard origin and serves only this installation,
+not external participants. Optional public participation controls use the same
+path on the configured public origin. Previous token-based links are not supported.
+Confirmed steps are saved in PostgreSQL, and reloading the same browser tab resumes
+the attempt. Generate keys in administration and distribute
 one unused key to each participant along with the link. Key usage can be refreshed
 in administration. Submit after the final step to mark the saved participation
 complete. The administrative preview never saves responses or consumes keys.

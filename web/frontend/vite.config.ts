@@ -32,7 +32,7 @@ export default defineConfig({
               path === "/docs" ||
               path === "/openapi.json" ||
               path === "/redoc") &&
-            !/^\/api\/participate\/[^/]+(?:\/submit|\/steps\/\d+\/confirm)?$/.test(
+            !/^\/api\/participate\/(?:start|[^/]+(?:\/submit|\/steps\/\d+\/confirm)?)$/.test(
               path,
             )
           ) {

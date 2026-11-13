@@ -94,6 +94,7 @@ def initialize_database() -> None:
             UNIQUE (participation_id, question_id)
         )
         """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS participation_keys_key_unique ON participation_keys (key)",
     )
     try:
         with connect_database() as connection:

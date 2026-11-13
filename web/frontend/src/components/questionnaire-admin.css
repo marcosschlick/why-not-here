@@ -642,3 +642,50 @@
   gap: 0.4rem;
   margin-top: 0.75rem;
 }
+
+.qa-details-panel {
+  display: grid;
+  gap: 1.25rem;
+  justify-items: stretch;
+}
+.qa-details-panel > button {
+  justify-self: start;
+}
+.qa-details-panel > .qa-form,
+.qa-control-group > .qa-form {
+  margin-top: 0;
+}
+.qa-control-group {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-subtle);
+  justify-items: start;
+}
+.qa-control-group > p {
+  margin: 0;
+}
+.qa-control-group > p:empty {
+  display: none;
+}
+.qa-participant-link {
+  display: grid;
+  gap: 0.75rem;
+}
+.qa-control-group > .qa-form {
+  width: 100%;
+}
+.qa-key-generation {
+  grid-template-columns: minmax(8rem, 12rem) auto;
+  align-items: end;
+  justify-content: start;
+}
+@media (max-width: 600px) {
+  .qa-key-generation {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .qa-details-panel > .qa-heading {
+    flex-wrap: wrap;
+  }
+}

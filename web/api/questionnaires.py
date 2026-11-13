@@ -32,7 +32,7 @@ class QuestionnaireInput(BaseModel):
 
 
 def get_questionnaire(connection, questionnaire_id: int, *, lock: bool = False):
-    query = "SELECT id, title, description, status, protocol_version, created_at, closed_at, access_token FROM questionnaires WHERE id = %s"
+    query = "SELECT id, title, description, status, protocol_version, created_at, closed_at FROM questionnaires WHERE id = %s"
     if lock:
         query += " FOR UPDATE"
     questionnaire = connection.execute(query, (questionnaire_id,)).fetchone()
@@ -83,7 +83,7 @@ def create_questionnaire(payload: QuestionnaireInput):
 def list_questionnaires():
     with connect_database() as connection:
         return connection.execute(
-            "SELECT id, title, description, status, protocol_version, created_at, access_token FROM questionnaires ORDER BY id"
+            "SELECT id, title, description, status, protocol_version, created_at FROM questionnaires ORDER BY id"
         ).fetchall()
 
 

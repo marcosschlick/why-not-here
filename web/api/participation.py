@@ -112,7 +112,7 @@ def activate_questionnaire(questionnaire_id: int):
             "UPDATE questionnaires SET status = 'active', access_token = %s, group_secret = %s WHERE id = %s",
             (token, secrets.token_hex(32), questionnaire_id),
         )
-        return {"status": "active", "access_token": token}
+        return {"status": "active"}
 
 
 @router.post("/questionnaires/{questionnaire_id}/close")
@@ -178,12 +178,18 @@ def public_state(questionnaire, questions, participation, submission_key):
     }
 
 
-@public_router.post("/participate/{token}/start")
-def start_participation(
-    token: str, payload: ParticipationStartInput, response: Response
-):
+@public_router.post("/participate/start")
+def start_participation(payload: ParticipationStartInput, response: Response):
     response.headers["Cache-Control"] = "no-store"
     with connect_database() as connection:
+        target = connection.execute(
+            "SELECT q.access_token FROM questionnaires q JOIN participation_keys k ON k.questionnaire_id = q.id "
+            "WHERE k.key = %s AND q.access_token IS NOT NULL",
+            (payload.key,),
+        ).fetchone()
+        if target is None:
+            raise HTTPException(status_code=401, detail="Invalid participation key")
+        token = target["access_token"]
         questionnaire = active_questionnaire(connection, token)
         existing = connection.execute(
             "SELECT participant_name, participant_email, participation_key FROM participations "
@@ -205,12 +211,6 @@ def start_participation(
                 raise HTTPException(
                     status_code=410, detail="This questionnaire is closed"
                 )
-            key = connection.execute(
-                "SELECT key FROM participation_keys WHERE questionnaire_id = %s AND key = %s FOR UPDATE",
-                (questionnaire["id"], payload.key),
-            ).fetchone()
-            if key is None:
-                raise HTTPException(status_code=401, detail="Invalid participation key")
             if connection.execute(
                 "SELECT 1 FROM participations WHERE questionnaire_id = %s AND participation_key = %s",
                 (questionnaire["id"], payload.key),
@@ -249,12 +249,15 @@ def start_participation(
         participation = participation_record(
             connection, questionnaire, payload.submission_key
         )
-        return public_state(
-            questionnaire,
-            read_questions(connection, questionnaire["id"]),
-            participation,
-            payload.submission_key,
-        )
+        return {
+            **public_state(
+                questionnaire,
+                read_questions(connection, questionnaire["id"]),
+                participation,
+                payload.submission_key,
+            ),
+            "access_token": token,
+        }
 
 
 @public_router.get("/participate/{token}")

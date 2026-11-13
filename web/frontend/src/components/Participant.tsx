@@ -126,31 +126,28 @@ function RouteOptions({
   );
 }
 
-export function Participant({
-  token = "",
-  preview,
-}: {
-  token?: string;
-  preview?: Preview;
-}) {
+export function Participant({ preview }: { preview?: Preview }) {
   const [session, setSession] = useState<{
     id: string;
     started: boolean;
+    token?: string;
   } | null>(() => {
     if (preview) return null;
     try {
       const saved = JSON.parse(
-        sessionStorage.getItem(`participation-session:${token}`) || "null",
+        sessionStorage.getItem("questionnaire-session") || "null",
       );
       return saved &&
         typeof saved.id === "string" &&
-        typeof saved.started === "boolean"
+        typeof saved.started === "boolean" &&
+        (!saved.started || typeof saved.token === "string")
         ? saved
         : null;
     } catch {
       return null;
     }
   });
+  const token = session?.token ?? "";
   const submissionKey = preview?.submissionKey ?? session?.id ?? "";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -262,29 +259,29 @@ export function Participant({
     setError("");
     try {
       const pending = session ?? { id: attemptKey(), started: false };
-      sessionStorage.setItem(
-        `participation-session:${token}`,
-        JSON.stringify(pending),
-      );
+      sessionStorage.setItem("questionnaire-session", JSON.stringify(pending));
       setSession(pending);
-      const response = await fetch(
-        `/api/participate/${encodeURIComponent(token)}/start`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name,
-            email,
-            key: individualKey,
-            submission_key: pending.id,
-          }),
-        },
-      );
+      const response = await fetch("/api/participate/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email,
+          key: individualKey,
+          submission_key: pending.id,
+        }),
+      });
       if (response.status === 410) setClosed(true);
-      const data = await readResponse<Study>(response);
-      const authenticated = { ...pending, started: true };
+      const data = await readResponse<Study & { access_token: string }>(
+        response,
+      );
+      const authenticated = {
+        ...pending,
+        started: true,
+        token: data.access_token,
+      };
       sessionStorage.setItem(
-        `participation-session:${token}`,
+        "questionnaire-session",
         JSON.stringify(authenticated),
       );
       setSession(authenticated);

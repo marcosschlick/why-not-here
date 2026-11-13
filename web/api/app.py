@@ -79,6 +79,11 @@ def get_output_artifact(filename: str, dir: str | None = None):
 
 frontend_dist = ROOT_DIR / "web" / "frontend" / "dist"
 if frontend_dist.exists():
+
+    @app.get("/questionnaire", include_in_schema=False)
+    def get_participant_page():
+        return FileResponse(str(frontend_dist / "index.html"))
+
     app.mount(
         "/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend"
     )

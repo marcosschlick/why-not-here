@@ -40,7 +40,6 @@ type Questionnaire = {
   title: string;
   description: string | null;
   status: string;
-  access_token?: string | null;
   questions: Question[];
   protocol: Protocol;
 };
@@ -63,13 +62,11 @@ type Scenario = {
     alternative_path?: Point[];
   };
 };
-function localParticipantLink(token: string): string {
-  const url = new URL(window.location.href);
-  url.hash = `/participate/${token}`;
-  return url.toString();
+function localParticipantLink(): string {
+  return new URL("/questionnaire", window.location.origin).toString();
 }
 
-function publicParticipantLink(token: string): string | null {
+function publicParticipantLink(): string | null {
   const base = import.meta.env.VITE_PUBLIC_BASE_URL;
   if (!base) return null;
   try {
@@ -82,11 +79,45 @@ function publicParticipantLink(token: string): string | null {
       url.hash
     )
       return null;
-    url.hash = `/participate/${token}`;
-    return url.toString();
+    return new URL("/questionnaire", url).toString();
   } catch {
     return null;
   }
+}
+
+function ParticipantLinkActions({
+  title,
+  url,
+  disabled,
+  onCopy,
+}: {
+  title: string;
+  url: string;
+  disabled: boolean;
+  onCopy: (url: string) => void;
+}) {
+  return (
+    <div className="qa-participant-link">
+      <h3>{title}</h3>
+      <div className="qa-actions">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+        >
+          Open questionnaire
+        </button>
+        <button
+          type="button"
+          className="qa-secondary"
+          disabled={disabled}
+          onClick={() => onCopy(url)}
+        >
+          Copy link
+        </button>
+      </div>
+    </div>
+  );
 }
 
 async function api<T>(
@@ -172,9 +203,9 @@ export function QuestionnaireAdmin({
 }) {
   const [list, setList] = useState<Summary[]>([]);
   const [selected, setSelected] = useState<Questionnaire | null>(null);
-  const publicLink = selected?.access_token
-    ? publicParticipantLink(selected.access_token)
-    : null;
+  const publicLink =
+    selected?.status === "active" ? publicParticipantLink() : null;
+  const [copyStatus, setCopyStatus] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(
     initialQuestionnaireId === null,
   );
@@ -355,6 +386,7 @@ export function QuestionnaireAdmin({
         await loadQuestionnaire(id, true);
         setSidebarOpen(false);
         sidebarToggleRef.current?.focus();
+        setCopyStatus("");
         setConfirmDelete(false);
         setPreview(false);
       }).finally(() => setSelecting(false));
@@ -364,6 +396,7 @@ export function QuestionnaireAdmin({
     if (busy) return;
     confirmDiscard(() => {
       setParticipationKeys([]);
+      setCopyStatus("");
       setConfirmDelete(false);
       setSelected(null);
       setTitle("");
@@ -387,6 +420,18 @@ export function QuestionnaireAdmin({
       await loadList();
       await loadQuestionnaire(item.id, true);
     });
+  }
+  async function copyParticipantLink(url: string) {
+    setError("");
+    setCopyStatus("");
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyStatus("Participant link copied.");
+    } catch {
+      setError(
+        "Unable to copy the participant link. Allow clipboard access and try again.",
+      );
+    }
   }
   function generateKeys(event: FormEvent) {
     event.preventDefault();
@@ -578,7 +623,7 @@ export function QuestionnaireAdmin({
             <span role="status" className="qa-visually-hidden">
               {busy && !selecting ? activity : ""}
             </span>
-            <section className="qa-panel">
+            <section className="qa-panel qa-details-panel">
               <div className="qa-heading">
                 <div>
                   <span className="qa-overline">
@@ -618,27 +663,29 @@ export function QuestionnaireAdmin({
                   Activate questionnaire
                 </button>
               )}
-              {selected?.status === "active" && selected.access_token && (
-                <>
-                  <label className="qa-form">
-                    Local participant link
-                    <input
-                      readOnly
-                      value={localParticipantLink(selected.access_token)}
-                      onFocus={(event) => event.currentTarget.select()}
-                    />
-                  </label>
+              {selected?.status === "active" && (
+                <section
+                  className="qa-control-group"
+                  aria-label="Participant access"
+                >
+                  <ParticipantLinkActions
+                    title="Local participation"
+                    url={localParticipantLink()}
+                    disabled={panelBusy}
+                    onCopy={(url) => void copyParticipantLink(url)}
+                  />
                   {publicLink && (
-                    <label className="qa-form">
-                      Public participant link
-                      <input
-                        readOnly
-                        value={publicLink}
-                        onFocus={(event) => event.currentTarget.select()}
-                      />
-                    </label>
+                    <ParticipantLinkActions
+                      title="Public participation"
+                      url={publicLink}
+                      disabled={panelBusy}
+                      onCopy={(url) => void copyParticipantLink(url)}
+                    />
                   )}
-                </>
+                  <p className="qa-muted" role="status">
+                    {copyStatus}
+                  </p>
+                </section>
               )}
               {selected?.status === "active" && (
                 <button
@@ -668,7 +715,10 @@ export function QuestionnaireAdmin({
                 </button>
               )}
               {selected && (
-                <section aria-label="Individual participation keys">
+                <section
+                  className="qa-control-group"
+                  aria-label="Individual participation keys"
+                >
                   <h3>Individual participation keys</h3>
                   <p className="qa-muted">
                     Give one key to each participant. Starting consumes the key
@@ -676,7 +726,10 @@ export function QuestionnaireAdmin({
                     can resume only in the same browser tab.
                   </p>
                   {selected.status !== "closed" && (
-                    <form onSubmit={generateKeys} className="qa-form">
+                    <form
+                      onSubmit={generateKeys}
+                      className="qa-form qa-key-generation"
+                    >
                       <label>
                         Number of keys
                         <input
