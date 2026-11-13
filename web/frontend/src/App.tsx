@@ -77,7 +77,6 @@ export function App() {
     null,
   );
   const [adminScenario, setAdminScenario] = useState<number | null>(null);
-  const [questionnaireTitle, setQuestionnaireTitle] = useState("");
   const [scenarioTitle, setScenarioTitle] = useState("");
   const [savingScenario, setSavingScenario] = useState(false);
   const [scenarioConfigDirty, setScenarioConfigDirty] = useState(false);
@@ -172,7 +171,7 @@ export function App() {
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [mapData, queue.length, scenarioConfigDirty]);
 
-  function startScenario(id: number, title: string) {
+  function startScenario(id: number, _title: string) {
     setSimulationSnapshot({
       map: mapData,
       path: userPath,
@@ -191,7 +190,6 @@ export function App() {
     setSingleOutput(undefined);
     setPendingConfiguration(null);
     setScenarioQuestionnaire(id);
-    setQuestionnaireTitle(title);
     setScenarioQueue([]);
     setAdminQuestionnaire(id);
     setAdminScenario(null);
@@ -1175,14 +1173,6 @@ export function App() {
       />
 
       <main className="main-content-wrapper">
-        <div className="queue-banner" role="status">
-          <span className="alert-text">
-            Destination:{" "}
-            {scenarioQuestionnaire !== null
-              ? `Questionnaire: ${questionnaireTitle}`
-              : "Simulation"}
-          </span>
-        </div>
         {errorMessage && (
           <div className="alert-banner">
             <span className="alert-icon">&times;</span>
@@ -1612,22 +1602,6 @@ export function App() {
                 )}
                 {queue[activeBatchResultIndex].scenarioId && (
                   <p role="status">Saved to questionnaire</p>
-                )}
-                {queue[activeBatchResultIndex].status === "failed" && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => {
-                      const item = queue[activeBatchResultIndex];
-                      if (!item.mapData) return;
-                      setBatchReviewIndex(activeBatchResultIndex);
-                      setMapData(item.mapData);
-                      setUserPath(item.userPath ?? item.mapData.auto_path);
-                      setCurrentStep("route_canvas");
-                    }}
-                  >
-                    Review route and retry
-                  </button>
                 )}
                 {scenarioQuestionnaire !== null && (
                   <form onSubmit={saveScenario}>
