@@ -139,7 +139,7 @@ def normalized_answer(kind, value):
         except ValidationError as error:
             raise HTTPException(
                 status_code=422,
-                detail="Choose a route, enter confidence from 0 to 100, and provide a reason of up to 1000 characters",
+                detail="Choose a route, select an integer confidence from 0 to 100, and provide a reason of 20 to 1000 characters",
             ) from error
     if kind == "likert" and type(value) is int and 1 <= value <= 5:
         return value

@@ -38,8 +38,9 @@ silently drops or converts existing tables.
 There are seventeen content steps and a final submission action:
 
 1. For each of three scenarios, participants choose the route they consider
-   faster, enter confidence from 0 to 100, and explain their choice in at most
-   1,000 characters. No value is preselected. All three fields are required and
+   faster, select an integer confidence from 0 to 100, and explain their choice
+   in 20 to 1,000 characters, excluding surrounding whitespace. No value is
+   preselected. All three fields are required and
    saved together as `{choice, confidence, reason}`. `choice` is the displayed
    route index (0 for A, 1 for B).
 2. After each assessment is saved, its explanation is shown on a separate step.

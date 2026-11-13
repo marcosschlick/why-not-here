@@ -39,9 +39,9 @@ class RouteAssessment(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     choice: int = Field(strict=True, ge=0, le=1)
-    confidence: float = Field(strict=True, ge=0, le=100)
+    confidence: int = Field(strict=True, ge=0, le=100)
     reason: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)
+        str, StringConstraints(strip_whitespace=True, min_length=20, max_length=1000)
     ]
 
 

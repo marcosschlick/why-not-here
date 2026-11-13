@@ -142,7 +142,7 @@ export function Participant({
   });
   const [study, setStudy] = useState<Study | null>(null);
   const [choice, setChoice] = useState<number | null>(null);
-  const [confidence, setConfidence] = useState("");
+  const [confidence, setConfidence] = useState<number | null>(null);
   const [reason, setReason] = useState("");
   const [rating, setRating] = useState<number | null>(null);
   const [attempted, setAttempted] = useState(false);
@@ -232,7 +232,7 @@ export function Participant({
   function accept(data: Study) {
     setStudy(data);
     setChoice(null);
-    setConfidence("");
+    setConfidence(null);
     setReason("");
     setRating(null);
     setAttempted(false);
@@ -246,22 +246,16 @@ export function Participant({
     setError("");
     let value: unknown = null;
     if (step?.type === "route_assessment") {
-      const number = Number(confidence);
+      const reasonLength = Array.from(reason.trim()).length;
       if (
         choice === null ||
-        confidence.trim() === "" ||
-        !Number.isFinite(number) ||
-        number < 0 ||
-        number > 100 ||
-        !reason.trim() ||
-        reason.trim().length > 1000
+        confidence === null ||
+        reasonLength < 20 ||
+        reasonLength > 1000
       ) {
-        setError(
-          "Choose a route, enter confidence from 0 to 100, and explain your choice.",
-        );
         return;
       }
-      value = { choice, confidence: number, reason: reason.trim() };
+      value = { choice, confidence, reason: reason.trim() };
     } else if (step?.type === "route_prediction") {
       if (choice === null) {
         setError("Choose a route before continuing.");
@@ -270,7 +264,6 @@ export function Participant({
       value = choice;
     } else if (step?.type === "likert") {
       if (rating === null) {
-        setError("Select a rating before continuing.");
         return;
       }
       value = rating;
@@ -331,14 +324,9 @@ export function Participant({
       : step.type === "route_prediction"
         ? `Prediction ${step.scenario_number} of 3`
         : `${step.type === "explanation" ? "Explanation" : "Route selection"} ${step.scenario_number} of 3`;
-  const invalidConfidence =
-    attempted &&
-    (confidence.trim() === "" ||
-      !Number.isFinite(Number(confidence)) ||
-      Number(confidence) < 0 ||
-      Number(confidence) > 100);
-  const invalidReason =
-    attempted && (!reason.trim() || reason.trim().length > 1000);
+  const invalidConfidence = attempted && confidence === null;
+  const reasonLength = Array.from(reason.trim()).length;
+  const invalidReason = attempted && (reasonLength < 20 || reasonLength > 1000);
   return (
     <div className={`qa-app ${preview ? "qa-preview-app" : ""}`}>
       {!preview && (
@@ -448,60 +436,96 @@ export function Participant({
                     )}
                   {step?.type === "route_assessment" && (
                     <div className="qa-form qa-assessment-fields">
-                      <label htmlFor="confidence">
-                        Confidence in your choice (0 to 100)
-                        <input
-                          id="confidence"
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="any"
-                          required
-                          value={confidence}
-                          onChange={(event) =>
-                            setConfidence(event.target.value)
-                          }
-                          aria-invalid={invalidConfidence}
-                          aria-describedby={
-                            invalidConfidence
-                              ? "confidence-help confidence-error"
-                              : "confidence-help"
-                          }
-                        />
-                      </label>
-                      <p id="confidence-help" className="qa-muted">
-                        0 means no confidence; 100 means complete confidence.
-                      </p>
-                      {invalidConfidence && (
-                        <p id="confidence-error" className="qa-field-error">
-                          Enter a number from 0 to 100.
+                      <div className="qa-assessment-field">
+                        <label htmlFor="confidence">
+                          Confidence in your choice (0 to 100)
+                          <span className="qa-confidence-value">
+                            {confidence === null ? "Not selected" : confidence}
+                          </span>
+                          <input
+                            id="confidence"
+                            className="qa-confidence-slider"
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={confidence ?? 50}
+                            onChange={(event) =>
+                              setConfidence(Number(event.target.value))
+                            }
+                            onPointerUp={(event) =>
+                              setConfidence(Number(event.currentTarget.value))
+                            }
+                            onKeyUp={(event) => {
+                              if (
+                                [
+                                  "ArrowLeft",
+                                  "ArrowRight",
+                                  "ArrowUp",
+                                  "ArrowDown",
+                                  "Home",
+                                  "End",
+                                  "PageUp",
+                                  "PageDown",
+                                ].includes(event.key)
+                              )
+                                setConfidence(
+                                  Number(event.currentTarget.value),
+                                );
+                            }}
+                            aria-invalid={invalidConfidence}
+                            aria-required="true"
+                            aria-valuetext={
+                              confidence === null ? "Not selected" : undefined
+                            }
+                            aria-describedby={
+                              invalidConfidence
+                                ? "confidence-help confidence-error"
+                                : "confidence-help"
+                            }
+                          />
+                        </label>
+                        <p id="confidence-help" className="qa-muted">
+                          0 means no confidence; 100 means complete confidence.
                         </p>
-                      )}
-                      <label htmlFor="reason">
-                        Why did you choose this route?
-                        <textarea
-                          id="reason"
-                          rows={4}
-                          required
-                          maxLength={1000}
-                          value={reason}
-                          onChange={(event) => setReason(event.target.value)}
-                          aria-invalid={invalidReason}
-                          aria-describedby={
-                            invalidReason
-                              ? "reason-count reason-error"
-                              : "reason-count"
-                          }
-                        />
-                      </label>
-                      {invalidReason && (
-                        <p id="reason-error" className="qa-field-error">
-                          Explain your choice in 1 to 1000 characters.
-                        </p>
-                      )}
-                      <span id="reason-count" className="qa-text-counter">
-                        {reason.length} / 1000
-                      </span>
+                        {invalidConfidence && (
+                          <p id="confidence-error" className="qa-field-error">
+                            Select your confidence level.
+                          </p>
+                        )}
+                      </div>
+                      <div className="qa-assessment-field">
+                        <label htmlFor="reason">
+                          Why did you choose this route?
+                          <textarea
+                            id="reason"
+                            rows={4}
+                            required
+                            value={reason}
+                            onChange={(event) =>
+                              setReason(
+                                Array.from(event.target.value)
+                                  .slice(0, 1000)
+                                  .join(""),
+                              )
+                            }
+                            aria-invalid={invalidReason}
+                            aria-describedby={
+                              invalidReason
+                                ? "reason-count reason-error"
+                                : "reason-count"
+                            }
+                          />
+                        </label>
+                        {invalidReason && (
+                          <p id="reason-error" className="qa-field-error">
+                            Enter at least 20 characters.
+                          </p>
+                        )}
+                        <span id="reason-count" className="qa-text-counter">
+                          {reasonLength} / 1000 characters (minimum 20)
+                        </span>
+                      </div>
                     </div>
                   )}
                   {step?.type === "likert" && (

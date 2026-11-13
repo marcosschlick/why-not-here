@@ -323,6 +323,17 @@
 .qa-app textarea {
   resize: none;
 }
+.qa-app input.qa-confidence-slider {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--azure-blue);
+  cursor: pointer;
+}
+.qa-confidence-value {
+  color: var(--text-strong);
+  font-size: 1rem;
+}
 .qa-fields {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr));
@@ -574,11 +585,23 @@
 }
 .qa-assessment-fields {
   width: 100%;
-  max-width: 44rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   margin-bottom: 1.5rem;
+}
+.qa-assessment-field {
+  display: grid;
+  gap: 0.65rem;
+  width: 100%;
+  min-width: 0;
 }
 .qa-assessment-fields p {
   margin: 0;
+}
+@media (max-width: 760px) {
+  .qa-assessment-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .qa-instrument-details {
   margin-top: 1rem;
@@ -594,7 +617,8 @@
 }
 .qa-field-error {
   color: var(--text-danger);
-  font-size: 0.88rem;
+  font-size: 0.74rem;
+  font-weight: 650;
 }
 @media (hover: hover) and (pointer: fine) {
   .qa-participant button {
