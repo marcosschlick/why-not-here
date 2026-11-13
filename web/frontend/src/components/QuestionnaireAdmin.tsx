@@ -508,7 +508,9 @@ export function QuestionnaireAdmin({
               aria-controls="questionnaire-sidebar"
               onClick={() => setSidebarOpen(!sidebarOpen)}
             >
-              <span aria-hidden="true">{sidebarOpen ? "‹" : "›"}</span>
+              <span className="qa-sidebar-toggle-icon" aria-hidden="true">
+                {sidebarOpen ? "‹" : "›"}
+              </span>
             </button>
             <div className="qa-sidebar-content" inert={!sidebarOpen}>
               <div className="qa-side-header">
@@ -543,6 +545,9 @@ export function QuestionnaireAdmin({
                     <button
                       className={`qa-list-item ${selected?.id === item.id ? "is-active" : ""}`}
                       key={item.id}
+                      aria-current={
+                        selected?.id === item.id ? "page" : undefined
+                      }
                       onClick={() => select(item.id)}
                       disabled={busy && !selecting}
                       aria-disabled={busy}
