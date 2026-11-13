@@ -7,5 +7,4 @@ Pillow
 fastapi
 psycopg[binary]
 uvicorn
-PyQt6
 ruff

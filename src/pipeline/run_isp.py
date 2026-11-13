@@ -10,6 +10,7 @@ from src.incremental import (
 )
 from src.isp.precheck import validate_alternative_path
 from src.isp.solver import ISPSolver
+from src.pipeline.storage import get_output_directory
 from src.planning import plan_path
 from src.reduction import create_reduced_graph
 from src.visual.plotter import render_tactical_map
@@ -80,7 +81,7 @@ def run_isp(
     start: tuple[int, int] | None = None,
     goal: tuple[int, int] | None = None,
 ) -> ClosedLoopResult | None:
-    map_dir = get_project_path(config.OUTPUT_DIR) / MAP_DIRECTORY_NAME
+    map_dir = get_project_path(get_output_directory()) / MAP_DIRECTORY_NAME
     map_json_path = map_dir / MAP_DATA_FILENAME
     log_lines = []
 
@@ -243,7 +244,7 @@ def run_isp(
         )
 
     isp_result.path_metrics = path_metrics
-    out_dir = get_project_path(config.OUTPUT_DIR)
+    out_dir = get_project_path(get_output_directory())
     results_dir = out_dir / RESULTS_DIRECTORY_NAME
     results_dir.mkdir(parents=True, exist_ok=False)
 

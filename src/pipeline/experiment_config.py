@@ -13,10 +13,11 @@ from src.pipeline.generate_map import generate_map
 from src.pipeline.run_isp import run_isp
 from src.pipeline.storage import (
     available_path,
-    reserve_configured_output,
-    storage_directory,
-    validate_name,
+    experiment_name,
+    reserve_output_directory,
+    set_output_directory,
 )
+from src.pipeline.utils import get_project_path
 
 CONFIG_REGISTRY = {
     "MAP_W": "config_grid.py",
@@ -49,7 +50,6 @@ CONFIG_REGISTRY = {
     "MAX_ISP_ITERATIONS": "config_incremental.py",
     "CLOSED_LOOP_TIMEOUT_SEC": "config_incremental.py",
     "INCREMENTAL_ASTAR_SCOPE": "config_incremental.py",
-    "OUTPUT_DIR": "config_storage.py",
 }
 
 FIXED_TERRAIN_CONFIG_KEYS = frozenset(
@@ -157,9 +157,6 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
         if value < 1:
             raise ValueError(f"{key} must be greater than zero.")
         candidate[key] = value
-
-    if not isinstance(candidate["OUTPUT_DIR"], str):
-        raise TypeError("OUTPUT_DIR must be a string.")
 
     component_ratio = float(candidate["MAP_MIN_MAIN_COMPONENT_RATIO"])
     if not math.isfinite(component_ratio) or not 0.0 < component_ratio <= 1.0:
@@ -372,56 +369,48 @@ def build_experiment_config(
     return export_dict
 
 
-def save_experiment_configurations(
-    destination_dir: str | Path,
-    configurations: list[dict[str, Any]],
-) -> list[str]:
+def save_experiment_configurations(configurations: list[dict[str, Any]]) -> list[str]:
     if not configurations:
         raise ValueError("At least one configuration is required.")
-    destination = storage_directory(destination_dir or "configurations")
-    prepared: list[tuple[str, bool, str]] = []
-    manual_names: set[str] = set()
+    destination = get_project_path("configurations")
+    destination.mkdir(parents=True, exist_ok=True)
+    prepared = []
     for item in configurations:
-        name = str(item.get("name", "")).strip()
-        if name.lower().endswith(".json"):
-            name = name[:-5]
-        name = validate_name(name)
-        automatic = bool(item.get("automatic_name", False))
-        if not automatic:
-            if name.casefold() in manual_names:
-                raise ValueError(f"Duplicate configuration name: {name}")
-            manual_names.add(name.casefold())
-            available_path(destination, name, False, ".json")
         export_data = build_experiment_config(
             config_dict=item.get("config") or {},
             start=item.get("start"),
             goal=item.get("goal"),
             user_path=item.get("user_path"),
         )
-        validate_experiment_config(export_data)
-        prepared.append((name, automatic, json.dumps(export_data, indent=2) + "\n"))
+        params, _, _, _ = validate_experiment_config(export_data)
+        name = experiment_name(
+            params["MAP_H"],
+            params["MAP_W"],
+            (item.get("naming") or {}).get("map_index"),
+            (item.get("naming") or {}).get("benchmark", False),
+            params["USE_INCREMENTAL_SOLVER"],
+            params["DEFAULT_REDUCTION_METHOD"],
+        )
+        prepared.append((name, json.dumps(export_data, indent=2) + "\n"))
 
-    created_paths: dict[int, Path] = {}
+    created_paths = []
     try:
-        for index, (name, automatic, content) in sorted(
-            enumerate(prepared), key=lambda entry: entry[1][1]
-        ):
+        for name, content in prepared:
             while True:
-                target = available_path(destination, name, automatic, ".json")
+                target = available_path(destination, name, ".json")
                 try:
                     config_file = target.open("x", encoding="utf-8")
                     break
                 except FileExistsError:
-                    if not automatic:
-                        raise
-            created_paths[index] = target
+                    continue
+            created_paths.append(target)
             with config_file:
                 config_file.write(content)
     except OSError:
-        for target in created_paths.values():
+        for target in created_paths:
             target.unlink(missing_ok=True)
         raise
-    return [str(created_paths[index]) for index in range(len(prepared))]
+    return [str(target) for target in created_paths]
 
 
 def validate_experiment_config(
@@ -561,10 +550,7 @@ def execute_experiment(
     if verbose:
         print(f"Applying configuration for seed={params.get('MAP_DEFAULT_SEED')}...")
 
-    output_dir = reserve_configured_output(
-        params["MAP_H"], params["MAP_W"], params["OUTPUT_DIR"]
-    )
-    params["OUTPUT_DIR"] = str(output_dir)
+    set_output_directory(reserve_output_directory(params["MAP_H"], params["MAP_W"]))
     apply_experiment_config(params, start=start, goal=goal)
 
     generate_map(verbose=verbose)

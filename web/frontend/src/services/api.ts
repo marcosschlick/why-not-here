@@ -2,7 +2,7 @@ import type {
   ImportConfigResponse,
   MapData,
   MapProfile,
-  OutputTarget,
+  NamingMetadata,
   SaveConfigurationsPayload,
   SolveResponse,
   SystemConfig,
@@ -48,7 +48,7 @@ export async function solveISP(
   start?: [number, number],
   goal?: [number, number],
   map?: Record<string, unknown>,
-  output?: OutputTarget,
+  naming?: NamingMetadata,
 ): Promise<SolveResponse> {
   const response = await fetch("/api/isp/solve", {
     method: "POST",
@@ -61,7 +61,7 @@ export async function solveISP(
       config: config || null,
       start,
       goal,
-      output,
+      naming,
     }),
   });
   if (!response.ok) {
@@ -72,25 +72,6 @@ export async function solveISP(
     );
   }
   return response.json();
-}
-
-export async function browseDirectory(): Promise<string | null> {
-  try {
-    const response = await fetch("/api/browse", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({}),
-    });
-    if (!response.ok) {
-      return null;
-    }
-    const data = await response.json();
-    return data.path || null;
-  } catch {
-    return null;
-  }
 }
 
 export async function saveConfigurations(

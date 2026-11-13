@@ -5,5 +5,4 @@ from .config_map import *
 from .config_planning import *
 from .config_reduction import *
 from .config_solver import *
-from .config_storage import *
 from .config_terrain import *

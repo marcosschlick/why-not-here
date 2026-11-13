@@ -14,6 +14,7 @@ if str(ROOT_DIR) not in sys.path:
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+from src.pipeline.storage import get_output_directory
 from src.pipeline.utils import get_project_path
 from web.api.database import initialize_database
 from web.api.exports import router as exports_router
@@ -67,12 +68,10 @@ app.include_router(exports_router)
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
-from src import config
-
 
 @app.get("/output/{filename:path}")
 def get_output_artifact(filename: str, dir: str | None = None):
-    output_directory = get_project_path(config.OUTPUT_DIR if dir is None else dir)
+    output_directory = get_project_path(get_output_directory() if dir is None else dir)
     artifact_path = output_directory / filename
     if artifact_path.exists() and artifact_path.is_file():
         return FileResponse(str(artifact_path))

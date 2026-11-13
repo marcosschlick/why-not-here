@@ -2,7 +2,6 @@ import type { QueueItem } from "../types";
 
 interface QueuePanelProps {
   scenarioMode?: boolean;
-  configurationDestination: string;
   queue: QueueItem[];
   workflowMode: "run" | "create";
   currentIndex: number;
@@ -17,7 +16,6 @@ interface QueuePanelProps {
 
 export function QueuePanel({
   scenarioMode = false,
-  configurationDestination,
   queue,
   workflowMode,
   currentIndex,
@@ -36,7 +34,7 @@ export function QueuePanel({
           {scenarioMode
             ? "The scenario queue is empty. Add or import configurations above, then review routes and process the queue."
             : workflowMode === "create"
-              ? "The configuration queue is empty. Configure the parameters above and add named configurations to the batch."
+              ? "The configuration queue is empty. Configure the parameters above and add configurations to the batch."
               : "The execution queue is empty. Configure the parameters above and click + Add to Queue to enqueue batch configurations."}
         </p>
       </div>
@@ -64,7 +62,7 @@ export function QueuePanel({
             {scenarioMode
               ? "Review each map and route, then solve and save successful scenarios to the questionnaire."
               : workflowMode === "create"
-                ? "Review each route, then save the named configuration files."
+                ? "Review each route, then save the configuration files."
                 : "Sequential pipeline execution across parameterized runs."}
           </p>
         </div>
@@ -174,11 +172,6 @@ export function QueuePanel({
                 {scenarioMode && (
                   <span className="param-tag">Name: {item.scenarioTitle}</span>
                 )}
-                {!scenarioMode && item.configurationName && (
-                  <span className="param-tag">
-                    Name: {item.configurationName}
-                  </span>
-                )}
                 <span className="param-tag">
                   {item.config.MAP_H}x{item.config.MAP_W}
                 </span>
@@ -193,12 +186,12 @@ export function QueuePanel({
                     ? "Incremental"
                     : "Monolithic"}
                 </span>
-                <span className="param-tag">
-                  Dir:{" "}
-                  {workflowMode === "create"
-                    ? `${configurationDestination}/${item.configurationName}.json`
-                    : item.config.OUTPUT_DIR}
-                </span>
+                {item.outputDir && (
+                  <span className="param-tag">Dir: {item.outputDir}</span>
+                )}
+                {item.savedFile && (
+                  <span className="param-tag">Saved: {item.savedFile}</span>
+                )}
               </div>
 
               {item.result && (

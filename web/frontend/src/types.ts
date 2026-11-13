@@ -45,7 +45,6 @@ export interface SystemConfig {
   CONNECTIVITY: number;
   DEFAULT_REDUCTION_METHOD: string;
   USE_INCREMENTAL_SOLVER: boolean;
-  OUTPUT_DIR: string;
   MAP_DEFAULT_SEED: number;
   DEFAULT_PLANNER?: string;
   DEFAULT_SOLVER?: string;
@@ -155,17 +154,17 @@ export interface SolveResponse {
   output_dir: string;
 }
 
-export interface OutputTarget {
-  directory: string;
-  name: string;
-  automatic_name: boolean;
+export interface NamingMetadata {
+  map_index?: number;
+  benchmark?: boolean;
 }
 
 export interface QueueItem {
   id: string;
   config: SystemConfig;
-  configurationName?: string;
-  output?: OutputTarget;
+  savedFile?: string;
+  outputDir?: string;
+  naming?: NamingMetadata;
   benchmarkGroup?: string;
   scenarioTitle?: string;
   scenarioId?: number;
@@ -192,12 +191,10 @@ export interface ExportConfigPayload {
 }
 
 export interface SaveConfigurationItem extends ExportConfigPayload {
-  name: string;
-  automatic_name: boolean;
+  naming?: NamingMetadata;
 }
 
 export interface SaveConfigurationsPayload {
-  destination_dir: string;
   configurations: SaveConfigurationItem[];
 }
 

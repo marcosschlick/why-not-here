@@ -1,20 +1,13 @@
-import type { MapData, OutputTarget, QueueItem, SystemConfig } from "../types";
-
-export function experimentName(height: number, width: number): string {
-  const now = new Date();
-  const pad = (value: number) => String(value).padStart(2, "0");
-  const date = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-  const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  return `experiment-${height}x${width}-${date}-${time}`;
-}
-
-export function outputPath(output: OutputTarget): string {
-  return `${output.directory.replace(/[\\/]+$/, "")}/${output.name}`;
-}
+import type {
+  MapData,
+  NamingMetadata,
+  QueueItem,
+  SystemConfig,
+} from "../types";
 
 export function createExperimentItems(
   config: SystemConfig,
-  output: OutputTarget,
+  naming: NamingMetadata,
   benchmark: boolean,
   mapData?: MapData,
   userPath?: [number, number][],
@@ -33,23 +26,15 @@ export function createExperimentItems(
         },
       ];
   return variants.map(({ incremental, reduction }, index) => {
-    const target = {
-      ...output,
-      name: benchmark
-        ? `${output.name}-${incremental ? "incremental" : "monolithic"}-${reduction.toLowerCase()}`
-        : output.name,
-    };
     const parameters = {
       ...config,
       USE_INCREMENTAL_SOLVER: incremental,
       DEFAULT_REDUCTION_METHOD: reduction,
-      OUTPUT_DIR: outputPath(target),
     };
     return {
       id: `${group}-${index}`,
       benchmarkGroup: benchmark ? group : undefined,
-      output: target,
-      configurationName: target.name,
+      naming: { ...naming, benchmark },
       config: parameters,
       mapData: mapData ? { ...mapData, config: parameters } : undefined,
       userPath,

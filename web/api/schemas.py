@@ -3,15 +3,17 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class OutputTarget(BaseModel):
-    directory: str = "results"
-    name: str | None = None
-    automatic_name: bool = True
+class NamingMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    map_index: int | None = Field(default=None, ge=1)
+    benchmark: bool = False
 
 
 class RunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     runs: int = Field(default=1, ge=1)
-    output: OutputTarget = Field(default_factory=OutputTarget)
 
 
 class GenerateMapRequest(BaseModel):
@@ -24,7 +26,6 @@ class GenerateMapRequest(BaseModel):
     DEFAULT_REDUCTION_METHOD: str = Field(default="NONE")
     USE_INCREMENTAL_SOLVER: bool = Field(default=False)
     INCREMENTAL_ASTAR_SCOPE: str = Field(default="GLOBAL")
-    OUTPUT_DIR: str = Field(default="results")
     MAP_DEFAULT_SEED: int | None = Field(default=None)
     MAP_ELEVATION_SCALE: float | None = Field(default=None, gt=0)
     MAP_ELEVATION_FREQ: float | None = Field(default=None, gt=0)
@@ -43,14 +44,14 @@ class GenerateMapRequest(BaseModel):
 
 
 class SolveISPRequest(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     user_path: list[tuple[int, int]] | None = None
     map: dict[str, Any] | None = None
     config: dict[str, Any] | None = None
     start: tuple[int, int] | None = None
     goal: tuple[int, int] | None = None
-    output: OutputTarget | None = None
+    naming: NamingMetadata | None = None
 
 
 class SemanticModificationsData(BaseModel):
@@ -72,7 +73,7 @@ class SemanticModificationsData(BaseModel):
 
 
 class ExportConfigRequest(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     config: dict[str, Any] | None = None
     start: tuple[int, int]
@@ -81,8 +82,9 @@ class ExportConfigRequest(BaseModel):
 
 
 class SaveConfigItem(BaseModel):
-    name: str
-    automatic_name: bool = False
+    model_config = ConfigDict(extra="forbid")
+
+    naming: NamingMetadata | None = None
     config: dict[str, Any] | None = None
     start: tuple[int, int]
     goal: tuple[int, int]
@@ -90,7 +92,8 @@ class SaveConfigItem(BaseModel):
 
 
 class SaveConfigurationsRequest(BaseModel):
-    destination_dir: str = "configurations"
+    model_config = ConfigDict(extra="forbid")
+
     configurations: list[SaveConfigItem] = Field(min_length=1)
 
 
@@ -101,7 +104,3 @@ class ImportConfigRequest(BaseModel):
     goal: tuple[int, int]
     p_user: list[tuple[int, int]] = Field(min_length=1)
     persist_artifacts: bool = True
-
-
-class BrowseRequest(BaseModel):
-    title: str | None = None

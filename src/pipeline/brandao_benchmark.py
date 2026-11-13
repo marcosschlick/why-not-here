@@ -5,6 +5,7 @@ from pathlib import Path
 from src import config
 from src.grid.grid import Grid
 from src.incremental import ISPValidator, solve_closed_loop, validate_alternative_path
+from src.pipeline.storage import get_output_directory
 from src.planning.astar import astar
 
 from .artifact_names import (
@@ -92,11 +93,11 @@ def run_brandao_benchmark(map_path: str | Path | None = None) -> Path:
     resolved_map_path = (
         Path(map_path).expanduser().resolve()
         if map_path is not None
-        else get_project_path(config.OUTPUT_DIR)
+        else get_project_path(get_output_directory())
         / MAP_DIRECTORY_NAME
         / MAP_DATA_FILENAME
     )
-    results_dir = get_project_path(config.OUTPUT_DIR) / RESULTS_DIRECTORY_NAME
+    results_dir = get_project_path(get_output_directory()) / RESULTS_DIRECTORY_NAME
     results_dir.mkdir(parents=True, exist_ok=True)
     log_path = results_dir / BENCHMARK_LOG_FILENAME
     log_lines = [
@@ -117,7 +118,9 @@ def run_brandao_benchmark(map_path: str | Path | None = None) -> Path:
         profile = create_two_terrain_profile(grid)
         optimal_path, optimal_cost, _ = astar(profile, start, goal)
         if not optimal_path:
-            log_lines.append("Benchmark skipped: no traversable A* route exists in the two-terrain profile.")
+            log_lines.append(
+                "Benchmark skipped: no traversable A* route exists in the two-terrain profile."
+            )
             log_path.write_text("\n".join(log_lines) + "\n", encoding="utf-8")
             print(f"Benchmark skipped. Details saved to '{log_path}'.")
             return log_path
@@ -174,8 +177,7 @@ def run_brandao_benchmark(map_path: str | Path | None = None) -> Path:
                 for metric in result.iteration_metrics
             )
             completed = sum(
-                bool(metric.get("completed"))
-                for metric in result.iteration_metrics
+                bool(metric.get("completed")) for metric in result.iteration_metrics
             )
             log_lines.append(
                 f"Incremental diagnostics: {attempts} solver attempts, {completed} completed iterations"

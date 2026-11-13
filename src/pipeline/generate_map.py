@@ -1,6 +1,7 @@
 from src import config
 from src.grid.grid import Grid
 from src.map.generator import generate_map as create_map
+from src.pipeline.storage import get_output_directory
 from src.visual.plotter import render_tactical_map
 
 from .artifact_names import MAP_DATA_FILENAME, MAP_DIRECTORY_NAME, MAP_IMAGE_FILENAME
@@ -41,7 +42,7 @@ def persist_map(
     verbose: bool = False,
 ) -> None:
     start, goal = prepare_endpoints(grid, start=start, goal=goal)
-    map_dir = get_project_path(config.OUTPUT_DIR) / MAP_DIRECTORY_NAME
+    map_dir = get_project_path(get_output_directory()) / MAP_DIRECTORY_NAME
     map_dir.mkdir(parents=True, exist_ok=False)
     map_json_path = map_dir / MAP_DATA_FILENAME
     grid.save(map_json_path)

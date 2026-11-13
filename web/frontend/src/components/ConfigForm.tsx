@@ -1,12 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchMapProfiles, browseDirectory } from "../services/api";
-import { experimentName } from "../utils/experiments";
-import type {
-  MapProfile,
-  OutputTarget,
-  QueueItem,
-  SystemConfig,
-} from "../types";
+import { fetchMapProfiles } from "../services/api";
+import type { MapProfile, SystemConfig } from "../types";
 
 interface ConfigFormProps {
   scenarioMode?: boolean;
@@ -16,30 +10,12 @@ interface ConfigFormProps {
   onConfigChange?: () => void;
   onDraftChange: (config: SystemConfig) => void;
   initialConfig: SystemConfig | null;
-  onGenerateMap: (
-    config: SystemConfig,
-    output: OutputTarget,
-    benchmark: boolean,
-  ) => void;
-  onAddToQueue: (
-    config: SystemConfig,
-    output: OutputTarget,
-    benchmark: boolean,
-  ) => void;
-  onAddBatch: (
-    config: SystemConfig,
-    count: number,
-    output: OutputTarget,
-    benchmark: boolean,
-  ) => void;
-  onImportConfig?: (
-    data: Record<string, unknown>,
-    output: OutputTarget,
-    benchmark: boolean,
-  ) => void;
+  onGenerateMap: (config: SystemConfig, benchmark: boolean) => void;
+  onAddToQueue: (config: SystemConfig, benchmark: boolean) => void;
+  onAddBatch: (config: SystemConfig, count: number, benchmark: boolean) => void;
+  onImportConfig?: (data: Record<string, unknown>, benchmark: boolean) => void;
   onImportBatchConfigs?: (
     configs: { name: string; data: Record<string, unknown> }[],
-    output: OutputTarget,
     benchmark: boolean,
   ) => void;
   isGenerating: boolean;
@@ -48,13 +24,6 @@ interface ConfigFormProps {
   activeMode: "individual" | "queue";
   onSwitchMode: (mode: "individual" | "queue") => void;
   queueCount: number;
-  queue?: QueueItem[];
-  outputDir: string;
-  onOutputDirChange: (path: string) => void;
-  configurationName: string;
-  onConfigurationNameChange: (name: string) => void;
-  configurationDestination: string;
-  onConfigurationDestinationChange: (path: string) => void;
 }
 
 export function ConfigForm({
@@ -76,13 +45,6 @@ export function ConfigForm({
   activeMode,
   onSwitchMode,
   queueCount,
-  queue,
-  outputDir,
-  onOutputDirChange: setOutputDir,
-  configurationName,
-  onConfigurationNameChange,
-  configurationDestination,
-  onConfigurationDestinationChange,
 }: ConfigFormProps) {
   const [batchCount, setBatchCount] = useState(2);
   const [mapSizes, setMapSizes] = useState<MapProfile[]>([]);
@@ -111,15 +73,9 @@ export function ConfigForm({
   const [useIncremental, setUseIncremental] = useState<boolean>(
     initialConfig?.USE_INCREMENTAL_SOLVER ?? false,
   );
-  const [outputDirError, setOutputDirError] = useState<string | null>(null);
-  const [isBrowsing, setIsBrowsing] = useState<boolean>(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const isConfigurationNameError = Boolean(
-    outputDirError?.startsWith("Configuration name"),
-  );
-  const isOutputDirectoryError = Boolean(
-    outputDirError && !isConfigurationNameError,
-  );
 
   const [planner, setPlanner] = useState<string>(
     initialConfig?.DEFAULT_PLANNER ?? "ASTAR",
@@ -144,9 +100,6 @@ export function ConfigForm({
   );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [suggestedName, setSuggestedName] = useState(() =>
-    experimentName(mapH, mapW),
-  );
   const [isAdvancedOpen, setIsAdvancedOpen] = useState<boolean>(false);
 
   const selectedProfile = mapSizes.find(
@@ -160,7 +113,6 @@ export function ConfigForm({
     if (!selectedSize) return;
     setMapH(selectedSize.height);
     setMapW(selectedSize.width);
-    setSuggestedName(experimentName(selectedSize.height, selectedSize.width));
   }
 
   function getCurrentConfig(): SystemConfig {
@@ -173,10 +125,6 @@ export function ConfigForm({
       CONNECTIVITY: Number(connectivity),
       DEFAULT_REDUCTION_METHOD: reductionMethod,
       USE_INCREMENTAL_SOLVER: useIncremental,
-      OUTPUT_DIR:
-        workflowMode === "run"
-          ? outputDir.trim()
-          : initialConfig?.OUTPUT_DIR || "",
       MAP_DEFAULT_SEED: Number(mapSeed),
       DEFAULT_PLANNER: planner,
       DEFAULT_SOLVER: solver,
@@ -198,77 +146,16 @@ export function ConfigForm({
     [onDraftChange],
   );
 
-  function getOutputTarget(): OutputTarget | null {
-    if (scenarioMode)
-      return {
-        directory: "results",
-        name: experimentName(mapH, mapW),
-        automatic_name: true,
-      };
-    const directory =
-      workflowMode === "create"
-        ? configurationDestination.trim()
-        : outputDir.trim();
-    if (!directory) {
-      setOutputDirError("Output directory is required.");
-      return null;
-    }
-    const automatic = !configurationName.trim();
-    const baseName = (configurationName.trim() || suggestedName).replace(
-      /\.json$/i,
-      "",
-    );
-    if (
-      !baseName ||
-      /[/\\<>:"|?*]/.test(baseName) ||
-      Array.from(baseName).some((character) => character.charCodeAt(0) < 32) ||
-      [".", ".."].includes(baseName)
-    ) {
-      setOutputDirError("Configuration name must be a valid file name.");
-      return null;
-    }
-    const exists = (name: string) =>
-      queue?.some((item) => {
-        if (workflowMode === "run" && item.output?.directory !== directory)
-          return false;
-        const existing = item.configurationName?.toLowerCase();
-        return (
-          existing === name.toLowerCase() ||
-          existing?.startsWith(`${name.toLowerCase()}-monolithic-`) ||
-          existing?.startsWith(`${name.toLowerCase()}-incremental-`)
-        );
-      });
-    let name = baseName;
-    let index = 2;
-    while (exists(name)) {
-      if (!automatic) {
-        setOutputDirError(
-          `Configuration name "${name}" is already in the batch queue.`,
-        );
-        return null;
-      }
-      name = `${baseName}-${index++}`;
-    }
-    setOutputDirError(null);
-    return { directory, name, automatic_name: automatic };
-  }
-
   function handleDirectRun() {
-    const output = getOutputTarget();
-    if (!output) return;
     const generate = () => {
-      onGenerateMap(getCurrentConfig(), output, !scenarioMode && benchmark);
-      setSuggestedName(experimentName(mapH, mapW));
+      onGenerateMap(getCurrentConfig(), !scenarioMode && benchmark);
     };
     if (onBeforeGenerate) onBeforeGenerate(generate);
     else generate();
   }
 
   function handleAddQueue() {
-    const output = getOutputTarget();
-    if (!output) return;
-    onAddToQueue(getCurrentConfig(), output, !scenarioMode && benchmark);
-    setSuggestedName(experimentName(mapH, mapW));
+    onAddToQueue(getCurrentConfig(), !scenarioMode && benchmark);
     setFeedback(
       scenarioMode
         ? "Scenario configuration added to queue"
@@ -279,36 +166,9 @@ export function ConfigForm({
     setTimeout(() => setFeedback(null), 2500);
   }
 
-  async function handleBrowse() {
-    setIsBrowsing(true);
-    try {
-      const selected = await browseDirectory();
-      if (selected && selected.trim()) {
-        const cleanPath = selected.trim();
-        onConfigChange?.();
-        if (workflowMode === "create") {
-          onConfigurationDestinationChange(cleanPath);
-        } else {
-          setOutputDir(cleanPath);
-        }
-        setOutputDirError(null);
-      } else {
-        setFeedback("Enter the directory path directly.");
-        setTimeout(() => setFeedback(null), 3000);
-      }
-    } catch {
-      setFeedback("Enter the directory path directly.");
-      setTimeout(() => setFeedback(null), 3000);
-    } finally {
-      setIsBrowsing(false);
-    }
-  }
-
   async function handleImportFiles(files: FileList | null) {
     if (!files?.length) return;
-    const output = getOutputTarget();
-    if (!output) return;
-    setIsBrowsing(true);
+    setIsImporting(true);
     try {
       const items = await Promise.all(
         Array.from(files, async (file) => ({
@@ -317,22 +177,19 @@ export function ConfigForm({
         })),
       );
       if (activeMode === "queue")
-        onImportBatchConfigs?.(items, output, !scenarioMode && benchmark);
-      else onImportConfig?.(items[0].data, output, !scenarioMode && benchmark);
+        onImportBatchConfigs?.(items, !scenarioMode && benchmark);
+      else onImportConfig?.(items[0].data, !scenarioMode && benchmark);
     } catch (error) {
-      setOutputDirError(
+      setImportError(
         error instanceof Error
           ? error.message
           : "Failed to import configuration.",
       );
     } finally {
-      setIsBrowsing(false);
+      setIsImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
-
-  const isConfigurationDestinationLocked =
-    workflowMode === "create" && activeMode === "queue" && queueCount > 0;
 
   return (
     <div className="config-card" onChangeCapture={onConfigChange}>
@@ -564,122 +421,6 @@ export function ConfigForm({
               </div>
             </div>
           </div>
-
-          {!scenarioMode && (
-            <div className="config-output-group">
-              <div
-                className={`form-group is-active ${isConfigurationNameError ? "has-error" : ""}`}
-              >
-                <label htmlFor="configurationName">
-                  <span>
-                    {workflowMode === "create"
-                      ? "Configuration Name"
-                      : "Experiment Name"}
-                  </span>
-                  <span className="form-group-hint">
-                    {workflowMode === "create"
-                      ? "Saved with a .json extension"
-                      : "A separate directory per experiment"}
-                  </span>
-                </label>
-                <input
-                  id="configurationName"
-                  type="text"
-                  value={configurationName || suggestedName}
-                  onChange={(event) => {
-                    onConfigurationNameChange(event.target.value);
-                    if (isConfigurationNameError) setOutputDirError(null);
-                  }}
-                  maxLength={120}
-                  placeholder={suggestedName}
-                  required
-                  aria-invalid={isConfigurationNameError}
-                  aria-describedby={
-                    isConfigurationNameError
-                      ? "configuration-name-error"
-                      : undefined
-                  }
-                />
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    onConfigurationNameChange("");
-                    setSuggestedName(experimentName(mapH, mapW));
-                    setOutputDirError(null);
-                  }}
-                  disabled={!configurationName}
-                >
-                  Use Automatic Name
-                </button>
-                {isConfigurationNameError && (
-                  <span
-                    id="configuration-name-error"
-                    className="field-error-message"
-                    role="alert"
-                  >
-                    {outputDirError}
-                  </span>
-                )}
-              </div>
-
-              <div
-                className={`form-group is-active ${isOutputDirectoryError ? "has-error" : ""}`}
-              >
-                <label id="destinationDirLabel">
-                  <span>
-                    {workflowMode === "create"
-                      ? "Configuration Directory"
-                      : "Results Directory"}
-                  </span>
-                  <span className="form-group-hint">
-                    Base directory; missing folders are created
-                  </span>
-                </label>
-                <div className="input-with-button">
-                  <input
-                    id="destinationDir"
-                    type="text"
-                    onChange={(event) => {
-                      if (workflowMode === "create")
-                        onConfigurationDestinationChange(event.target.value);
-                      else setOutputDir(event.target.value);
-                      setOutputDirError(null);
-                    }}
-                    disabled={isConfigurationDestinationLocked}
-                    value={
-                      workflowMode === "create"
-                        ? configurationDestination
-                        : outputDir
-                    }
-                    placeholder={
-                      workflowMode === "create" ? "configurations" : "results"
-                    }
-                    required
-                    aria-labelledby="destinationDirLabel"
-                    aria-invalid={isOutputDirectoryError}
-                    aria-describedby={
-                      isOutputDirectoryError
-                        ? "output-directory-error"
-                        : undefined
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={handleBrowse}
-                    disabled={
-                      isGenerating ||
-                      isBrowsing ||
-                      isConfigurationDestinationLocked
-                    }
-                  >
-                    {isBrowsing ? "Opening..." : "Browse..."}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         <div
@@ -852,16 +593,8 @@ export function ConfigForm({
                     batchCount > 100
                   }
                   onClick={() => {
-                    const output = getOutputTarget();
-                    if (!output) return;
                     const generate = () => {
-                      onAddBatch(
-                        getCurrentConfig(),
-                        batchCount,
-                        output,
-                        benchmark,
-                      );
-                      setSuggestedName(experimentName(mapH, mapW));
+                      onAddBatch(getCurrentConfig(), batchCount, benchmark);
                     };
                     if (onBeforeGenerate) onBeforeGenerate(generate);
                     else generate();
@@ -889,14 +622,14 @@ export function ConfigForm({
                 type="button"
                 className="btn btn-ghost"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isGenerating || isBrowsing}
+                disabled={isGenerating || isImporting}
                 title={
                   activeMode === "queue"
                     ? "Import one or more configuration JSON files into the queue"
                     : "Import configuration JSON and load alternative route"
                 }
               >
-                {isBrowsing ? "Opening..." : "Import Configuration"}
+                {isImporting ? "Opening..." : "Import Configuration"}
               </button>
             )}
           </div>
@@ -905,18 +638,18 @@ export function ConfigForm({
         </div>
       </fieldset>
 
-      {isOutputDirectoryError && (
+      {importError && (
         <div
-          id="output-directory-error"
+          id="import-error"
           className="validation-toast"
           role="alert"
           aria-live="assertive"
         >
-          <span>{outputDirError}</span>
+          <span>{importError}</span>
           <button
             type="button"
             className="alert-close"
-            onClick={() => setOutputDirError(null)}
+            onClick={() => setImportError(null)}
             aria-label="Dismiss notification"
           >
             &times;

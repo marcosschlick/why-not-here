@@ -9,7 +9,7 @@ from src.pipeline.experiment_config import (
 )
 from src.pipeline.generate_map import generate_map
 from src.pipeline.run_isp import run_isp
-from src.pipeline.storage import reserve_output_directory
+from src.pipeline.storage import reserve_output_directory, set_output_directory
 
 from .artifacts import collect_artifacts
 
@@ -38,19 +38,18 @@ class PipelineRunner:
         with self.lock:
             return self.state["running"]
 
-    def start(self, runs: int, output: dict[str, Any]) -> None:
+    def start(self, runs: int) -> None:
         if not self.execution_lock.acquire(blocking=False):
             raise RuntimeError("Pipeline execution already in progress.")
         parameters = get_experiment_configurations()
         output_dirs: list[Path] = []
         try:
             for index in range(1, runs + 1):
-                target = dict(output)
-                if runs > 1 and target.get("name"):
-                    target["name"] = f"{target['name']}-map-{index}"
                 output_dirs.append(
                     reserve_output_directory(
-                        parameters["MAP_H"], parameters["MAP_W"], **target
+                        parameters["MAP_H"],
+                        parameters["MAP_W"],
+                        map_index=index if runs > 1 else None,
                     )
                 )
         except (ValueError, OSError):
@@ -83,9 +82,8 @@ class PipelineRunner:
                 with self.lock:
                     self.state["current_run"] = index
                     self.state["status"] = f"Running {index} of {len(output_dirs)}"
-                apply_experiment_config(
-                    {**parameters, "OUTPUT_DIR": str(output_dir)}, start=None, goal=None
-                )
+                apply_experiment_config(parameters, start=None, goal=None)
+                set_output_directory(output_dir)
                 grid = generate_map(verbose=False)
                 generation = {
                     "base_seed": grid.base_seed,

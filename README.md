@@ -63,16 +63,14 @@ export ADMIN_EXPORT_KEY=your_export_key
 database and user must already exist. The API creates its tables on startup
 and does not start if database initialization fails.
 
-In the simulation screen, **Create Configuration** defaults to `configurations/`
-and **Run Experiment** defaults to `results/`. Both provide an automatic
-`experiment-<H>x<W>-<YYYYMMDD-HHmmss>` name and editable name/directory fields.
-Missing directories are created. Configurations are saved as `<name>.json`;
-each execution gets its own `<name>/map/` and `<name>/results/` folders.
-Automatic collisions receive numeric suffixes; manual collisions show an error.
-Existing content is never deleted or overwritten. Previewing a map or importing
-JSON writes no artifacts; execution persists the displayed map in a fresh folder.
-Import JSON using the browser file picker. Directory paths can be typed directly,
-including when a native **Browse** dialog is unavailable.
+In the simulation screen, the backend saves configurations in `configurations/`
+and execution artifacts in `results/`, using automatic
+`experiment-<H>x<W>-<YYYYMMDD-HHmmss>` names and numeric collision suffixes.
+Each execution has its own `map/` and `results/` folders. Existing content is
+never deleted or overwritten. Previewing a map or importing JSON writes no
+artifacts; execution persists the displayed map in a fresh folder. Import JSON
+using the browser file picker. Old configurations and API calls containing
+removed name or destination options must be recreated in the current format.
 
 Enable **Benchmark** to create ten configurations or executions per map:
 monolithic and incremental, each with `NONE`, `PATH_ONLY`, `SPARSIFIED`, `BBOX`

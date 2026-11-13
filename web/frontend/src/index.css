@@ -599,20 +599,7 @@ kbd,
 .conditional-inner-grid.has-scope {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.config-output-group {
-  margin-top: 0.25rem;
-}
-.input-with-button input[readonly] {
-  cursor: default;
-  pointer-events: none;
-  user-select: none;
-  caret-color: transparent;
-  background: var(--surface-raised);
-}
-.config-output-group .form-group {
-  width: 100%;
-  max-width: 32rem;
-}
+
 .queue-tab-content {
   animation: tabContentEnter var(--duration-normal) var(--ease-out);
 }
@@ -657,8 +644,7 @@ kbd,
   font-size: 0.78rem;
 }
 .form-group input,
-.form-group select,
-.input-with-button input {
+.form-group select {
   width: 100%;
   min-height: 2.625rem;
   padding: 0.55rem 0.7rem;
@@ -673,8 +659,7 @@ kbd,
     background-color var(--duration-fast) var(--ease-out);
 }
 .form-group input:focus,
-.form-group select:focus,
-.input-with-button input:focus {
+.form-group select:focus {
   border-color: var(--azure-blue);
   box-shadow: 0 0 0 0.22rem var(--focus-ring);
 }
@@ -717,26 +702,7 @@ kbd,
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.input-with-button {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  width: 100%;
-  max-width: 32rem;
-}
-.input-with-button input {
-  flex: 1;
-  min-width: 0;
-}
-.input-with-button .btn {
-  flex-shrink: 0;
-  min-width: 8rem;
-  min-height: 2.625rem;
-  padding: 0.55rem 1.35rem;
-  font-size: 0.84rem;
-  font-weight: 750;
-  white-space: nowrap;
-}
+
 .toggle-container,
 .queue-options-row {
   display: flex;
@@ -2668,23 +2634,20 @@ kbd,
 }
 
 .config-step .form-group input,
-.config-step .form-group select,
-.config-step .input-with-button input {
+.config-step .form-group select {
   min-height: 2.75rem;
   background: color-mix(in srgb, var(--bright-snow) 97%, var(--yale-blue));
   border-color: color-mix(in srgb, var(--yale-blue) 25%, transparent);
   border-radius: var(--radius-sm);
 }
 
-.config-step .form-group input::placeholder,
-.config-step .input-with-button input::placeholder {
+.config-step .form-group input::placeholder {
   color: color-mix(in srgb, var(--yale-blue) 62%, var(--bright-snow));
   opacity: 1;
 }
 
 .config-step .form-group input:focus,
-.config-step .form-group select:focus,
-.config-step .input-with-button input:focus {
+.config-step .form-group select:focus {
   background: var(--bright-snow);
   border-color: var(--azure-blue);
 }
@@ -2722,16 +2685,14 @@ kbd,
     box-shadow var(--duration-fast) var(--ease-out);
 }
 
-.config-step .conditional-field-wrapper.is-inactive,
-.config-step .config-output-group .form-group.is-inactive {
+.config-step .conditional-field-wrapper.is-inactive {
   background: var(--config-surface-soft);
   border-color: var(--config-border);
   border-left-color: color-mix(in srgb, var(--yale-blue) 35%, transparent);
   box-shadow: none;
 }
 
-.config-step .conditional-field-wrapper.is-active,
-.config-step .config-output-group .form-group.is-active {
+.config-step .conditional-field-wrapper.is-active {
   background: var(--config-surface-selected);
   border-color: color-mix(in srgb, var(--azure-blue) 36%, transparent);
   border-left-color: var(--azure-blue);
@@ -2740,39 +2701,6 @@ kbd,
 .config-step .conditional-field-wrapper input,
 .config-step .conditional-field-wrapper select {
   background: var(--bright-snow);
-}
-
-.config-step .config-output-group {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 1rem;
-  margin-top: 0.15rem;
-}
-
-.config-step .config-output-group .form-group {
-  box-sizing: border-box;
-  padding: 0.7rem 0.75rem;
-  background: var(--config-surface-soft);
-  border: 1px solid var(--config-border);
-  border-left: 0.2rem solid
-    color-mix(in srgb, var(--yale-blue) 35%, transparent);
-  border-radius: var(--radius-sm);
-  max-width: none;
-  box-shadow: none;
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out);
-}
-
-.config-step .input-with-button {
-  max-width: none;
-}
-
-.config-step .input-with-button .btn {
-  min-height: 2.75rem;
-  border-radius: var(--radius-sm);
 }
 
 .config-step .advanced-settings-section {
@@ -2922,14 +2850,6 @@ kbd,
 
   .config-step .mode-tab {
     flex: 1 1 auto;
-  }
-
-  .config-step .config-output-group {
-    grid-template-columns: 1fr;
-  }
-
-  .config-step .config-output-group .form-group {
-    max-width: none;
   }
 
   .config-step .queue-item-card {

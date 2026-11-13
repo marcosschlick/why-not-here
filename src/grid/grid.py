@@ -290,7 +290,7 @@ class Grid:
         path = Path(filepath)
         if not path.exists():
             raise FileNotFoundError(
-                f"Map file not found: '{path}'. Generate or persist a map in the selected output directory."
+                f"Map file not found: '{path}'. Generate or persist a map in the current output directory."
             )
 
         with open(path, "r", encoding="utf-8") as f:

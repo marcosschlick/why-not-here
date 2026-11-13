@@ -10,7 +10,6 @@ import { RouteCanvas } from "./components/RouteCanvas";
 import { validateDrawingRoute } from "./utils/validateRoute";
 import {
   createExperimentItems,
-  outputPath,
   reviewIndices,
   sameReviewGroup,
 } from "./utils/experiments";
@@ -27,7 +26,7 @@ import {
 import type {
   LastResult,
   MapData,
-  OutputTarget,
+  NamingMetadata,
   QueueItem,
   SaveConfigurationItem,
   SystemConfig,
@@ -92,22 +91,13 @@ export function App() {
     reviewIndex: number;
     resultIndex: number;
     config: SystemConfig | null;
-    output: OutputTarget | undefined;
-    pendingConfiguration: OutputTarget | null;
   } | null>(null);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<"individual" | "queue">(
     "individual",
   );
   const [workflowMode, setWorkflowMode] = useState<"run" | "create">("run");
-  const [configurationName, setConfigurationName] = useState<string>("");
-  const [configurationDestination, setConfigurationDestination] =
-    useState<string>("configurations");
-  const [pendingConfiguration, setPendingConfiguration] =
-    useState<OutputTarget | null>(null);
-  const [singleOutput, setSingleOutput] = useState<OutputTarget | undefined>();
   const [benchmark, setBenchmark] = useState(false);
-  const [resultsDestination, setResultsDestination] = useState("results");
   const [currentStep, setCurrentStep] = useState<
     "config" | "route_canvas" | "results"
   >("config");
@@ -184,11 +174,7 @@ export function App() {
       reviewIndex: batchReviewIndex,
       resultIndex: activeBatchResultIndex,
       config,
-      output: singleOutput,
-      pendingConfiguration,
     });
-    setSingleOutput(undefined);
-    setPendingConfiguration(null);
     setScenarioQuestionnaire(id);
     setScenarioQueue([]);
     setAdminQuestionnaire(id);
@@ -221,8 +207,6 @@ export function App() {
       setBatchReviewIndex(simulationSnapshot.reviewIndex);
       setActiveBatchResultIndex(simulationSnapshot.resultIndex);
       setConfig(simulationSnapshot.config);
-      setSingleOutput(simulationSnapshot.output);
-      setPendingConfiguration(simulationSnapshot.pendingConfiguration);
     }
     setAdminScenario(scenarioId);
     setScenarioQuestionnaire(null);
@@ -274,7 +258,6 @@ export function App() {
         ...map.config,
         TERRAIN_COLORS: map.terrain_colors,
       };
-      delete configuration.OUTPUT_DIR;
       try {
         const response = await fetch(
           `/api/questionnaires/${scenarioQuestionnaire}/scenarios`,
@@ -367,16 +350,14 @@ export function App() {
 
   function prepareItems(
     parameters: SystemConfig,
-    output: OutputTarget,
+    naming: NamingMetadata,
     useBenchmark: boolean,
     map?: MapData,
     path?: [number, number][],
   ): QueueItem[] {
-    const target =
-      workflowMode === "create" ? { ...output, directory: "results" } : output;
     const items = createExperimentItems(
       parameters,
-      target,
+      naming,
       useBenchmark && scenarioQuestionnaire === null,
       map,
       path,
@@ -392,11 +373,10 @@ export function App() {
 
   async function handleGenerateMap(
     targetConfig: SystemConfig,
-    output: OutputTarget,
     useBenchmark: boolean,
   ) {
     if (useBenchmark && scenarioQuestionnaire === null) {
-      const items = prepareItems(targetConfig, output, true);
+      const items = prepareItems(targetConfig, {}, true);
       setQueue(items);
       setActiveTabMode("queue");
       await handleStartBatchReview(items);
@@ -407,15 +387,8 @@ export function App() {
     setIsGeneratingMap(true);
     setErrorMessage(null);
     setSuccessMessage(null);
-    setPendingConfiguration(workflowMode === "create" ? output : null);
-    const target =
-      workflowMode === "create" ? { ...output, directory: "results" } : output;
-    setSingleOutput(target);
     try {
-      const generated = await generateMap({
-        ...targetConfig,
-        OUTPUT_DIR: outputPath(target),
-      });
+      const generated = await generateMap(targetConfig);
       setLastResult(null);
       setScenarioConfigDirty(false);
       setMapData(generated);
@@ -432,25 +405,17 @@ export function App() {
 
   async function handleImportConfig(
     parsedJson: Record<string, unknown>,
-    output: OutputTarget,
     useBenchmark: boolean,
   ) {
     setElapsedTime(0);
     setIsGeneratingMap(true);
     setErrorMessage(null);
-    setPendingConfiguration(workflowMode === "create" ? output : null);
-    const target =
-      workflowMode === "create" ? { ...output, directory: "results" } : output;
-    setSingleOutput(target);
     try {
-      const imported = await importConfig({
-        ...parsedJson,
-        OUTPUT_DIR: outputPath(target),
-      });
+      const imported = await importConfig(parsedJson);
       if (useBenchmark && scenarioQuestionnaire === null) {
         const items = prepareItems(
           imported.config,
-          output,
+          {},
           true,
           imported,
           imported.user_path,
@@ -480,7 +445,6 @@ export function App() {
 
   async function handleImportBatchConfigs(
     files: { name: string; data: Record<string, unknown> }[],
-    output: OutputTarget,
     useBenchmark: boolean,
   ) {
     setElapsedTime(0);
@@ -492,15 +456,10 @@ export function App() {
     for (const [index, file] of files.entries()) {
       try {
         const imported = await importConfig(file.data);
-        const target = {
-          ...output,
-          name:
-            files.length > 1 ? `${output.name}-map-${index + 1}` : output.name,
-        };
         items.push(
           ...prepareItems(
             imported.config,
-            target,
+            files.length > 1 ? { map_index: index + 1 } : {},
             useBenchmark,
             imported,
             imported.user_path,
@@ -551,11 +510,9 @@ export function App() {
         mapData.start,
         mapData.goal,
         mapData.grid,
-        singleOutput,
       );
       setMapData({
         ...mapData,
-        config: { ...mapData.config, OUTPUT_DIR: response.output_dir },
         map_image_url:
           response.artifacts.find((url) => url.startsWith("/output/map/")) ||
           "",
@@ -573,16 +530,10 @@ export function App() {
     } finally {
       setIsSolvingISP(false);
     }
-  }, [mapData, userPath, singleOutput]);
+  }, [mapData, userPath]);
 
-  function handleAddToQueue(
-    newConfig: SystemConfig,
-    output: OutputTarget,
-    useBenchmark: boolean,
-  ) {
-    if (workflowMode === "create")
-      setConfigurationDestination(output.directory);
-    const items = prepareItems(newConfig, output, useBenchmark);
+  function handleAddToQueue(newConfig: SystemConfig, useBenchmark: boolean) {
+    const items = prepareItems(newConfig, {}, useBenchmark);
     setQueue((previous) => [...previous, ...items]);
     setScenarioConfigDirty(false);
   }
@@ -590,13 +541,12 @@ export function App() {
   function handleAddBatch(
     base: SystemConfig,
     count: number,
-    output: OutputTarget,
     useBenchmark: boolean,
   ) {
     const items = Array.from({ length: count }, (_, index) =>
       prepareItems(
         { ...base, MAP_DEFAULT_SEED: base.MAP_DEFAULT_SEED + index },
-        { ...output, name: `${output.name}-map-${index + 1}` },
+        { map_index: index + 1 },
         useBenchmark,
       ),
     ).flat();
@@ -758,18 +708,15 @@ export function App() {
   }
 
   async function handleSaveSingleConfiguration() {
-    if (!mapData || !pendingConfiguration) return;
+    if (!mapData) return;
     setElapsedTime(0);
     setIsGeneratingMap(true);
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
       const result = await saveConfigurations({
-        destination_dir: pendingConfiguration.directory,
         configurations: [
           {
-            name: pendingConfiguration.name,
-            automatic_name: pendingConfiguration.automatic_name,
             config: mapData.config,
             start: mapData.start,
             goal: mapData.goal,
@@ -778,7 +725,6 @@ export function App() {
         ],
       });
       setSuccessMessage(`Configuration saved to ${result.saved_files[0]}`);
-      setPendingConfiguration(null);
       setCurrentStep("config");
     } catch (err) {
       setErrorMessage(
@@ -790,19 +736,8 @@ export function App() {
   }
 
   async function handleSaveBatchConfigurations(finalQueue: QueueItem[]) {
-    if (!configurationDestination.trim()) {
-      setErrorMessage("Output directory is required.");
-      return;
-    }
-    if (
-      finalQueue.some(
-        (item) =>
-          !item.configurationName?.trim() ||
-          !item.mapData ||
-          !item.userPath?.length,
-      )
-    ) {
-      setErrorMessage("Every batch item must have a name, map, and route.");
+    if (finalQueue.some((item) => !item.mapData || !item.userPath?.length)) {
+      setErrorMessage("Every batch item must have a map and route.");
       return;
     }
 
@@ -813,8 +748,7 @@ export function App() {
     try {
       const configurations: SaveConfigurationItem[] = finalQueue.map(
         (item) => ({
-          name: item.configurationName as string,
-          automatic_name: item.output?.automatic_name ?? false,
+          naming: item.naming,
           config: item.config,
           start: (item.mapData as MapData).start,
           goal: (item.mapData as MapData).goal,
@@ -822,21 +756,17 @@ export function App() {
         }),
       );
       const result = await saveConfigurations({
-        destination_dir: configurationDestination,
         configurations,
       });
       setQueue((previous) =>
         previous.map((item, index) => ({
           ...item,
-          configurationName: result.saved_files[index]
-            .split(/[\\/]/)
-            .at(-1)
-            ?.replace(/\.json$/i, ""),
+          savedFile: result.saved_files[index],
           status: "saved",
         })),
       );
       setSuccessMessage(
-        `Saved ${result.saved_files.length} configurations to ${configurationDestination}`,
+        `Saved ${result.saved_files.length} configurations to configurations/`,
       );
       setIsBatchMode(false);
       setCurrentStep("config");
@@ -1002,7 +932,7 @@ export function App() {
           item.mapData.start,
           item.mapData.goal,
           item.mapData.grid,
-          item.output,
+          item.naming,
         );
 
         setQueue((prev) =>
@@ -1010,7 +940,7 @@ export function App() {
             idx === i
               ? {
                   ...it,
-                  config: { ...it.config, OUTPUT_DIR: response.output_dir },
+                  outputDir: response.output_dir,
                   mapData: it.mapData
                     ? {
                         ...it.mapData,
@@ -1018,10 +948,6 @@ export function App() {
                           response.artifacts.find((url) =>
                             url.startsWith("/output/map/"),
                           ) || "",
-                        config: {
-                          ...it.config,
-                          OUTPUT_DIR: response.output_dir,
-                        },
                       }
                     : undefined,
                   status: response.result.success ? "completed" : "failed",
@@ -1237,13 +1163,6 @@ export function App() {
               activeMode={activeTabMode}
               onSwitchMode={setActiveTabMode}
               queueCount={queue.length}
-              queue={queue}
-              outputDir={resultsDestination}
-              onOutputDirChange={setResultsDestination}
-              configurationName={configurationName}
-              onConfigurationNameChange={setConfigurationName}
-              configurationDestination={configurationDestination}
-              onConfigurationDestinationChange={setConfigurationDestination}
             />
 
             {activeTabMode === "queue" && (
@@ -1252,7 +1171,6 @@ export function App() {
                   queue={queue}
                   scenarioMode={scenarioQuestionnaire !== null}
                   workflowMode={workflowMode}
-                  configurationDestination={configurationDestination}
                   currentIndex={batchReviewIndex}
                   isProcessing={isSolvingISP || isGeneratingMap}
                   interactiveMode={interactiveQueueMode}
@@ -1458,7 +1376,7 @@ export function App() {
                                 >
                                   <span>
                                     {workflowMode === "create"
-                                      ? `${item.configurationName || `Item ${idx + 1}`} (${item.config.MAP_H}x${item.config.MAP_W})`
+                                      ? `Item ${idx + 1} (${item.config.MAP_H}x${item.config.MAP_W})`
                                       : `Map ${reviewSteps.indexOf(idx) + 1} (${item.config.MAP_H}x${item.config.MAP_W})${item.benchmarkGroup ? " · 10 combinations" : ""}`}
                                   </span>
                                   <span
@@ -1709,7 +1627,6 @@ export function App() {
                   <QueuePanel
                     queue={queue}
                     workflowMode={workflowMode}
-                    configurationDestination={configurationDestination}
                     currentIndex={batchReviewIndex}
                     isProcessing={isSolvingISP}
                     interactiveMode={interactiveQueueMode}

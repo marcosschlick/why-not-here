@@ -1,8 +1,4 @@
-import json
 import math
-import os
-import subprocess
-import sys
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
@@ -27,7 +23,11 @@ from src.pipeline.experiment_config import (
 )
 from src.pipeline.generate_map import generate_map, persist_map
 from src.pipeline.run_isp import run_isp
-from src.pipeline.storage import reserve_configured_output, reserve_output_directory
+from src.pipeline.storage import (
+    get_output_directory,
+    reserve_output_directory,
+    set_output_directory,
+)
 from src.pipeline.utils import (
     create_alternative_path,
     get_project_path,
@@ -41,7 +41,6 @@ from .artifacts import collect_artifacts
 from .config_manager import get_experiment_configurations, update_configurations
 from .runner import runner
 from .schemas import (
-    BrowseRequest,
     ExportConfigRequest,
     GenerateMapRequest,
     ImportConfigRequest,
@@ -82,7 +81,7 @@ def _map_image_url(persist_artifacts: bool) -> str:
         return ""
     return (
         f"/output/{MAP_DIRECTORY_NAME}/{MAP_IMAGE_FILENAME}"
-        f"?dir={quote(config.OUTPUT_DIR, safe='')}"
+        f"?dir={quote(str(get_output_directory()), safe='')}"
     )
 
 
@@ -157,11 +156,8 @@ def save_configurations_endpoint(
     configurations = [item.model_dump() for item in payload.configurations]
     try:
         saved_files = save_experiment_configurations(
-            destination_dir=payload.destination_dir,
             configurations=configurations,
         )
-    except FileExistsError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except OSError as exc:
@@ -183,13 +179,9 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
 
     if payload.persist_artifacts:
         try:
-            params["OUTPUT_DIR"] = str(
-                reserve_configured_output(
-                    params["MAP_H"], params["MAP_W"], params["OUTPUT_DIR"]
-                )
+            set_output_directory(
+                reserve_output_directory(params["MAP_H"], params["MAP_W"])
             )
-        except FileExistsError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (ValueError, OSError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -272,15 +264,12 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
 
     if persist_artifacts:
         try:
-            updates["OUTPUT_DIR"] = str(
-                reserve_configured_output(
+            set_output_directory(
+                reserve_output_directory(
                     updates.get("MAP_H", config.MAP_H),
                     updates.get("MAP_W", config.MAP_W),
-                    updates.get("OUTPUT_DIR", "results"),
                 )
             )
-        except FileExistsError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (ValueError, OSError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -370,15 +359,19 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
         grid = (
             Grid.from_dict(payload.map)
             if payload.map is not None
-            else Grid.load(get_project_path(config.OUTPUT_DIR) / "map" / "map.json")
-        )
-        if payload.output is None:
-            output_dir = reserve_configured_output(grid.h, grid.w, config.OUTPUT_DIR)
-        else:
-            output_dir = reserve_output_directory(
-                grid.h, grid.w, **payload.output.model_dump()
+            else Grid.load(
+                get_project_path(get_output_directory()) / "map" / "map.json"
             )
-        apply_experiment_config({"OUTPUT_DIR": str(output_dir)}, start=start, goal=goal)
+        )
+        naming = payload.naming.model_dump() if payload.naming else {}
+        output_dir = reserve_output_directory(
+            grid.h,
+            grid.w,
+            **naming,
+            incremental=config.USE_INCREMENTAL_SOLVER,
+            reduction=config.DEFAULT_REDUCTION_METHOD,
+        )
+        set_output_directory(output_dir)
         persist_map(grid, start=start, goal=goal)
         result = run_isp(verbose=False, user_path=p_user, start=start, goal=goal)
         if not result:
@@ -430,7 +423,9 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
             "original_optimal_path": result.original_optimal_path,
             "original_alternative_cost": (
                 ISPValidator.compute_path_cost(
-                    Grid.load(get_project_path(config.OUTPUT_DIR) / "map" / "map.json"),
+                    Grid.load(
+                        get_project_path(get_output_directory()) / "map" / "map.json"
+                    ),
                     p_user,
                 )
                 if p_user
@@ -451,7 +446,9 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
         }
 
         if result.modifications is not None:
-            map_json_path = get_project_path(config.OUTPUT_DIR) / "map" / "map.json"
+            map_json_path = (
+                get_project_path(get_output_directory()) / "map" / "map.json"
+            )
             original_grid = Grid.load(map_json_path)
             prepare_endpoints(original_grid, start=start, goal=goal)
             modified_grid = ISPValidator.apply_modifications(
@@ -462,7 +459,7 @@ def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
                 **_grid_layers(modified_grid),
             }
 
-        artifacts = collect_artifacts(config.OUTPUT_DIR)
+        artifacts = collect_artifacts(get_output_directory())
 
         sanitized_result = sanitize_floats(last_result)
 
@@ -501,7 +498,7 @@ def execute_pipeline(payload: RunRequest) -> dict[str, Any]:
             status_code=409, detail="Pipeline execution already in progress"
         )
     try:
-        runner.start(payload.runs, payload.output.model_dump())
+        runner.start(payload.runs)
     except (RuntimeError, FileExistsError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
@@ -516,28 +513,3 @@ def execute_pipeline(payload: RunRequest) -> dict[str, Any]:
 @router.get("/status")
 def fetch_status() -> dict[str, Any]:
     return runner.get_status()
-
-
-@router.post("/browse")
-def browse_system_dialog(payload: BrowseRequest) -> dict[str, Any]:
-    title = payload.title or "Select Output Directory"
-    py_code = (
-        "import sys, json\n"
-        "from PyQt6.QtWidgets import QApplication, QFileDialog\n"
-        "app = QApplication(sys.argv)\n"
-        f"res = QFileDialog.getExistingDirectory(None, {json.dumps(title)})\n"
-        "print(json.dumps({'path': res or ''}), end='')\n"
-    )
-    try:
-        process = subprocess.run(
-            [sys.executable, "-B", "-c", py_code],
-            check=False,
-            capture_output=True,
-            text=True,
-            env=os.environ.copy(),
-        )
-        if process.returncode != 0 or not process.stdout.strip():
-            return {"path": ""}
-        return {"path": json.loads(process.stdout.strip()).get("path", "")}
-    except (subprocess.SubprocessError, OSError, json.JSONDecodeError):
-        return {"path": ""}
