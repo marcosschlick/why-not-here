@@ -2895,12 +2895,11 @@ kbd,
   }
 }
 
-.config-strategy-grid > .conditional-field-wrapper,
-.config-strategy-grid > .benchmark-setting {
+.scenario-strategy-grid > .conditional-field-wrapper {
   grid-column: 1 / -1;
 }
 
-.config-strategy-grid > .conditional-field-wrapper {
+.config-step .config-strategy-grid > .conditional-field-wrapper {
   margin-top: 0;
 }
 
@@ -2915,7 +2914,13 @@ kbd,
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1rem;
+  padding: 1rem 1.25rem;
   color: var(--text-strong);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-left: 0.2rem solid var(--azure-blue);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .workflow-context > div {
@@ -2929,6 +2934,12 @@ kbd,
   color: var(--text-muted);
   font-size: 0.85rem;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 80rem) {
+  .simulation-strategy-grid .conditional-inner-grid.has-scope {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 48rem) {

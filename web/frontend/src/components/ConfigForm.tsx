@@ -291,7 +291,9 @@ export function ConfigForm({
             </div>
           </div>
 
-          <div className="config-strategy-grid">
+          <div
+            className={`config-strategy-grid ${scenarioMode ? "scenario-strategy-grid" : "simulation-strategy-grid"}`}
+          >
             <div className="strategy-column">
               <div className="form-group">
                 <label htmlFor="reductionMethod">
