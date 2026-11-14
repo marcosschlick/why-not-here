@@ -199,7 +199,6 @@ export interface NamingMetadata {
 export interface QueueItem {
   id: string;
   config: SystemConfig;
-  savedFile?: string;
   outputDir?: string;
   batchDir?: string;
   naming?: NamingMetadata;
@@ -210,7 +209,6 @@ export interface QueueItem {
     | "generating_map"
     | "awaiting_route"
     | "solving"
-    | "saved"
     | "completed"
     | "failed";
   mapData?: MapData;

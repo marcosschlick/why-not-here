@@ -2684,8 +2684,7 @@ kbd,
 }
 
 .config-step .status-pill.pending,
-.config-step .status-pill.awaiting_route,
-.config-step .status-pill.saved {
+.config-step .status-pill.awaiting_route {
   color: var(--yale-blue);
   background: var(--config-surface-soft);
   border-color: var(--config-border);

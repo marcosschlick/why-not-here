@@ -43,8 +43,7 @@ export function QueuePanel({
   const completedCount = queue.filter(
     (item) =>
       item.status === "completed" ||
-      item.status === "failed" ||
-      item.status === "saved",
+      item.status === "failed",
   ).length;
   const progressPercent = Math.round((completedCount / queue.length) * 100);
   return (
@@ -151,7 +150,7 @@ export function QueuePanel({
               entry.status === "solving" || entry.status === "generating_map",
           );
           const allFinished = group.every((entry) =>
-            ["completed", "failed", "saved"].includes(entry.status),
+            ["completed", "failed"].includes(entry.status),
           );
           const status = !isGroup
             ? item.status
@@ -159,9 +158,7 @@ export function QueuePanel({
               (allFinished
                 ? group.some((entry) => entry.status === "failed")
                   ? "failed"
-                  : group.every((entry) => entry.status === "saved")
-                    ? "saved"
-                    : "completed"
+                  : "completed"
                 : group.some((entry) => entry.status === "awaiting_route")
                   ? "awaiting_route"
                   : "pending"));
@@ -170,7 +167,6 @@ export function QueuePanel({
             generating_map: "Generating map...",
             awaiting_route: "Awaiting route",
             solving: "Solving ISP...",
-            saved: "Saved",
             completed: "Completed",
             failed: "Failed",
           };
@@ -219,9 +215,6 @@ export function QueuePanel({
                 )}
                 {!isGroup && item.outputDir && (
                   <span className="param-tag">Dir: {item.outputDir}</span>
-                )}
-                {!isGroup && item.savedFile && (
-                  <span className="param-tag">Saved: {item.savedFile}</span>
                 )}
               </div>
 

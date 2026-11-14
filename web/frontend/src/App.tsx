@@ -69,6 +69,7 @@ function arePathsEqual(
 export function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [config, setConfig] = useState<SystemConfig | null>(null);
+  const initialConfigRef = useRef<SystemConfig | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<"individual" | "queue">(
     "individual",
   );
@@ -152,6 +153,7 @@ export function App() {
     async function loadInitial() {
       try {
         const initialConfig = await fetchConfig();
+        initialConfigRef.current = initialConfig;
         setConfig(initialConfig);
       } catch (err) {
         setErrorMessage(
@@ -542,6 +544,7 @@ export function App() {
           },
         ],
       });
+      resetPreparation();
       setSuccessMessage(`Configuration saved to /configurations/${directoryName(result.saved_files[0])}`);
       setCurrentStep("config");
     } catch (err) {
@@ -575,13 +578,7 @@ export function App() {
         batch: true,
         configurations,
       });
-      setQueue((previous) =>
-        previous.map((item, index) => ({
-          ...item,
-          savedFile: result.saved_files[index],
-          status: "saved",
-        })),
-      );
+      resetPreparation();
       setSuccessMessage(
         `Saved ${result.saved_files.length} configurations to /configurations/${directoryName(result.saved_files[0].replace(/[\\/][^\\/]+$/, ""))}/`,
       );
@@ -730,7 +727,7 @@ export function App() {
     setActiveBatchResultIndex(0);
     for (let i = 0; i < finalQueue.length; i++) {
       const item = finalQueue[i];
-      if (item.status === "completed" || item.status === "saved") continue;
+      if (item.status === "completed") continue;
       setActiveBatchResultIndex(i);
       setQueue((prev) =>
         prev.map((it, idx) =>
@@ -840,8 +837,46 @@ export function App() {
   }
   const hasMapData = Boolean(mapData);
   const hasResults = Boolean(lastResult || (isBatchMode && queue.length > 0));
+  function clearSimulation() {
+    setMapData(null);
+    setUserPath([]);
+    setLastResult(null);
+    setArtifacts([]);
+    setBatchRouteFeedback(null);
+    setIsBatchMode(false);
+    setBatchReviewIndex(0);
+    setActiveBatchResultIndex(0);
+    setExecutionRecords([]);
+    setExportGroup("");
+    setBatchDirectory(null);
+    setSingleOutputDirectory(null);
+    setElapsedTime(0);
+    setErrorMessage(null);
+    executionOrder.current = 0;
+    attempts.current.clear();
+  }
+  function resetPreparation() {
+    clearSimulation();
+    setConfigurationQueue([]);
+    setConfig(initialConfigRef.current);
+    setBenchmark(false);
+  }
   function handleSelectStep(step: "config" | "route_canvas" | "results") {
     if (isSolvingISP || isGeneratingMap) return;
+    if (step === "config" && workflowMode === "run" && executionRecords.length > 0) {
+      setConfirmation({
+        title: "Return to Configuration",
+        description: "The current results and routes will be lost. Return to configuration?",
+        confirmLabel: "Return to Configuration",
+        onConfirm: () => {
+          clearSimulation();
+          setRunQueue([]);
+          setSuccessMessage(null);
+          setCurrentStep("config");
+        },
+      });
+      return;
+    }
     if (currentStep === "route_canvas" && isBatchMode) {
       setQueue((previous) =>
         previous.map((item) =>
@@ -903,7 +938,7 @@ export function App() {
             </button>
           </div>
         )}
-        {successMessage && (
+        {successMessage && currentStep === "config" && (
           <div className="queue-banner" role="status">
             <span className="alert-text">{successMessage}</span>
             <button
@@ -1008,6 +1043,10 @@ export function App() {
               }
               isSolving={isSolvingISP || isGeneratingMap}
               onCancel={() => {
+                if (workflowMode === "run" && executionRecords.length > 0) {
+                  handleSelectStep("config");
+                  return;
+                }
                 if (isBatchMode)
                   setQueue((previous) =>
                     previous.map((item) =>
@@ -1270,24 +1309,7 @@ export function App() {
                   ? queue[activeBatchResultIndex]?.mapData?.map_image_url
                   : mapData?.map_image_url
               }
-              onNewRun={() => {
-                if (isSolvingISP) return;
-                const startAgain = () => {
-                  setIsBatchMode(false);
-                  setCurrentStep("config");
-                };
-                if (isBatchMode) {
-                  setConfirmation({
-                    title: "Start Again",
-                    description:
-                      "Discard the current simulation and start again?",
-                    confirmLabel: "Start Again",
-                    onConfirm: startAgain,
-                  });
-                  return;
-                }
-                startAgain();
-              }}
+              onNewRun={() => handleSelectStep("config")}
               batchQueue={isBatchMode && queue.length > 0 ? queue : undefined}
               activeBatchIndex={activeBatchResultIndex}
               onSelectBatchIndex={(idx) => {

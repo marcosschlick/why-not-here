@@ -531,9 +531,7 @@ export function ResultsView({
               const isSelected = idx === currentBatchIdx;
               const outcome = getRunOutcome(item.status, item.result);
               const tabLabel =
-                item.status === "saved"
-                  ? "Saved"
-                  : outcome === "solving"
+                outcome === "solving"
                     ? "Solving"
                     : outcome === "queued"
                       ? "Queued"
