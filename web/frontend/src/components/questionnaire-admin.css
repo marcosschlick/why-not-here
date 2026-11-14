@@ -71,20 +71,22 @@
   gap: 0.65rem;
   text-align: left;
   color: var(--text-structural);
-  background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
+  background: transparent;
+  border: 1px solid transparent;
 }
 .qa-app .qa-selector-toggle:hover:not(:disabled) {
   background: var(--surface-selected);
 }
 .qa-selector-indicator {
-  display: grid;
-  flex: 0 0 1.5rem;
-  height: 1.5rem;
-  place-items: center;
-  border-radius: var(--radius-round);
-  color: var(--bright-snow);
-  background: var(--azure-blue);
+  display: inline-block;
+  color: var(--azure-blue);
+  font-size: 0.85rem;
+}
+.qa-selector-toggle[aria-expanded="true"] .qa-selector-indicator {
+  transform: rotate(90deg);
+}
+.qa-selector.is-animated .qa-selector-indicator {
+  transition: transform var(--duration-normal) var(--ease-out);
 }
 .qa-selector-label {
   display: flex;
@@ -99,8 +101,31 @@
 .qa-selector-label strong {
   overflow-wrap: anywhere;
 }
-.qa-selector-content:not([hidden]) {
-  padding: 0.65rem 0.15rem 0.15rem;
+.qa-selector-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+.qa-selector-collapse.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.qa-selector.is-animated .qa-selector-collapse {
+  transition: grid-template-rows var(--duration-normal) var(--ease-out),
+    opacity var(--duration-normal) var(--ease-out);
+}
+.qa-selector-content {
+  min-height: 0;
+  overflow: hidden;
+}
+.qa-selector-content > * {
+  margin-top: 0.65rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .qa-selector.is-animated .qa-selector-collapse,
+  .qa-selector.is-animated .qa-selector-indicator {
+    transition: none;
+  }
 }
 .qa-heading {
   display: flex;
@@ -307,12 +332,6 @@
 .qa-confidence-value {
   color: var(--text-strong);
   font-size: 1rem;
-}
-.qa-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr));
-  gap: 0.8rem;
-  width: 100%;
 }
 .qa-app button[aria-disabled="true"] {
   cursor: not-allowed;
@@ -529,14 +548,6 @@
   border-color: var(--lobster-pink);
 }
 
-.qa-protocol-form,
-.qa-protocol-form fieldset {
-  width: 100%;
-}
-.qa-protocol-form legend {
-  font-size: 1rem;
-  font-weight: 650;
-}
 .qa-assessment-fields {
   width: 100%;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -603,12 +614,10 @@
   justify-items: stretch;
 }
 .qa-edit-details,
-.qa-protocol-details,
 .qa-access-details {
   min-width: 0;
 }
 .qa-edit-details summary,
-.qa-protocol-details summary,
 .qa-access-details > summary {
   width: fit-content;
   color: var(--text-structural);
@@ -616,13 +625,11 @@
   cursor: pointer;
 }
 .qa-edit-details summary:focus-visible,
-.qa-protocol-details summary:focus-visible,
 .qa-access-details > summary:focus-visible {
   outline: 3px solid var(--yale-blue);
   outline-offset: 3px;
 }
-.qa-edit-details .qa-form,
-.qa-protocol-details .qa-form {
+.qa-edit-details .qa-form {
   margin-top: 1rem;
 }
 .qa-setup-heading {

@@ -13,6 +13,7 @@ type Candidate = {
 type PreparationState = {
   configuration: SystemConfig | null;
   savedIds: number[];
+  protocolComplete: boolean;
 };
 
 async function request<T>(path: string, body: unknown): Promise<T> {
@@ -73,7 +74,7 @@ export function ScenarioPreparation({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [protocolSaved, setProtocolSaved] = useState(false);
+  const [protocolSaved, setProtocolSaved] = useState(initial.protocolComplete);
   const [retryPending, setRetryPending] = useState(false);
 
   useEffect(() => {
@@ -150,13 +151,11 @@ export function ScenarioPreparation({
     }
   }
 
-  async function saveProtocol(ids: number[]) {
+  async function saveProtocol() {
     const response = await fetch(
       `/api/questionnaires/${questionnaireId}/protocol`,
       {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario_ids: ids }),
       },
     );
     if (!response.ok) {
@@ -259,7 +258,7 @@ export function ScenarioPreparation({
         }
       }
       setCandidates(remaining);
-      if (saved.length === 6) await saveProtocol(saved);
+      if (saved.length === 6) await saveProtocol();
       else await fillPositions(remaining, saved.length);
     } catch (reason) {
       setError(
@@ -274,7 +273,7 @@ export function ScenarioPreparation({
     setBusy(true);
     setError("");
     try {
-      await saveProtocol(savedIds);
+      await saveProtocol();
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Protocol saving failed.",
@@ -438,7 +437,7 @@ export function ScenarioPreparation({
           disabled={busy}
           onClick={() => void retryProtocol()}
         >
-          Save study protocol
+          Retry study setup
         </button>
       )}
     </section>

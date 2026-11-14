@@ -61,24 +61,17 @@ browser's native warning. Returning fills missing positions with new seeds;
 completed scenarios remain stored. Closing the browser during an unresolved save
 can lose a local result, but any committed scenario remains in the database.
 
-Six successes automatically save the protocol selection. If that final save fails,
-retry **Save study protocol** without repeating generation or resolution. Preview
-and activation require six valid distinct scenarios. This preparation does not
-create participants, responses or aggregate study results.
+Six successful scenarios are automatically linked to the study. If that final
+step fails, **Retry study setup** saves the study without repeating generation or
+resolution, including after reopening the questionnaire. Preview and activation
+require six valid distinct scenarios. Preparation does not create participants,
+responses or aggregate study results.
 
-`PUT /api/questionnaires/{id}/protocol` accepts:
-
-```json
-{
-  "scenario_ids": [1, 2, 3, 4, 5, 6]
-}
-```
-
-These numbers are example identifiers. Saving creates twenty question records:
-six `route_scenario` records and fourteen Likert items. The participant sequence
+`PUT /api/questionnaires/{id}/protocol` accepts no request body. It validates and
+uses the questionnaire's six saved scenarios in creation order, creating twenty
+question records: six `route_scenario` records and fourteen Likert items. Retrying
+with the same scenarios preserves question identifiers. The participant sequence
 assigns each scenario its assessment or prediction role using the stored order.
-Saving the same selection preserves question identifiers. A different selection
-replaces the generated questions while the questionnaire is still a draft.
 Prompts, item order and scale bounds cannot be edited manually.
 Activation requires a complete valid protocol and locks editing. Closing a study
 rejects unfinished participations and new attempts; completed submissions can be
@@ -90,11 +83,10 @@ silently drops or converts existing tables.
 
 ## Participation overview
 
-Draft questionnaires show scenario preparation, study protocol, and review and
-activation in order. Title and description can be changed under **Edit details**;
-scenario selection and participation keys are available in expandable sections.
+Draft questionnaires show scenario preparation and review and activation in order.
+Title and description can be changed under **Edit details**.
 Active and closed questionnaires show a read-only title and description,
-participation counts. Draft and active questionnaires include key management;
+participation counts. Active questionnaires include key management;
 closed questionnaires omit it entirely. Active studies also retain participant
 access and closure controls. Editing remains prohibited after activation.
 
@@ -247,7 +239,7 @@ measure attention. The planned inferential analyses described in section 4.3 of
 
 ## Participation keys
 
-Draft and active questionnaires show a compact **Participation keys** section.
+Active questionnaires show a compact **Participation keys** section.
 **Generate keys** opens an inline quantity form (default 10, range 1 to 1,000).
 **Cancel** closes it without creating keys. A successful generation closes the
 form and shows the new keys first under **Available** without copying them.

@@ -25,12 +25,6 @@ import type {
 import "./questionnaire-admin.css";
 
 type Point = [number, number];
-type Protocol = {
-  scenario_ids: number[];
-};
-const emptyProtocol: Protocol = {
-  scenario_ids: [],
-};
 type Question = {
   id: number;
   prompt: string;
@@ -49,11 +43,10 @@ type Questionnaire = {
   description: string | null;
   status: string;
   questions: Question[];
-  protocol: Protocol;
   preparation_configuration: SystemConfig | null;
 };
 type ParticipationKey = { key: string; used: boolean };
-type Summary = Omit<Questionnaire, "questions" | "protocol">;
+type Summary = Omit<Questionnaire, "questions">;
 type Scenario = {
   id: number;
   title: string;
@@ -495,6 +488,7 @@ export function QuestionnaireAdmin({
     selected?.status === "active" ? publicParticipantLink() : null;
   const [copyStatus, setCopyStatus] = useState("");
   const [selectorOpen, setSelectorOpen] = useState(true);
+  const [selectorMotion, setSelectorMotion] = useState(false);
   const selectorToggleRef = useRef<HTMLButtonElement>(null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<number | null>(null);
@@ -502,7 +496,6 @@ export function QuestionnaireAdmin({
   const [scenarioName, setScenarioName] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [protocol, setProtocol] = useState<Protocol>(emptyProtocol);
   const [view, setView] = useState<
     "overview" | "preview" | "scenarios" | "preparation"
   >("overview");
@@ -531,16 +524,12 @@ export function QuestionnaireAdmin({
   const detailsDirty =
     title !== (selected?.title ?? "") ||
     description !== (selected?.description ?? "");
-  const protocolDirty =
-    JSON.stringify(protocol) !==
-    JSON.stringify(selected?.protocol ?? emptyProtocol);
   const scenarioDirty =
     renamingScenario !== null &&
     scenarioName !==
       scenarios.find((scenario) => scenario.id === renamingScenario)?.title;
   const hasUnsavedChanges =
     detailsDirty ||
-    protocolDirty ||
     scenarioDirty ||
     preparationDirty ||
     preparationBusy;
@@ -620,7 +609,6 @@ export function QuestionnaireAdmin({
         ),
       );
       setSelected(questionnaire);
-      setProtocol(questionnaire.protocol);
       if (resetDetails) {
         setView("overview");
         setTitle(questionnaire.title);
@@ -656,6 +644,7 @@ export function QuestionnaireAdmin({
   }
   function select(id: number) {
     if (busy) return;
+    setSelectorMotion(false);
     if (id === selected?.id) {
       setSelectorOpen(false);
       selectorToggleRef.current?.focus();
@@ -684,7 +673,6 @@ export function QuestionnaireAdmin({
       setSelectedScenario(null);
       setRenamingScenario(null);
       setScenarioName("");
-      setProtocol(emptyProtocol);
       setView("overview");
       setError("");
     });
@@ -713,18 +701,12 @@ export function QuestionnaireAdmin({
       );
     }
   }
-  function saveProtocol(event: FormEvent) {
-    event.preventDefault();
+  async function retryStudySetup() {
     if (!selected) return;
-    void perform(async () => {
-      const saved = await api<Questionnaire>(
-        `/questionnaires/${selected.id}/protocol`,
-        "PUT",
-        protocol,
-      );
-      setSelected(saved);
-      setProtocol(saved.protocol);
-    }, "Saving study protocol...");
+    await perform(async () => {
+      await api(`/questionnaires/${selected.id}/protocol`, "PUT");
+      await loadQuestionnaire(selected.id);
+    }, "Saving study setup...");
   }
   function handleActivateQuestionnaire() {
     if (!selected) return;
@@ -736,7 +718,6 @@ export function QuestionnaireAdmin({
         onConfirm: () => {
           setTitle(selected.title);
           setDescription(selected.description || "");
-          setProtocol(selected.protocol);
           void perform(async () => {
             await api(`/questionnaires/${selected.id}/activate`, "POST");
             setView("overview");
@@ -803,7 +784,7 @@ export function QuestionnaireAdmin({
       <div className="qa-app">
         <div className="qa-layout">
           <main className="qa-content">
-            <section className="qa-selector" aria-label="Questionnaires">
+            <section className={`qa-selector${selectorMotion ? " is-animated" : ""}`} aria-label="Questionnaires">
               <div className="qa-selector-bar">
                 <button
                   type="button"
@@ -811,9 +792,12 @@ export function QuestionnaireAdmin({
                   className="qa-selector-toggle"
                   aria-expanded={selectorOpen}
                   aria-controls="questionnaire-list"
-                  onClick={() => setSelectorOpen(!selectorOpen)}
+                  onClick={(event) => {
+                    setSelectorMotion(event.detail > 0);
+                    setSelectorOpen(!selectorOpen);
+                  }}
                 >
-                  <span className="qa-selector-indicator" aria-hidden="true">{selectorOpen ? "−" : "+"}</span>
+                  <span className="qa-selector-indicator" aria-hidden="true">▶</span>
                   <span className="qa-selector-label">
                     <span>Questionnaires</span>
                     <strong>{selected?.title || "New questionnaire"}</strong>
@@ -829,7 +813,8 @@ export function QuestionnaireAdmin({
                   + New
                 </button>
               </div>
-              <div id="questionnaire-list" className="qa-selector-content" hidden={!selectorOpen}>
+              <div id="questionnaire-list" className={`qa-selector-collapse${selectorOpen ? " is-open" : ""}`} inert={!selectorOpen} aria-hidden={!selectorOpen}>
+              <div className="qa-selector-content">
                 {list.length === 0 ? (
                   <div className="qa-selector-empty">
                     <p className="qa-empty-title">No questionnaires yet</p>
@@ -853,6 +838,7 @@ export function QuestionnaireAdmin({
                     ))}
                   </nav>
                 )}
+              </div>
               </div>
             </section>
             <span className="qa-visually-hidden" role="status">
@@ -879,6 +865,7 @@ export function QuestionnaireAdmin({
                 initial={{
                   configuration: selected.preparation_configuration,
                   savedIds: scenarios.map((scenario) => scenario.id),
+                  protocolComplete: Boolean(protocolComplete),
                 }}
                 onDirtyChange={setPreparationDirty}
                 onBusyChange={setPreparationBusy}
@@ -1081,23 +1068,31 @@ export function QuestionnaireAdmin({
                         <div className="qa-heading">
                           <div>
                             {editable && (
-                              <span className="qa-overline">STEP 1</span>
+                              <span className="qa-overline">STEP 1 OF 2</span>
                             )}
                             <h2>
-                              Scenarios{" "}
+                              Study scenarios{" "}
                               <span className="qa-count">
                                 {scenarios.length}
                               </span>
                             </h2>
                             {editable && (
                               <p className="qa-muted">
-                                Generate six maps, draw the alternative routes
-                                manually and save six successful monolithic ISP
-                                scenarios.
+                                Prepare six maps and draw an alternative route for each.
                               </p>
                             )}
                           </div>
                         </div>
+                        {editable && (
+                          <p className="qa-muted" role="status">
+                            {protocolComplete ? "Six scenarios are ready for the study." : `${scenarios.length} of 6 scenarios saved. Scenarios are linked automatically.`}
+                          </p>
+                        )}
+                        {editable && scenarios.length === 6 && !protocolComplete && (
+                          <button type="button" disabled={panelBusy} onClick={() => void retryStudySetup()}>
+                            Retry study setup
+                          </button>
+                        )}
                         {editable && (
                           <button
                             type="button"
@@ -1230,90 +1225,6 @@ export function QuestionnaireAdmin({
                             )}
                           </div>
                         )}
-                      </section>
-                    )}
-                    {editable && (
-                      <section className="qa-panel" aria-busy={panelBusy}>
-                        <div className="qa-setup-heading"><h2>2. Study protocol</h2><span className="qa-setup-status">{protocolComplete && !protocolDirty ? "Ready" : "Action needed"}</span></div>
-                        <p className="qa-muted">
-                          Select six different saved scenarios. The system
-                          creates a random order for each participant: three
-                          scenarios with explanations, 14 adapted evaluation
-                          items, then three unseen predictions. All six
-                          scenarios must support explanations.
-                        </p>
-                        <details className="qa-protocol-details" open={protocolDirty || undefined}>
-                          <summary>Review or change scenario selection</summary>
-                        <form
-                          onSubmit={saveProtocol}
-                          className="qa-form qa-protocol-form"
-                        >
-                          <fieldset
-                            className="qa-fieldset"
-                            disabled={panelBusy}
-                          >
-                            <legend>Scenario pool</legend>
-                            <div className="qa-fields">
-                              {[0, 1, 2, 3, 4, 5].map((index) => (
-                                <label key={index}>
-                                  Scenario {index + 1}
-                                  <select
-                                    required
-                                    value={protocol.scenario_ids[index] || ""}
-                                    onChange={(event) =>
-                                      setProtocol((current) => {
-                                        const ids = [...current.scenario_ids];
-                                        ids[index] = Number(event.target.value);
-                                        return { scenario_ids: ids };
-                                      })
-                                    }
-                                  >
-                                    <option value="">
-                                      Select a saved scenario
-                                    </option>
-                                    {scenarios.map((scenario) => (
-                                      <option
-                                        key={scenario.id}
-                                        value={scenario.id}
-                                        disabled={
-                                          scenario.id !==
-                                            protocol.scenario_ids[index] &&
-                                          protocol.scenario_ids.includes(
-                                            scenario.id,
-                                          )
-                                        }
-                                      >
-                                        {scenario.title}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                              ))}
-                            </div>
-                          </fieldset>
-                          <button type="submit" disabled={panelBusy}>
-                            Save protocol
-                          </button>
-                        </form>
-                        </details>
-                        <p className="qa-muted" role="status">
-                          {protocolComplete
-                            ? "Protocol saved: 6 randomized scenarios and 14 adapted evaluation items."
-                            : "Save all six scenarios to enable preview and activation."}
-                        </p>
-                        {protocolComplete && (
-                          <p className="qa-muted">
-                            {selected.protocol.scenario_ids
-                              .map((id) => scenarios.find((scenario) => scenario.id === id)?.title ?? `Scenario ${id}`)
-                              .join(" · ")}
-                          </p>
-                        )}
-                        {protocolDirty && (
-                          <p className="qa-notice">
-                            Save the scenario selection before previewing or
-                            activating the questionnaire.
-                          </p>
-                        )}
                         {protocolComplete && (
                           <details className="qa-instrument-details">
                             <summary>
@@ -1350,9 +1261,10 @@ export function QuestionnaireAdmin({
                     )}
                     {editable && (
                       <section className="qa-panel qa-review-panel">
-                        <div className="qa-setup-heading"><h2>3. Review and activate</h2><span className="qa-setup-status">{protocolComplete && !hasUnsavedChanges ? "Ready" : "Not ready"}</span></div>
+                        <span className="qa-overline">STEP 2 OF 2</span>
+                        <div className="qa-setup-heading"><h2>Review and activate</h2><span className="qa-setup-status">{protocolComplete && !hasUnsavedChanges ? "Ready" : "Not ready"}</span></div>
                         <p className="qa-muted" role="status">
-                          {!protocolComplete ? "Prepare six scenarios and save the study protocol to enable preview and activation." : hasUnsavedChanges ? "Save your changes before previewing or activating the questionnaire." : "Preview the study before activation. Activation locks editing."}
+                          {!protocolComplete ? "Prepare six successful scenarios to enable preview and activation." : hasUnsavedChanges ? "Save your changes before previewing or activating the questionnaire." : "Preview the study before activation. Activation locks editing."}
                         </p>
                         <div className="qa-actions">
                           <button type="button" className="qa-secondary" disabled={panelBusy || hasUnsavedChanges || !protocolComplete} onClick={() => setView("preview")}>Preview questionnaire</button>
@@ -1360,7 +1272,7 @@ export function QuestionnaireAdmin({
                         </div>
                       </section>
                     )}
-                    {selected.status !== "closed" && (
+                    {selected.status === "active" && (
                       <details className="qa-panel qa-access-details">
                         <summary>Participation keys</summary>
                         <ParticipationKeysPanel key={selected.id} questionnaireId={selected.id} disabled={panelBusy} />

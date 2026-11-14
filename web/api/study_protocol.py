@@ -13,13 +13,6 @@ from web.api.rating_instrument import INSTRUMENT_TITLE, QUESTION_COUNT, RATING_I
 PROTOCOL_VERSION = "route-study-v4"
 StudyGroup = Literal["cost_based", "contrastive_text", "contrastive_visual"]
 STUDY_GROUPS = ("cost_based", "contrastive_text", "contrastive_visual")
-ScenarioId = Annotated[int, Field(strict=True, gt=0)]
-
-
-class ProtocolInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    scenario_ids: list[ScenarioId] = Field(min_length=6, max_length=6)
 
 
 class RoutePrediction(BaseModel):
@@ -52,9 +45,9 @@ def protocol_selection(questions):
     }
 
 
-def build_questions(payload: ProtocolInput):
+def build_questions(scenario_ids: list[int]):
     questions = []
-    for scenario_id in payload.scenario_ids:
+    for scenario_id in scenario_ids:
         questions.append(
             {
                 "type": "route_scenario",
@@ -179,9 +172,9 @@ def require_protocol(questions):
     if len(questions) != QUESTION_COUNT or len(ids) != 6 or len(set(ids)) != 6:
         raise HTTPException(
             status_code=422,
-            detail="Select six different scenarios",
+            detail="Study requires six different scenarios",
         )
-    expected = build_questions(ProtocolInput(**selection))
+    expected = build_questions(ids)
     for question, template in zip(questions, expected, strict=True):
         if any(question[key] != value for key, value in template.items()):
             raise HTTPException(

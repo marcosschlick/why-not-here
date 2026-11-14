@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from psycopg import errors
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, StringConstraints
@@ -15,7 +15,6 @@ from web.api.questionnaire_results import (
 )
 from web.api.study_protocol import (
     PROTOCOL_VERSION,
-    ProtocolInput,
     StudyGroup,
     build_questions,
     protocol_selection,
@@ -73,7 +72,6 @@ def questionnaire_details(connection, questionnaire_id):
         }
         for question in questions
     ]
-    questionnaire["protocol"] = protocol_selection(questions)
     return questionnaire
 
 
@@ -171,31 +169,31 @@ def update_questionnaire(questionnaire_id: int, payload: QuestionnaireInput):
 
 
 @router.put("/{questionnaire_id}/protocol")
-def save_protocol(questionnaire_id: int, payload: ProtocolInput):
-    ids = payload.scenario_ids
-    if len(set(ids)) != 6:
+async def save_protocol(questionnaire_id: int, request: Request):
+    if await request.body():
         raise HTTPException(
-            status_code=422, detail="All six scenarios must be different"
+            status_code=422, detail="Protocol request must not contain a body"
         )
     with connect_database() as connection:
         require_draft(connection, questionnaire_id)
         scenarios = connection.execute(
-            "SELECT id, data, configuration FROM scenarios WHERE questionnaire_id = %s AND id = ANY(%s)",
-            (questionnaire_id, ids),
+            "SELECT id, data, configuration FROM scenarios WHERE questionnaire_id = %s ORDER BY id",
+            (questionnaire_id,),
         ).fetchall()
         if len(scenarios) != 6:
             raise HTTPException(
-                status_code=422, detail="Select six scenarios from this questionnaire"
+                status_code=422, detail="Study requires six saved scenarios"
             )
         for scenario in scenarios:
             validate_scenario(scenario["data"])
             validate_scenario_configuration(scenario["configuration"])
+        ids = [scenario["id"] for scenario in scenarios]
         existing = read_questions(connection, questionnaire_id)
-        if protocol_selection(existing) != payload.model_dump():
+        if protocol_selection(existing)["scenario_ids"] != ids:
             connection.execute(
                 "DELETE FROM questions WHERE questionnaire_id = %s", (questionnaire_id,)
             )
-            for question in build_questions(payload):
+            for question in build_questions(ids):
                 connection.execute(
                     "INSERT INTO questions (questionnaire_id, prompt, type, configuration, scenario_id, position) VALUES (%s, %s, %s, %s, %s, %s)",
                     (
