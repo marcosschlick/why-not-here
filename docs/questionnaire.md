@@ -2,6 +2,11 @@
 
 ## Protocol and administration
 
+Questionnaire titles and descriptions are required, trimmed and limited to 100
+and 1000 characters respectively. Titles are unique across all questionnaires,
+ignoring case and surrounding spaces. Creating or updating a duplicate returns
+HTTP 409. The administration selector lists each title, description and status.
+
 `route-study-v4` is a fixed research protocol for non-specialists in autonomous
 navigation, prepared for a possible future evaluation; its current three-condition design is defined here.
 It uses the six distinct scenarios prepared for the questionnaire.
@@ -562,7 +567,7 @@ checkpoint without counting the absence.
 
 ## Replacing the local schema
 
-The v4 schema requires a fresh set of questionnaire tables, including preparation configuration and seed cursor, remaining block assignments,
+The v4 schema requires a fresh set of questionnaire tables, including preparation configuration, seed reservations, required descriptions and unique titles, remaining block assignments,
 three group identifiers, stable export codes, the `current_step` limit of 23 and
 the `route-study-v4` default. Startup rejects an older schema before changing it. No migration or
 compatibility with the previous instrument is provided. Existing data is never

@@ -23,8 +23,8 @@ def initialize_database() -> None:
         """
         CREATE TABLE IF NOT EXISTS questionnaires (
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            title TEXT NOT NULL,
-            description TEXT,
+            title TEXT NOT NULL CHECK (length(btrim(title)) BETWEEN 1 AND 100),
+            description TEXT NOT NULL CHECK (length(btrim(description)) BETWEEN 1 AND 1000),
             status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'closed')),
             protocol_version TEXT NOT NULL DEFAULT 'route-study-v4',
             created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -34,6 +34,7 @@ def initialize_database() -> None:
             preparation_configuration JSONB
         )
         """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS questionnaires_title_unique ON questionnaires (lower(btrim(title)))",
         """
         CREATE TABLE IF NOT EXISTS scenario_seed_reservations (
             questionnaire_id BIGINT NOT NULL REFERENCES questionnaires(id) ON DELETE CASCADE,
@@ -123,7 +124,7 @@ def initialize_database() -> None:
                 "SELECT pg_advisory_xact_lock(hashtext('why-not-here-schema'))"
             )
             existing = connection.execute(
-                "SELECT column_name FROM information_schema.columns "
+                "SELECT column_name, is_nullable FROM information_schema.columns "
                 "WHERE table_schema = current_schema() AND table_name = 'questionnaires'"
             ).fetchall()
             if existing and "allocation_remaining" not in {
@@ -136,6 +137,22 @@ def initialize_database() -> None:
                 raise RuntimeError(
                     "Incompatible questionnaire seed schema. Prepare a new database; no data was changed. See docs/questionnaire.md."
                 )
+            if existing:
+                description = next(
+                    (row for row in existing if row["column_name"] == "description"),
+                    None,
+                )
+                title_index = connection.execute(
+                    "SELECT 1 FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'questionnaires' AND indexname = 'questionnaires_title_unique'"
+                ).fetchone()
+                if (
+                    not description
+                    or description["is_nullable"] != "NO"
+                    or not title_index
+                ):
+                    raise RuntimeError(
+                        "Incompatible questionnaire details schema. Prepare a new database; no data was changed. See docs/questionnaire.md."
+                    )
             for statement in statements:
                 connection.execute(statement)
     except (KeyError, psycopg.Error) as error:

@@ -34,8 +34,12 @@ NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_lengt
 class QuestionnaireInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    title: NonEmptyText
-    description: str | None = None
+    title: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)
+    ]
+    description: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)
+    ]
 
 
 def get_questionnaire(connection, questionnaire_id: int, *, lock: bool = False):
@@ -77,12 +81,19 @@ def questionnaire_details(connection, questionnaire_id):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_questionnaire(payload: QuestionnaireInput):
-    with connect_database() as connection:
-        return connection.execute(
-            "INSERT INTO questionnaires (title, description, protocol_version) VALUES (%s, %s, %s) "
-            "RETURNING id, title, description, status, protocol_version, created_at",
-            (payload.title, payload.description, PROTOCOL_VERSION),
-        ).fetchone()
+    try:
+        with connect_database() as connection:
+            return connection.execute(
+                "INSERT INTO questionnaires (title, description, protocol_version) VALUES (%s, %s, %s) "
+                "RETURNING id, title, description, status, protocol_version, created_at",
+                (payload.title, payload.description, PROTOCOL_VERSION),
+            ).fetchone()
+    except errors.UniqueViolation as error:
+        if error.diag.constraint_name != "questionnaires_title_unique":
+            raise
+        raise HTTPException(
+            status_code=409, detail="Questionnaire title already exists."
+        ) from error
 
 
 @router.get("")
@@ -159,13 +170,20 @@ def download_responses(questionnaire_id: int):
 
 @router.put("/{questionnaire_id}")
 def update_questionnaire(questionnaire_id: int, payload: QuestionnaireInput):
-    with connect_database() as connection:
-        require_draft(connection, questionnaire_id)
-        return connection.execute(
-            "UPDATE questionnaires SET title = %s, description = %s WHERE id = %s "
-            "RETURNING id, title, description, status, protocol_version, created_at",
-            (payload.title, payload.description, questionnaire_id),
-        ).fetchone()
+    try:
+        with connect_database() as connection:
+            require_draft(connection, questionnaire_id)
+            return connection.execute(
+                "UPDATE questionnaires SET title = %s, description = %s WHERE id = %s "
+                "RETURNING id, title, description, status, protocol_version, created_at",
+                (payload.title, payload.description, questionnaire_id),
+            ).fetchone()
+    except errors.UniqueViolation as error:
+        if error.diag.constraint_name != "questionnaires_title_unique":
+            raise
+        raise HTTPException(
+            status_code=409, detail="Questionnaire title already exists."
+        ) from error
 
 
 @router.put("/{questionnaire_id}/protocol")

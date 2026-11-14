@@ -166,8 +166,8 @@
 .qa-nav-list {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.35rem;
 }
 .qa-app button:not(:where(.route-canvas-section button)) {
   border: 0;
@@ -204,8 +204,10 @@
   min-width: 0;
   max-width: 100%;
   text-align: left;
-  display: grid;
-  gap: 0.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   padding: 0.85rem 0.9rem;
   background: var(--surface-raised);
   color: var(--text-strong);
@@ -217,14 +219,37 @@
     transform var(--duration-press) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out);
 }
-.qa-list-item strong {
+.qa-list-info {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.qa-list-info strong {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.qa-list-item span {
+.qa-list-description {
   font-size: 0.74rem;
   color: var(--text-muted);
-  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qa-list-status {
+  flex-shrink: 0;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-round);
+  color: var(--text-structural);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+.qa-list-status.status-active {
+  color: var(--text-structural);
+  background: var(--surface-info);
+}
+.qa-list-status.status-closed {
+  color: var(--text-muted);
 }
 .qa-app .qa-list-item:hover:not(:disabled) {
   background: var(--surface-selected);

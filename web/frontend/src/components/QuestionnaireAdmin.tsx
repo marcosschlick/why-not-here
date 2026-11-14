@@ -40,8 +40,8 @@ type Question = {
 type Questionnaire = {
   id: number;
   title: string;
-  description: string | null;
-  status: string;
+  description: string;
+  status: "draft" | "active" | "closed";
   questions: Question[];
   preparation_configuration: SystemConfig | null;
 };
@@ -496,6 +496,8 @@ export function QuestionnaireAdmin({
   const [scenarioName, setScenarioName] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [titleError, setTitleError] = useState("");
+  const [descriptionError, setDescriptionError] = useState("");
   const [view, setView] = useState<
     "overview" | "preview" | "scenarios" | "preparation"
   >("overview");
@@ -612,7 +614,9 @@ export function QuestionnaireAdmin({
       if (resetDetails) {
         setView("overview");
         setTitle(questionnaire.title);
-        setDescription(questionnaire.description || "");
+        setDescription(questionnaire.description);
+        setTitleError("");
+        setDescriptionError("");
         setRenamingScenario(null);
         setScenarioName("");
       }
@@ -669,6 +673,8 @@ export function QuestionnaireAdmin({
       setSelected(null);
       setTitle("");
       setDescription("");
+      setTitleError("");
+      setDescriptionError("");
       setScenarios([]);
       setSelectedScenario(null);
       setRenamingScenario(null);
@@ -679,12 +685,26 @@ export function QuestionnaireAdmin({
   }
   function saveDraft(event: FormEvent) {
     event.preventDefault();
+    const cleanTitle = title.trim();
+    const cleanDescription = description.trim();
+    setTitleError(cleanTitle ? "" : "Enter a title.");
+    setDescriptionError(cleanDescription ? "" : "Enter a description.");
+    if (!cleanTitle || !cleanDescription) return;
     void perform(async () => {
-      const item = await api<Summary>(
-        selected ? `/questionnaires/${selected.id}` : "/questionnaires",
-        selected ? "PUT" : "POST",
-        { title, description: description || null },
-      );
+      let item: Summary;
+      try {
+        item = await api<Summary>(
+          selected ? `/questionnaires/${selected.id}` : "/questionnaires",
+          selected ? "PUT" : "POST",
+          { title: cleanTitle, description: cleanDescription },
+        );
+      } catch (reason) {
+        if (reason instanceof Error && reason.message === "Questionnaire title already exists.") {
+          setTitleError(reason.message);
+          return;
+        }
+        throw reason;
+      }
       await loadList();
       await loadQuestionnaire(item.id, true);
     });
@@ -717,7 +737,7 @@ export function QuestionnaireAdmin({
         confirmLabel: "Activate Questionnaire",
         onConfirm: () => {
           setTitle(selected.title);
-          setDescription(selected.description || "");
+          setDescription(selected.description);
           void perform(async () => {
             await api(`/questionnaires/${selected.id}/activate`, "POST");
             setView("overview");
@@ -832,8 +852,13 @@ export function QuestionnaireAdmin({
                         aria-disabled={busy}
                         type="button"
                       >
-                        <strong>{item.title}</strong>
-                        <span>{item.status}</span>
+                        <span className="qa-list-info">
+                          <strong>{item.title}</strong>
+                          <span className="qa-list-description">{item.description}</span>
+                        </span>
+                        <span className={`qa-list-status status-${item.status}`}>
+                          {item.status === "draft" ? "Draft" : item.status === "active" ? "Active" : "Closed"}
+                        </span>
                       </button>
                     ))}
                   </nav>
@@ -1006,19 +1031,26 @@ export function QuestionnaireAdmin({
                           required
                           maxLength={100}
                           value={title}
-                          onChange={(e) => setTitle(e.target.value)}
+                          onChange={(e) => { setTitle(e.target.value); setTitleError(""); }}
+                          aria-invalid={Boolean(titleError)}
+                          aria-describedby={titleError ? "questionnaire-title-error" : undefined}
                           disabled={panelBusy}
                         />
+                        {titleError && <span id="questionnaire-title-error" className="field-error-message" role="alert">{titleError}</span>}
                       </label>
                       <label>
                         Description
                         <textarea
+                          required
                           rows={2}
                           maxLength={1000}
                           value={description}
-                          onChange={(e) => setDescription(e.target.value)}
+                          onChange={(e) => { setDescription(e.target.value); setDescriptionError(""); }}
+                          aria-invalid={Boolean(descriptionError)}
+                          aria-describedby={descriptionError ? "questionnaire-description-error" : undefined}
                           disabled={panelBusy}
                         />
+                        {descriptionError && <span id="questionnaire-description-error" className="field-error-message" role="alert">{descriptionError}</span>}
                       </label>
                       <button disabled={panelBusy} type="submit">
                         {selected ? "Save details" : "Create draft"}

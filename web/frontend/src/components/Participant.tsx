@@ -50,7 +50,7 @@ type StudyStep = {
 };
 type Study = {
   title: string;
-  description: string | null;
+  description: string;
   submission_completed: boolean;
   current_step: number;
   total_steps: number;
@@ -466,7 +466,7 @@ function StudyForm({
     <>
       <section className="qa-panel">
         <h2>{study.title}</h2>
-        {study.description && <p>{study.description}</p>}
+        <p>{study.description}</p>
         <p className="qa-muted">
           Progress is saved as you work. To resume later, return to this address
           and enter the same name, email and individual key. Confirmed steps
