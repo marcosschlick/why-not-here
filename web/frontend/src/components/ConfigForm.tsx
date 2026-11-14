@@ -346,17 +346,18 @@ export function ConfigForm({
                     setIncrementalAstarScope(event.target.value)
                   }
                   disabled={
-                    !benchmark &&
-                    (!useIncremental || reductionMethod === "NONE")
+                    benchmark || !useIncremental || reductionMethod === "NONE"
                   }
                 >
                   <option value="GLOBAL">Global Grid</option>
                   <option value="SUBGRAPH">Reduced Subgraph</option>
                 </select>
                 <span id="incremental-scope-description" className="benchmark-description">
-                  {incrementalAstarScope === "SUBGRAPH"
-                    ? "Searches the subgraph and validates optimal candidates on the full grid."
-                    : "Searches for competing paths across the full grid."}
+                  {benchmark
+                    ? "Benchmark runs both scopes; None uses global search for both."
+                    : incrementalAstarScope === "SUBGRAPH"
+                      ? "Searches the subgraph and validates optimal candidates on the full grid."
+                      : "Searches for competing paths across the full grid."}
                 </span>
               </div>
             </div>
