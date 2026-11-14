@@ -7,10 +7,12 @@ with reduction `NONE` automatically runs three scenarios in order: normal
 incremental, Brandao monolithic with `NONE`, and Brandao incremental with `NONE`.
 Other individual combinations run their single normal scenario.
 
-The full benchmark schedules twelve executions per map: ten normal
-combinations (monolithic, then incremental; each with `NONE`, `PATH_ONLY`,
-`SPARSIFIED`, `BBOX`, `FLOODFILL`), followed by Brandao monolithic and incremental,
-both with `NONE`. The individual expansion is not applied again to benchmark
+The full benchmark schedules seventeen executions per map: five normal
+monolithic combinations and ten normal incremental combinations (requested
+`SUBGRAPH` and `GLOBAL` for each of `NONE`, `PATH_ONLY`, `SPARSIFIED`, `BBOX`,
+`FLOODFILL`), followed by Brandao monolithic and incremental, both with `NONE`.
+With `NONE`, both incremental requests use the full grid and have effective scope
+`GLOBAL`; they do not represent different verification scopes. The individual expansion is not applied again to benchmark
 members. Each scenario uses the same original map, endpoints and reviewed desired route.
 
 Scenario planning is shared by the Web workflow, background executor and CLI
@@ -20,10 +22,12 @@ generating maps, solving or mutating global settings. The internal
 `POST /api/isp/solve` remains atomic: one request executes one resolved scenario.
 The UI has no manual model selector or additional strategy-comparison button.
 
-Only normal configurations are saved: one individual configuration, or ten per
-map for a full benchmark. Execution/import automatically expands a
-normal incremental/`NONE` configuration into the trio. Running the ten saved
-normal benchmark configurations produces twelve scenario executions. Brandao
+Only normal configurations are saved: one individual configuration, or fifteen per
+map for a full benchmark. Execution/import expands an individual normal
+incremental/`NONE` configuration into the trio. Saved benchmark members record
+their group membership; the `GLOBAL` incremental/`NONE` member expands into the
+trio and the `SUBGRAPH` member runs once. Running all fifteen saved normal
+benchmark configurations produces seventeen scenario executions. Brandao
 configuration files are not saved or imported as standalone scenarios; internal
 Brandao parameters remain in execution records for reproduction. No legacy
 format conversion or deduplication is performed. Each imported normal file is
@@ -284,7 +288,8 @@ the server stopped. Session export also works while later scenarios are running.
 
 `scenarios.csv` contains one row per execution or additional attempt and a fixed
 set of columns. It includes run and map identities, model, strategy, reduction,
-grid and solver settings, outcome and certification, timing, iteration and
+grid and solver settings, requested and effective incremental A* scope, outcome
+and certification, timing, iteration and
 intervention counts, graph sizes, route lengths and Hausdorff distance, route
 costs, solver bounds and sampled process memory. These measurements support the
 performance comparisons in Eder and Steinbauer-Wagner (2024) and Brandao et al.

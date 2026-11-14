@@ -365,7 +365,7 @@ export function ConfigForm({
                 <label htmlFor="benchmarkToggle">
                   <span>Benchmark</span>
                   <span className="form-group-hint">
-                    12 scenarios per map
+                    17 scenarios per map
                   </span>
                 </label>
                 <div className="toggle-container">
@@ -393,8 +393,8 @@ export function ConfigForm({
                   className="benchmark-description"
                 >
                   {workflowMode === "create"
-                    ? "Saves ten normal configurations per map; execution adds both Brandao scenarios."
-                    : "Runs ten normal combinations plus Brandao monolithic and incremental without reduction."}
+                    ? "Saves fifteen normal configurations per map; execution adds both Brandao scenarios."
+                    : "Runs fifteen normal combinations plus Brandao monolithic and incremental without reduction."}
                 </span>
               </div>
             </div>

@@ -91,17 +91,20 @@ def draw_modifications(
     ax: plt.Axes,
     modifications: SemanticModifications,
     edge_width: float,
+    user_path: list[tuple[int, int]] | None = None,
+    shared_cells: set[tuple[int, int]] | None = None,
 ) -> None:
     origin_x = ax.transData.transform((0, 0))[0]
     next_x = ax.transData.transform((1, 0))[0]
     cell_width_points = abs(next_x - origin_x) * 72 / ax.figure.dpi
-    _draw_modification_cells(
-        ax,
-        modifications.terrain_nodes,
-        MODIFICATION_TERRAIN_COLOR,
-        edge_width,
-        cell_width_points,
-    )
+    for target in ("GRASS", "FOREST"):
+        nodes = [node for node, terrain in modifications.terrain_assignments if terrain == target]
+        _draw_modification_cells(ax, nodes, MODIFICATION_TERRAIN_COLOR, edge_width, cell_width_points)
+        if target == "FOREST":
+            for row, col in nodes:
+                for color, width in ((MODIFICATION_EDGE_COLOR, 0.17), ("#F8F8F8", 0.08)):
+                    ax.plot([col - 0.18, col + 0.18], [row, row], color=color,
+                            linewidth=cell_width_points * width, solid_capstyle="round", zorder=6.1)
     _draw_modification_cells(
         ax,
         [record.cell for record in modifications.cell_openings],
@@ -115,6 +118,13 @@ def draw_modifications(
         edge_width,
         cell_width_points,
     )
+    path = user_path or []
+    visual_points = _path_with_shared_offset(path, shared_cells or set(), -1)
+    edge_centers = {
+        (path[index], path[index + 1]): (np.array(visual_points[index]) + np.array(visual_points[index + 1])) / 2
+        for index in range(len(path) - 1)
+    }
+    slope_edges = {record.edge for record in modifications.slope_adjustments}
     for records, color, double in (
         (
             modifications.environmental_speed_edges,
@@ -128,17 +138,21 @@ def draw_modifications(
         ),
     ):
         for record in records:
-            _draw_speed_arrow(ax, record.edge, color, double, cell_width_points)
+            _draw_speed_arrow(ax, record.edge, color, double, cell_width_points,
+                              edge_centers.get(record.edge), record.edge in slope_edges)
 
 
-def _draw_speed_arrow(ax, edge, color, double, cell_width_points):
+def _draw_speed_arrow(ax, edge, color, double, cell_width_points, route_center=None, has_slope=False):
     u, v = edge
     direction = np.array([v[1] - u[1], v[0] - u[0]], dtype=float)
     direction /= np.linalg.norm(direction)
     perpendicular = np.array([-direction[1], direction[0]])
-    center = np.array([(u[1] + v[1]) / 2, (u[0] + v[0]) / 2]) + perpendicular * 0.46
-    segments = [((-0.25, 0), (0.25, 0))]
-    for tip in (0.25, 0.05) if double else (0.25,):
+    center = route_center if route_center is not None else np.array([(u[1] + v[1]) / 2, (u[0] + v[0]) / 2])
+    if has_slope:
+        center = center + direction * 0.25
+    half_length = 0.15 if has_slope else 0.25
+    segments = [((-half_length, 0), (half_length, 0))]
+    for tip in (half_length, half_length - 0.20) if double else (half_length,):
         segments.extend(
             [((tip - 0.13, -0.10), (tip, 0)), ((tip, 0), (tip - 0.13, 0.10))]
         )

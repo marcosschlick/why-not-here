@@ -191,6 +191,7 @@ export interface SolveResponse {
 export interface NamingMetadata {
   map_index?: number;
   benchmark?: boolean;
+  benchmark_member?: boolean;
   benchmark_group_id?: string;
 }
 
@@ -238,6 +239,7 @@ export interface ImportConfigResponse extends MapData {
 
 export interface ExecutionMetadata {
   run_id: string;
+  benchmark_member?: boolean;
   benchmark_group_id?: string;
   attempt_index: number;
   execution_order: number;
@@ -249,6 +251,8 @@ export interface ScenarioMetrics {
   model?: string;
   strategy?: string;
   reduction?: string;
+  requested_astar_scope?: string | null;
+  effective_astar_scope?: string | null;
   stop_reason?: string;
   validation_status?: string;
   objective_certified?: boolean;

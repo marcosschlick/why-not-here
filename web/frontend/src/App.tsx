@@ -216,6 +216,7 @@ export function App() {
         imported,
         imported.user_path,
         workflowMode,
+        imported.execution?.benchmark_member,
       );
       if (items.length > 1) {
         setQueue(items);
@@ -267,6 +268,7 @@ export function App() {
             imported,
             imported.user_path,
             workflowMode,
+            imported.execution?.benchmark_member,
           )),
         );
       } catch (error) {
@@ -1117,7 +1119,7 @@ export function App() {
                                   <span>
                                     {workflowMode === "create"
                                       ? `Item ${idx + 1} (${item.config.MAP_H}x${item.config.MAP_W})`
-                                      : `Map ${reviewSteps.indexOf(idx) + 1} (${item.config.MAP_H}x${item.config.MAP_W})${item.groupKind === "benchmark" ? " · 12 scenarios" : item.groupKind === "comparison" ? " · 3 scenarios" : ""}`}
+                                      : `Map ${reviewSteps.indexOf(idx) + 1} (${item.config.MAP_H}x${item.config.MAP_W})${item.groupKind === "benchmark" ? " · 17 scenarios" : item.groupKind === "comparison" ? " · 3 scenarios" : ""}`}
                                   </span>
                                   <span
                                     className={`batch-step-status-pill ${isItemConnected ? "ready" : "pending"}`}

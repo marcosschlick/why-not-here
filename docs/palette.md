@@ -29,8 +29,10 @@ five-color palette.
 For normal-model interventions, use Turquoise (`#00C9C7`) for cell openings,
 Violet (`#A855F7`) for directed slope adjustments, Pink (`#FF3B8D`) for
 removing environmental speed limits, and Lime (`#C6FF00`) for hypothetical
-robot speed capability. Brandao keeps Pink (`#FF3B8D`) for terrain assignments;
-its map colors, cell grouping, routes and endpoints are unchanged.
+robot speed capability. Brandao uses Pink (`#FF3B8D`) for terrain assignments. Slow-to-fast cells
+use filled circles; fast-to-slow cells add a Bright Snow horizontal stroke with a
+Shadow Grey outline. Group each direction separately. Its map colors, routes and
+endpoints are unchanged.
 
 Draw cell changes as filled circles with radius 0.39 cells and a Shadow Grey
 (`#282828`) edge 0.05 cells wide, without a halo. Group same-type cells
@@ -52,9 +54,10 @@ Draw environmental speed interventions as single arrows and hypothetical robot
 capability interventions as double arrows. The shaft is 0.50 cells long, with
 0.13-cell backward and 0.10-cell sideways arrowhead wings; the second tip is
 0.20 cells behind the first. Use the same 0.07/0.17-cell colored/dark stroke
-widths. Shift speed-arrow centers 0.46 cells to the left normal of the directed
-edge in row/column screen coordinates, separating them from centered slope
-crosses and from reverse-direction actions. Draw cell markers first, slope
+widths. Center speed arrows on the displayed alternative route at the directed edge
+midpoint, including the route offset on shared cells. If a slope adjustment
+shares the directed edge, move the arrow 0.25 cells toward its destination and
+shorten its shaft to 0.30 cells so both symbols remain visible. Draw cell markers first, slope
 crosses next, then speed arrows and endpoints. Use matching symbols in Web and
 PNG legends. Inspection identifies directed endpoints and all coincident actions.
 The prepared background remains visible beneath intervention overlays in both

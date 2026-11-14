@@ -31,6 +31,8 @@ export function requestFailure(
           : map.isp_model_version,
       strategy: config.USE_INCREMENTAL_SOLVER ? "INCREMENTAL" : "MONOLITHIC",
       reduction: config.DEFAULT_REDUCTION_METHOD,
+      requested_astar_scope: config.USE_INCREMENTAL_SOLVER ? config.INCREMENTAL_ASTAR_SCOPE : null,
+      effective_astar_scope: null,
       stop_reason: "REQUEST_ERROR",
       validation_status: "UNKNOWN",
       objective_certified: false,

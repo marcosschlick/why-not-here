@@ -48,16 +48,8 @@ export function SolverConfigBadges({
 
   const reductionLabel = formatReductionMethod(config.DEFAULT_REDUCTION_METHOD);
 
-  const hasReduction =
-    config.DEFAULT_REDUCTION_METHOD &&
-    config.DEFAULT_REDUCTION_METHOD !== "NONE";
-  const astarScopeLabel =
-    config.INCREMENTAL_ASTAR_SCOPE === "SUBGRAPH" ? "Subgraph A*" : "Global A*";
-
   const solverArchLabel = config.USE_INCREMENTAL_SOLVER
-    ? `Incremental MILP (${config.DEFAULT_SOLVER || "HiGHS"}${
-        hasReduction ? `, ${astarScopeLabel}` : ""
-      })`
+    ? `Incremental MILP (${config.DEFAULT_SOLVER || "HiGHS"}; requested ${config.INCREMENTAL_ASTAR_SCOPE}, expected ${config.DEFAULT_REDUCTION_METHOD === "NONE" ? "GLOBAL" : config.INCREMENTAL_ASTAR_SCOPE})`
     : `Monolithic MILP (${config.DEFAULT_SOLVER || "HiGHS"})`;
 
   const gridSpecs = `${config.MAP_H}×${config.MAP_W} (${config.CONNECTIVITY}-Connected)`;

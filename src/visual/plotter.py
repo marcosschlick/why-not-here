@@ -82,7 +82,7 @@ def render_tactical_map(
 
     build_tactical_legend(
         ax=ax,
-        grid=target_grid,
+        grid=grid,
         modifications=modifications,
         show_optimal_path=bool(optimal_path),
         show_alternative_path=bool(user_path),
@@ -137,7 +137,7 @@ def render_tactical_map(
         )
 
     if modifications is not None:
-        draw_modifications(ax, modifications, modification_edge_width)
+        draw_modifications(ax, modifications, modification_edge_width, user_path, shared_cells)
 
     if optimal_path:
         draw_endpoints(

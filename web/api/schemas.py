@@ -10,6 +10,7 @@ class NamingMetadata(BaseModel):
 
     map_index: int | None = Field(default=None, ge=1)
     benchmark: bool = False
+    benchmark_member: bool = False
     benchmark_group_id: str | None = Field(default=None, max_length=128)
 
 

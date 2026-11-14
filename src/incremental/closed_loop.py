@@ -113,7 +113,8 @@ class ClosedLoopISPSolver:
         astar_scope=None,
     ) -> ClosedLoopResult:
         method = reduction_method or self.reduction_method
-        scope = "GLOBAL" if method == "NONE" else (astar_scope or self.astar_scope)
+        requested_scope = astar_scope or self.astar_scope
+        scope = "GLOBAL" if method == "NONE" else requested_scope
         result = ClosedLoopResult(
             False,
             None,
@@ -133,7 +134,8 @@ class ClosedLoopISPSolver:
             model_version=full_grid.isp_model_version,
             strategy="INCREMENTAL" if self.incremental else "MONOLITHIC",
             reduction=method,
-            astar_scope=scope,
+            requested_astar_scope=requested_scope if self.incremental else None,
+            effective_astar_scope=scope if self.incremental else None,
             tolerance_sec=self.tolerance,
             validation_status="NOT_RUN",
             stop_reason="NOT_RUN",

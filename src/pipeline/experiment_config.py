@@ -366,13 +366,15 @@ def expand_scenario_configurations(
     if benchmark:
         for incremental in (False, True):
             for reduction in ("NONE", "PATH_ONLY", "SPARSIFIED", "BBOX", "FLOODFILL"):
-                scenarios.append(
-                    {
-                        **copy.deepcopy(normal),
-                        "USE_INCREMENTAL_SOLVER": incremental,
-                        "DEFAULT_REDUCTION_METHOD": reduction,
-                    }
-                )
+                for scope in (("SUBGRAPH", "GLOBAL") if incremental else (normal["INCREMENTAL_ASTAR_SCOPE"],)):
+                    scenarios.append(
+                        {
+                            **copy.deepcopy(normal),
+                            "USE_INCREMENTAL_SOLVER": incremental,
+                            "DEFAULT_REDUCTION_METHOD": reduction,
+                            "INCREMENTAL_ASTAR_SCOPE": scope,
+                        }
+                    )
     else:
         scenarios.append(copy.deepcopy(normal))
     include_brandao = benchmark or (
@@ -453,6 +455,8 @@ def save_experiment_configurations(configurations: list[dict[str, Any]]) -> list
         group_id = (item.get("naming") or {}).get("benchmark_group_id")
         if group_id:
             export_data["execution"]["benchmark_group_id"] = group_id
+        if (item.get("naming") or {}).get("benchmark_member"):
+            export_data["execution"]["benchmark_member"] = True
         prepared.append((name, json.dumps(export_data, indent=2) + "\n"))
 
     created_paths = []
@@ -507,6 +511,7 @@ def validate_experiment_config(
     execution = data.get("execution", {})
     if not isinstance(execution, dict) or set(execution) - {
         "benchmark_group_id",
+        "benchmark_member",
         "execution_order",
         "attempt_index",
     }:
@@ -518,6 +523,8 @@ def validate_experiment_config(
         execution["benchmark_group_id"], str
     ):
         raise ValueError("benchmark_group_id must be a string.")
+    if "benchmark_member" in execution and type(execution["benchmark_member"]) is not bool:
+        raise ValueError("benchmark_member must be a boolean.")
     raw_start = data.get("start")
     if not raw_start or not isinstance(raw_start, (list, tuple)) or len(raw_start) != 2:
         raise ValueError(
@@ -633,6 +640,8 @@ def execute_experiment(
 ) -> list[ClosedLoopResult]:
     params, start, goal, p_user = validate_experiment_config(config_data)
     scenarios = expand_scenario_configurations(params)
+    if (config_data.get("execution") or {}).get("benchmark_member") and params["INCREMENTAL_ASTAR_SCOPE"] == "SUBGRAPH":
+        scenarios = scenarios[:1]
     apply_experiment_config(params, start=start, goal=goal)
     generated = generate_map(verbose=verbose, persist_artifacts=False)
     execution = dict(config_data.get("execution") or {})

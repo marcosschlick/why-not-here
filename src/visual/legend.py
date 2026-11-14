@@ -88,6 +88,23 @@ class ModificationDotHandle(Line2D):
         super().__init__([], [], marker="o", markerfacecolor=color, label=label)
 
 
+class TerrainSlowHandle(ModificationDotHandle):
+    pass
+
+
+class TerrainSlowHandler(HandlerBase):
+    def create_artists(self, legend, original_handle, xdescent, ydescent, width, height, fontsize, transform):
+        center = (xdescent + width / 2, ydescent + height / 2)
+        return [
+            mpatches.Circle(center, radius=min(width, height) * 0.39, facecolor=MODIFICATION_TERRAIN_COLOR,
+                            edgecolor=MODIFICATION_EDGE_COLOR, linewidth=0.65, transform=transform),
+            Line2D([center[0] - width * 0.13, center[0] + width * 0.13], [center[1], center[1]],
+                   color=MODIFICATION_EDGE_COLOR, linewidth=2.5, solid_capstyle="round", transform=transform),
+            Line2D([center[0] - width * 0.13, center[0] + width * 0.13], [center[1], center[1]],
+                   color="#F8F8F8", linewidth=1, solid_capstyle="round", transform=transform),
+        ]
+
+
 class ModificationEdgeHandle(Line2D):
     def __init__(self, color: str, label: str) -> None:
         super().__init__([], [], color=color, linewidth=2.4, label=label)
@@ -295,10 +312,16 @@ def build_tactical_legend(
     if modifications is not None:
         changes = (
             (
-                len(modifications.terrain_nodes),
+                sum(target == "GRASS" for _, target in modifications.terrain_assignments),
                 MODIFICATION_TERRAIN_COLOR,
-                "Terrain changed",
+                "Slow to fast",
                 ModificationDotHandle,
+            ),
+            (
+                sum(target == "FOREST" for _, target in modifications.terrain_assignments),
+                MODIFICATION_TERRAIN_COLOR,
+                "Fast to slow",
+                TerrainSlowHandle,
             ),
             (
                 len(modifications.cell_openings),
@@ -343,6 +366,7 @@ def build_tactical_legend(
         handler_map={
             SharedRouteHandle: SharedRouteHandler(),
             ModificationDotHandle: ModificationDotHandler(),
+            TerrainSlowHandle: TerrainSlowHandler(),
             ModificationEdgeHandle: ModificationEdgeHandler(),
             SpeedHandle: SpeedHandler(),
         },

@@ -2810,3 +2810,6 @@ kbd,
   color: var(--shadow-grey);
   line-height: 1.5;
 }
+
+.legend-terrain-slow { position: relative; }
+.legend-terrain-slow::after { content: ""; position: absolute; left: 20%; right: 20%; top: 50%; height: 2px; transform: translateY(-50%); background: #f8f8f8; outline: 1px solid #282828; }

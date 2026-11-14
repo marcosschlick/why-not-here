@@ -136,6 +136,8 @@ def run_isp(
     result.runtime_sec = elapsed
     result.prepared_grid = prepared
     metrics = result.metrics
+    metrics.setdefault("requested_astar_scope", config.INCREMENTAL_ASTAR_SCOPE if config.USE_INCREMENTAL_SOLVER else None)
+    metrics.setdefault("effective_astar_scope", None)
     stop = metrics.get("stop_reason")
     overrun = elapsed > budget.limit_sec
     metrics.update(

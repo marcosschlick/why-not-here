@@ -13,9 +13,13 @@ export async function createExperimentItems(
   mapData?: MapData,
   userPath?: [number, number][],
   purpose: "run" | "create" = "run",
+  benchmarkMember = false,
 ): Promise<QueueItem[]> {
   const group = crypto.randomUUID();
-  const variants = await planScenarioConfigurations(config, benchmark, purpose);
+  const planned = await planScenarioConfigurations(config, benchmark, purpose);
+  const variants = !benchmark && benchmarkMember && config.INCREMENTAL_ASTAR_SCOPE === "SUBGRAPH"
+    ? planned.slice(0, 1)
+    : planned;
   const grouped = benchmark || variants.length > 1;
   return variants.map<QueueItem>((parameters, index) => ({
     id: `${group}-${index}`,
@@ -24,6 +28,7 @@ export async function createExperimentItems(
     naming: {
       ...naming,
       benchmark: grouped,
+      benchmark_member: (benchmark || benchmarkMember) && purpose === "create",
       benchmark_group_id: grouped ? group : naming.benchmark_group_id,
     },
     config: parameters,

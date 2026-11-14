@@ -555,6 +555,8 @@ export function ResultsView({
                       : "Monolithic"}
                     {item.config.ISP_MODEL !== "BRANDAO" &&
                       ` · ${item.config.DEFAULT_REDUCTION_METHOD}`}
+                    {item.config.USE_INCREMENTAL_SOLVER &&
+                      ` · requested ${item.config.INCREMENTAL_ASTAR_SCOPE}, ${item.result ? `effective ${item.result.metrics?.effective_astar_scope ?? "unknown"}` : `expected ${item.config.DEFAULT_REDUCTION_METHOD === "NONE" ? "GLOBAL" : item.config.INCREMENTAL_ASTAR_SCOPE}`}`}
                   </span>
                   <span className={`batch-tab-badge status-${outcome}`}>
                     {tabLabel}
@@ -746,11 +748,7 @@ export function ResultsView({
               <span className="loading-param-chip">
                 Solver:{" "}
                 {activeBatchItem.config.USE_INCREMENTAL_SOLVER
-                  ? `Incremental MILP${
-                      activeBatchItem.config.DEFAULT_REDUCTION_METHOD !== "NONE"
-                        ? ` (${activeBatchItem.config.INCREMENTAL_ASTAR_SCOPE === "SUBGRAPH" ? "Subgraph A*" : "Global A*"})`
-                        : ""
-                    }`
+                  ? `Incremental MILP (requested ${activeBatchItem.config.INCREMENTAL_ASTAR_SCOPE}, expected ${activeBatchItem.config.DEFAULT_REDUCTION_METHOD === "NONE" ? "GLOBAL" : activeBatchItem.config.INCREMENTAL_ASTAR_SCOPE})`
                   : "Monolithic MILP"}
               </span>
               <span className="loading-param-chip">
@@ -790,6 +788,14 @@ export function ResultsView({
             </p>
           )}
           <div className="metrics-grid">
+            {currentConfig?.USE_INCREMENTAL_SOLVER && (
+              <div className="metric-card">
+                <span className="metric-label">A* Scope: Requested / Effective</span>
+                <span className="metric-value">
+                  {currentResult.metrics?.requested_astar_scope ?? "Unknown"} / {currentResult.metrics?.effective_astar_scope ?? "Unknown"}
+                </span>
+              </div>
+            )}
             <div className="metric-card">
               <span className="metric-label">Execution Time</span>
               <span className="metric-value">{runtimeDisplay}</span>

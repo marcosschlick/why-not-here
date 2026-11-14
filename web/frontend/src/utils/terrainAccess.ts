@@ -11,12 +11,15 @@ export function interventionDescriptions(
   modifications: SemanticModificationsData | null | undefined,
   point: GridPoint,
 ): string[] {
-  if (!modifications || modifications.model !== "NORMAL") return [];
+  if (!modifications) return [];
   const matches = ([row, col]: GridPoint) =>
     row === point[0] && col === point[1];
   const label = (edge: [GridPoint, GridPoint]) =>
     `[${edge[0].join(", ")}] → [${edge[1].join(", ")}]`;
   const descriptions: string[] = [];
+  for (const [, target] of modifications.terrain_assignments.filter(([cell]) => matches(cell))) {
+    descriptions.push(target === "GRASS" ? "Terrain: slow → fast" : "Terrain: fast → slow");
+  }
   for (const opening of modifications.cell_openings.filter(({ cell }) =>
     matches(cell),
   )) {
