@@ -17,6 +17,7 @@ import type {
 } from "../utils/useParticipationProgress";
 import type { StudyGroup } from "../utils/studyGroups";
 import { ScenarioMapView } from "./ScenarioMapView";
+import { Brand } from "./Brand";
 import "./questionnaire-admin.css";
 
 type Point = [number, number];
@@ -795,10 +796,8 @@ export function Participant({ preview }: { preview?: Preview }) {
   return (
     <div className={`qa-app ${preview ? "qa-preview-app" : ""}`}>
       {!preview && (
-        <header className="qa-header">
-          <div>
-            <h1>Route planning study</h1>
-          </div>
+        <header className="app-topbar qa-participant-header">
+          <Brand />
         </header>
       )}
       <main className="qa-content qa-participant">

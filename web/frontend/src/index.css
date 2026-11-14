@@ -2377,6 +2377,13 @@ kbd,
   .brand-tagline {
     display: none;
   }
+  .qa-participant-header .topbar-brand {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .qa-participant-header .brand-tagline {
+    display: block;
+  }
   .brand-logo-frame {
     width: min(15rem, 100%);
   }

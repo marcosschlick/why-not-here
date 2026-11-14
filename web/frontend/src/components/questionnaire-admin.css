@@ -5,15 +5,6 @@
   background: var(--surface-page);
   color: var(--text-strong);
 }
-.qa-header {
-  background: var(--surface-structure);
-  color: var(--text-inverse);
-  padding: 1.3rem clamp(1rem, 4vw, 3rem);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
 .qa-progress-status {
   display: flex;
   align-items: center;
@@ -22,15 +13,6 @@
   gap: 0.75rem;
   color: var(--text-muted);
   font-size: 0.875rem;
-}
-.qa-header h1 {
-  margin: 0.3rem 0 0;
-  font-size: clamp(1.25rem, 2vw, 1.8rem);
-  color: inherit;
-}
-.qa-header .qa-overline {
-  color: var(--bright-snow);
-  opacity: 0.75;
 }
 .qa-overline {
   color: var(--text-structural);
@@ -481,10 +463,6 @@
   background: var(--surface-selected);
 }
 @media (max-width: 760px) {
-  .qa-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
   .qa-heading {
     flex-wrap: wrap;
   }

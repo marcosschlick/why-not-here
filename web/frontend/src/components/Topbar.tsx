@@ -1,3 +1,5 @@
+import { Brand } from "./Brand";
+
 export interface TopbarProps {
   activeView: "simulation" | "admin";
   currentStep: "config" | "route_canvas" | "results";
@@ -19,24 +21,7 @@ export function Topbar({
   const isAdmin = activeView === "admin";
   return (
     <header className="app-topbar">
-      <div className="topbar-brand">
-        <h1 className="brand-logo-frame">
-          <img
-            src="/logo.svg"
-            alt="Why Not Here?"
-            className="brand-logo-img"
-            width="1000"
-            height="256"
-          />
-        </h1>
-
-        <div className="brand-text">
-          <span className="brand-tagline">
-            Contrastive explanations for autonomous path planning via Inverse
-            Shortest Path (ISP) on 2D grids
-          </span>
-        </div>
-      </div>
+      <Brand />
 
       <div className="topbar-actions-group">
         <nav
