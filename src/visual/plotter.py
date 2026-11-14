@@ -100,7 +100,8 @@ def render_tactical_map(
     modification_edge_width = cell_width_points * MODIFICATION_EDGE_WIDTH
     endpoint_edge_width = cell_width_points * 0.035
 
-    draw_map_textures(ax, grid, cell_width_pixels)
+    if grid.isp_model != "BRANDAO":
+        draw_map_textures(ax, grid, cell_width_pixels)
 
     shared_cells = set(optimal_path or []) & set(user_path or [])
 

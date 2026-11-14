@@ -23,6 +23,7 @@ from .style import (
     MODIFICATION_TERRAIN_COLOR,
     START_COLOR,
     START_EDGE_COLOR,
+    BRANDAO_BLOCKED_COLOR,
     terrain_color_rgb,
 )
 
@@ -38,6 +39,18 @@ def create_grid_rgb_matrix(grid: Grid) -> np.ndarray:
     for i in range(grid.h):
         for j in range(grid.w):
             cell = grid.cells[i][j]
+            if grid.isp_model == "BRANDAO":
+                color = (
+                    BRANDAO_BLOCKED_COLOR
+                    if not grid.is_cell_traversable((i, j))
+                    else None
+                )
+                rgb[i, j] = (
+                    np.array([int(color[k : k + 2], 16) / 255 for k in (1, 3, 5)])
+                    if color
+                    else terrain_color_rgb(cell.terrain, brandao=True)
+                )
+                continue
             if cell.terrain == "WATER_RIVER":
                 base = terrain_color_rgb(cell.terrain)
                 water[i, j] = True
@@ -47,6 +60,8 @@ def create_grid_rgb_matrix(grid: Grid) -> np.ndarray:
                 base = terrain_color_rgb(cell.terrain)
 
             rgb[i, j] = base
+    if grid.isp_model == "BRANDAO":
+        return rgb
     intensity = relief_intensity(elev_matrix, grid.cell_size, appearance["relief"])[
         :, :, None
     ]

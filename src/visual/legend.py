@@ -21,6 +21,7 @@ from .style import (
     USER_PATH_COLOR,
     USER_PATH_OUTLINE_COLOR,
     USER_PATH_OUTLINE_WIDTH,
+    BRANDAO_BLOCKED_COLOR,
     terrain_color_rgb,
 )
 
@@ -249,17 +250,18 @@ def build_tactical_legend(
     add_section("Terrain")
     handles.extend(
         mpatches.Patch(
-            color=terrain_color_rgb(name),
+            color=terrain_color_rgb(name, brandao=grid.isp_model == "BRANDAO"),
             label=f"{('fast' if name == 'GRASS' else 'slow') if grid.isp_model == 'BRANDAO' and name in {'GRASS', 'FOREST'} else name.lower().replace('_', ' ')} ({speed:g} m/s)",
         )
         for name, speed in grid.speeds.items()
+        if grid.isp_model != "BRANDAO" or name in {"GRASS", "FOREST"}
     )
     handles.append(
         mpatches.Patch(
-            facecolor="#777B80",
+            facecolor=BRANDAO_BLOCKED_COLOR if grid.isp_model == "BRANDAO" else "#777B80",
             edgecolor="#282828",
             hatch="xx",
-            label="Obstacle (terrain shade)",
+            label="Blocked" if grid.isp_model == "BRANDAO" else "Obstacle (terrain shade)",
         )
     )
 

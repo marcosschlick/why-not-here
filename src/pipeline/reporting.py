@@ -35,9 +35,10 @@ def execution_error(result) -> str | None:
         "SOLVER_NOT_FOUND",
         "SOLVER_FAILED",
         "INCONSISTENT_COMPETING_PATH",
-        "COST_MODEL_MISMATCH",
     }
     reason = result.metrics.get("stop_reason")
+    if reason == "COST_MODEL_MISMATCH":
+        return "Modeled edge costs differ from the costs applied to the candidate map."
     if reason in failures or result.solver_status in failures:
         return (
             result.metrics.get("error")

@@ -313,6 +313,11 @@ class ClosedLoopISPSolver:
                                     or abs(modeled_cost - physical_cost) > 1e-5
                                 ):
                                     consistent = False
+                                    metrics["cost_model_mismatch"] = {
+                                        "edge": edge,
+                                        "modeled_cost": modeled_cost,
+                                        "applied_cost": physical_cost,
+                                    }
                                     break
                             metrics["cost_expression_consistent"] = consistent
                             final_path, final_cost, expanded = astar(
@@ -359,7 +364,7 @@ class ClosedLoopISPSolver:
                             )
                         metric["completed"] = True
                         if not metrics["cost_expression_consistent"]:
-                            result.success = globally_valid
+                            result.success = False
                             metrics["stop_reason"] = "COST_MODEL_MISMATCH"
                             break
                         if globally_valid:
@@ -467,9 +472,7 @@ class ClosedLoopISPSolver:
                     last_candidate,
                     full_grid,
                     stop_reason=metrics["stop_reason"],
-                    solver_status="PATH_VALIDATED"
-                    if result.success
-                    else "CANDIDATE_UNVALIDATED",
+                    solver_status="PATH_VALIDATED" if result.success else "CANDIDATE_UNVALIDATED",
                 )
                 if not metrics["cardinality_certified"]:
                     result.explanation_text += (

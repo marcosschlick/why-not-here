@@ -93,6 +93,12 @@ $shadow-grey: #282828;
 
 ### Terrain textures and obstacles
 
+The prepared Brandao map uses flat Bright Snow (`#F8F8F8`) for fast terrain,
+Yale Blue (`#324B64`) for slow terrain, and Shadow Grey (`#282828`) for all
+blocked cells. These three classes replace terrain textures and relief shading
+in this view, including its generated tactical images. Route, intervention, and
+endpoint symbols retain the rules above.
+
 Dense forest uses map-specific `#234A32` and groups of three layered trees; ordinary forest keeps `#2F653A` and a single layered tree with a trunk. Terrain motifs use Shadow Grey with three deterministic variants selected by `(row + 2*column) % 3`. Grass has short tufts; grassland has spaced stems; dry vegetation has broken branches; sand has irregular dots and ripples; mud has flattened marks and grooves; rocks have irregular polygons with an inner face; water has parallel short waves; compacted soil has horizontal marks; unpaved tracks have interrupted paired ruts.
 
 At cell sizes of at least 8 pixels, motifs use 24% opacity and a 0.045-cell stroke width. Below 8 pixels, overview motifs span blocks of `2**ceil(log2(16/cell_pixels))` cells, producing spacing from 16 to less than 32 pixels. A repeating 2×2 atlas uses the same coordinate-based variants, 16% opacity and a 0.045-tile stroke width. Patterns are anchored to the grid origin, clipped to the actual terrain and omitted on physical obstacles. Canvas caches small atlases independently of map dimensions; PNG uses a raster overlay sampled by terrain class. Both scales stay below routes, changes and endpoints.

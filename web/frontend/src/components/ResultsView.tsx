@@ -164,6 +164,7 @@ export function ResultsView({
     useState<HTMLDivElement | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [hoveredCell, setHoveredCell] = useState<GridPoint | null>(null);
+  const [showOriginalMap, setShowOriginalMap] = useState(false);
 
   const isBatch = Boolean(batchQueue && batchQueue.length > 0);
   const currentBatchIdx =
@@ -205,18 +206,18 @@ export function ResultsView({
         : originalMapData,
     [originalMapData, currentResult],
   );
-  const modifiedGrid = currentResult?.modified_grid;
-  const currentMapData = useMemo(
-    () =>
-      preparedMapData && modifiedGrid
-        ? {
-            ...preparedMapData,
-            ...modifiedGrid,
-            terrain_colors: preparedMapData.terrain_colors,
-          }
-        : preparedMapData,
-    [preparedMapData, modifiedGrid],
-  );
+  const isBrandao = currentConfig?.ISP_MODEL === "BRANDAO";
+  const currentMapData = isBrandao
+    ? showOriginalMap
+      ? originalMapData
+      : preparedMapData
+    : preparedMapData && currentResult?.modified_grid
+      ? {
+          ...preparedMapData,
+          ...currentResult.modified_grid,
+          terrain_colors: preparedMapData.terrain_colors,
+        }
+      : preparedMapData;
   const currentUserPath = isBatch
     ? (activeBatchItem?.userPath ??
       activeBatchItem?.mapData?.auto_path ??
@@ -236,6 +237,7 @@ export function ResultsView({
     setPreviousBatchIndex(currentBatchIdx);
     setHoveredCell(null);
     setZoomLevel(1.0);
+    setShowOriginalMap(false);
   } else if (zoomLevel > maxZoomLevel) {
     setZoomLevel(maxZoomLevel);
   }
@@ -357,7 +359,9 @@ export function ResultsView({
   const currentModifications = currentResult?.modifications ?? null;
   const hasCandidateModifications = hasModifications(currentModifications);
   const visibleModifications: SemanticModificationsData | null =
-    hasCandidateModifications ? currentModifications : null;
+    hasCandidateModifications && !(isBrandao && showOriginalMap)
+      ? currentModifications
+      : null;
   const explanationText = currentResult
     ? currentResult.explanation_text?.trim() ||
       `No detailed explanation was returned for solver status ${currentResult.solver_status}.`
@@ -439,7 +443,15 @@ export function ResultsView({
     hoveredCell && currentMapData ? (
       <span>
         Cell [{hoveredCell[0]}, {hoveredCell[1]}] &bull; Terrain{" "}
-        <strong>{hoveredTerrain}</strong>
+        <strong>
+          {currentMapData.isp_model === "BRANDAO"
+            ? hoveredObstacleBlocked || hoveredTerrainBlocked
+              ? "Blocked"
+              : hoveredTerrain === "GRASS"
+                ? "Fast"
+                : "Slow"
+            : hoveredTerrain}
+        </strong>
         {isCellTerrainModified && (
           <strong
             className="mod-badge terrain"
@@ -539,8 +551,11 @@ export function ResultsView({
                   onClick={() => handleTabSelect(idx)}
                 >
                   <span className="batch-tab-title">
-                    #{idx + 1} · {item.config.ISP_MODEL === "BRANDAO" ? "Brandao · " : ""}
-                    {item.config.USE_INCREMENTAL_SOLVER ? "Incremental" : "Monolithic"}
+                    #{idx + 1} ·{" "}
+                    {item.config.ISP_MODEL === "BRANDAO" ? "Brandao · " : ""}
+                    {item.config.USE_INCREMENTAL_SOLVER
+                      ? "Incremental"
+                      : "Monolithic"}
                     {item.config.ISP_MODEL !== "BRANDAO" &&
                       ` · ${item.config.DEFAULT_REDUCTION_METHOD}`}
                   </span>
@@ -589,12 +604,27 @@ export function ResultsView({
             <div>
               <h3>Interactive Tactical Map</h3>
               <p className="subtitle">
-                {currentConfig?.ISP_MODEL === "BRANDAO"
-                  ? "Brandao adaptation: fast/slow costs 1:8, fixed obstacles and no slope effects."
+                {isBrandao
+                  ? showOriginalMap
+                    ? "Original map and its initial optimal route."
+                    : "Prepared Brandao map: fast/slow costs 1:8, fixed obstacles and no slope effects."
                   : "Alternative route and ISP interventions on the active map."}
               </p>
             </div>
             <div className="results-map-controls">
+              {isBrandao && currentResult?.prepared_grid && originalMapData && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  aria-pressed={showOriginalMap}
+                  onClick={() => {
+                    setShowOriginalMap((value) => !value);
+                    setHoveredCell(null);
+                  }}
+                >
+                  {showOriginalMap ? "Show Brandao map" : "Show original map"}
+                </button>
+              )}
               {currentOutcome === "inconclusive" &&
                 currentResult?.metrics?.candidate_available && (
                   <span className="candidate-solution-badge candidate">
@@ -645,7 +675,9 @@ export function ResultsView({
           </div>
 
           {!hasCandidateModifications && (
-            <p className={`results-notice ${currentOutcome === "validated" ? "info" : "warning"}`}>
+            <p
+              className={`results-notice ${currentOutcome === "validated" ? "info" : "warning"}`}
+            >
               {currentOutcome === "infeasible"
                 ? "No valid modifications could be calculated; the alternative route is shown."
                 : currentOutcome === "validated"
@@ -666,7 +698,9 @@ export function ResultsView({
             ref={setMapCanvasContainer}
           >
             <TacticalMapCanvas
-              mapData={preparedMapData ?? currentMapData}
+              mapData={
+                isBrandao ? currentMapData : (preparedMapData ?? currentMapData)
+              }
               userPath={currentUserPath}
               optimalPath={currentMapData.optimal_path}
               modifications={visibleModifications}
@@ -748,119 +782,128 @@ export function ResultsView({
       )}
 
       {currentResult && (
-        <div className="metrics-grid">
-          <div className="metric-card">
-            <span className="metric-label">Execution Time</span>
-            <span className="metric-value">{runtimeDisplay}</span>
-          </div>
-
-          {currentConfig?.USE_INCREMENTAL_SOLVER && (
-            <div className="metric-card">
-              <span className="metric-label">ISP Iterations</span>
-              <span className="metric-value">
-                {formatMetric(currentResult.iterations)}
-              </span>
-            </div>
+        <>
+          {isBrandao && (
+            <p className="subtitle">
+              Metrics and costs refer to the prepared Brandao scenario.
+            </p>
           )}
-
-          <div className="metric-card optimal-card">
-            <span className="metric-label">Initial Optimal Route Cost</span>
-            <span className="metric-value">{origCostDisplay}</span>
-          </div>
-
-          <div className="metric-card alternative-card">
-            <span className="metric-label">Initial Alternative Route Cost</span>
-            <span className="metric-value">
-              {formatRouteCost(
-                currentResult.original_alternative_cost,
-                currentResult.metrics?.cost_states?.original_alternative,
-              )}
-            </span>
-          </div>
-          <div className="metric-card alternative-card">
-            <span className="metric-label">Final Alternative Route Cost</span>
-            <span className="metric-value">{altCostDisplay}</span>
-          </div>
-
-          <div className="metric-card">
-            <span className="metric-label">Graph Nodes</span>
-            <span className="metric-value">
-              {formatMetric(currentResult.graph_nodes)}
-            </span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Directed Edges</span>
-            <span className="metric-value">
-              {formatMetric(currentResult.graph_edges)}
-            </span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Optimal Route Length</span>
-            <span className="metric-value">
-              {formatDistance(
-                currentResult.path_metrics?.optimal_length_cells,
-                currentResult.path_metrics?.optimal_length_m,
-              )}
-            </span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Alternative Route Length</span>
-            <span className="metric-value">
-              {formatDistance(
-                currentResult.path_metrics?.alternative_length_cells,
-                currentResult.path_metrics?.alternative_length_m,
-              )}
-            </span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Discrete Hausdorff Distance</span>
-            <span className="metric-value">
-              {formatDistance(
-                currentResult.path_metrics?.hausdorff_cells,
-                currentResult.path_metrics?.hausdorff_m,
-              )}
-            </span>
-          </div>
-
-          <div className="metric-card">
-            <span className="metric-label">Global Route Validation</span>
-            <span className="metric-value">
-              {formatValidation(currentResult.metrics?.validation_status)}
-            </span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">ISP Interventions</span>
-            <span className="metric-value">
-              {formatMetric(currentResult.metrics?.interventions?.total)}
-            </span>
-            {currentConfig?.ISP_MODEL === "BRANDAO" &&
-              currentResult.metrics?.candidate_available && (
-                <span className="metric-label">
-                  Slow → fast:{" "}
-                  {formatMetric(
-                    currentResult.metrics.interventions?.slow_to_fast,
-                  )}{" "}
-                  · Fast → slow:{" "}
-                  {formatMetric(
-                    currentResult.metrics.interventions?.fast_to_slow,
-                  )}
-                </span>
-              )}
-          </div>
-          {currentConfig?.ISP_MODEL === "BRANDAO" && (
+          <div className="metrics-grid">
             <div className="metric-card">
-              <span className="metric-label">Preparation Conversions</span>
+              <span className="metric-label">Execution Time</span>
+              <span className="metric-value">{runtimeDisplay}</span>
+            </div>
+
+            {currentConfig?.USE_INCREMENTAL_SOLVER && (
+              <div className="metric-card">
+                <span className="metric-label">ISP Iterations</span>
+                <span className="metric-value">
+                  {formatMetric(currentResult.iterations)}
+                </span>
+              </div>
+            )}
+
+            <div className="metric-card optimal-card">
+              <span className="metric-label">Initial Optimal Route Cost</span>
+              <span className="metric-value">{origCostDisplay}</span>
+            </div>
+
+            <div className="metric-card alternative-card">
+              <span className="metric-label">
+                Initial Alternative Route Cost
+              </span>
               <span className="metric-value">
-                {formatMetric(
-                  currentResult.metrics?.preparation?.converted_blocked_cells,
+                {formatRouteCost(
+                  currentResult.original_alternative_cost,
+                  currentResult.metrics?.cost_states?.original_alternative,
                 )}
               </span>
-              <span className="metric-label">
-                Excluded from ISP interventions
+            </div>
+            <div className="metric-card alternative-card">
+              <span className="metric-label">Final Alternative Route Cost</span>
+              <span className="metric-value">{altCostDisplay}</span>
+            </div>
+
+            <div className="metric-card">
+              <span className="metric-label">Graph Nodes</span>
+              <span className="metric-value">
+                {formatMetric(currentResult.graph_nodes)}
               </span>
             </div>
-          )}
-        </div>
+            <div className="metric-card">
+              <span className="metric-label">Directed Edges</span>
+              <span className="metric-value">
+                {formatMetric(currentResult.graph_edges)}
+              </span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Optimal Route Length</span>
+              <span className="metric-value">
+                {formatDistance(
+                  currentResult.path_metrics?.optimal_length_cells,
+                  currentResult.path_metrics?.optimal_length_m,
+                )}
+              </span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Alternative Route Length</span>
+              <span className="metric-value">
+                {formatDistance(
+                  currentResult.path_metrics?.alternative_length_cells,
+                  currentResult.path_metrics?.alternative_length_m,
+                )}
+              </span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Discrete Hausdorff Distance</span>
+              <span className="metric-value">
+                {formatDistance(
+                  currentResult.path_metrics?.hausdorff_cells,
+                  currentResult.path_metrics?.hausdorff_m,
+                )}
+              </span>
+            </div>
+
+            <div className="metric-card">
+              <span className="metric-label">Global Route Validation</span>
+              <span className="metric-value">
+                {formatValidation(currentResult.metrics?.validation_status)}
+              </span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">ISP Interventions</span>
+              <span className="metric-value">
+                {formatMetric(currentResult.metrics?.interventions?.total)}
+              </span>
+              {currentConfig?.ISP_MODEL === "BRANDAO" &&
+                currentResult.metrics?.candidate_available && (
+                  <span className="metric-label">
+                    Slow → fast:{" "}
+                    {formatMetric(
+                      currentResult.metrics.interventions?.slow_to_fast,
+                    )}{" "}
+                    · Fast → slow:{" "}
+                    {formatMetric(
+                      currentResult.metrics.interventions?.fast_to_slow,
+                    )}
+                  </span>
+                )}
+            </div>
+            {currentConfig?.ISP_MODEL === "BRANDAO" && (
+              <div className="metric-card">
+                <span className="metric-label">Preparation Conversions</span>
+                <span className="metric-value">
+                  {formatMetric(
+                    currentResult.metrics?.preparation?.converted_blocked_cells,
+                  )}
+                </span>
+                <span className="metric-label">
+                  Excluded from ISP interventions
+                </span>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {(currentResult?.execution_error || activeBatchItem?.error) && (

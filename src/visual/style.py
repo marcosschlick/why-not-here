@@ -3,10 +3,13 @@ import numpy as np
 from .. import config
 
 DEFAULT_TERRAIN_COLOR = np.array([0.5, 0.5, 0.5])
+BRANDAO_TERRAIN_COLORS = {"GRASS": "#F8F8F8", "FOREST": "#324B64"}
+BRANDAO_BLOCKED_COLOR = "#282828"
 
 
-def terrain_color_rgb(terrain_name: str) -> np.ndarray:
-    color = config.TERRAIN_COLORS.get(terrain_name)
+def terrain_color_rgb(terrain_name: str, brandao: bool = False) -> np.ndarray:
+    colors = BRANDAO_TERRAIN_COLORS if brandao else config.TERRAIN_COLORS
+    color = colors.get(terrain_name)
     if not isinstance(color, str) or len(color) != 7 or not color.startswith("#"):
         return DEFAULT_TERRAIN_COLOR.copy()
     try:

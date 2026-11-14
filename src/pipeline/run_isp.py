@@ -28,6 +28,8 @@ from .utils import create_alternative_path, get_project_path, prepare_endpoints
 
 
 def format_artifact_status(result: ClosedLoopResult) -> str:
+    if result.metrics.get("stop_reason") == "COST_MODEL_MISMATCH":
+        return f"Execution error: modeled and applied costs differ; physical validation: {result.metrics.get('validation_status')}"
     if result.metrics.get("cardinality_certified"):
         return "Global path validated; minimum cardinality certified in the declared domain"
     if result.success:
@@ -37,10 +39,13 @@ def format_artifact_status(result: ClosedLoopResult) -> str:
 
 def grid_response(grid: Grid) -> dict:
     from src.visual.layers import find_steep_cells
+    from src.visual.style import BRANDAO_TERRAIN_COLORS
 
     return {
         **grid.to_dict(),
-        "terrain_colors": config.TERRAIN_COLORS,
+        "terrain_colors": BRANDAO_TERRAIN_COLORS
+        if grid.isp_model == "BRANDAO"
+        else config.TERRAIN_COLORS,
         "appearance": resolve_map_appearance(grid.h, grid.w),
         "steep_cells": sorted(find_steep_cells(grid)),
     }
@@ -222,6 +227,8 @@ def run_isp(
                 if config.ISP_MODEL == "BRANDAO"
                 else "Normal traversal model"
             )
+            if metrics.get("stop_reason") == "COST_MODEL_MISMATCH":
+                profile = f"{profile}; {status}"
             for filename, title, optimal, desired in (
                 (
                     "optimal_path.png",

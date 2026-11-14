@@ -630,6 +630,8 @@ export function TacticalMapCanvas({
           Math.round(Math.min(h, row + step) * effectiveCellSize) - y;
         const terrainName = terrain[row]?.[col] || "GRASS";
         const isObstacle = (obstacle[row]?.[col] ?? 0) !== 0;
+        const isBrandao = mapData.isp_model === "BRANDAO";
+        const blocked = isObstacle || (mapData.speeds[terrainName] ?? 0) <= 0;
         const baseTerrainColor = terrainColor(
           mapData.terrain_colors[terrainName],
         );
@@ -640,13 +642,20 @@ export function TacticalMapCanvas({
               ) as Rgb)
             : baseTerrainColor;
         ctx.fillStyle = shadedColor(
-          terrainName === "WATER_RIVER"
-            ? baseTerrainColor
-            : reliefShader(baseColor, row, col),
+          isBrandao
+            ? blocked
+              ? [40, 40, 40]
+              : baseTerrainColor
+            : terrainName === "WATER_RIVER"
+              ? baseTerrainColor
+              : reliefShader(baseColor, row, col),
         );
         ctx.fillRect(x, y, width, height);
 
-        if (effectiveCellSize >= appearance.texture_min_cell_pixels) {
+        if (
+          !isBrandao &&
+          effectiveCellSize >= appearance.texture_min_cell_pixels
+        ) {
           if (isObstacle) {
             drawHatch(
               ctx,
@@ -671,7 +680,7 @@ export function TacticalMapCanvas({
               col,
             );
           }
-        } else if (!isObstacle) {
+        } else if (!isBrandao && !isObstacle) {
           const pattern = overviewPatterns.get(terrainName);
           if (pattern) {
             ctx.fillStyle = pattern;
@@ -1024,29 +1033,47 @@ export function TacticalMapLegend({
       </div>
       <div className="legend-group">
         <span className="legend-group-label">Terrain</span>
-        {Object.entries(mapData.speeds ?? {}).map(([name, speed]) => (
-          <span className="legend-item" key={name}>
-            <span
-              className="legend-color"
-              style={{
-                backgroundColor: mapData.terrain_colors?.[name] ?? "#808080",
-              }}
-            />
-            {mapData.isp_model === "BRANDAO" && name === "GRASS"
-              ? "Fast"
-              : mapData.isp_model === "BRANDAO" && name === "FOREST"
-                ? "Slow"
-                : name.toLowerCase().replaceAll("_", " ")}{" "}
-            (
-            {Number(speed).toLocaleString("en-US", {
-              maximumSignificantDigits: 6,
-            })}{" "}
-            m/s)
-          </span>
-        ))}
+        {Object.entries(mapData.speeds ?? {})
+          .filter(
+            ([name]) =>
+              mapData.isp_model !== "BRANDAO" ||
+              name === "GRASS" ||
+              name === "FOREST",
+          )
+          .map(([name, speed]) => (
+            <span className="legend-item" key={name}>
+              <span
+                className="legend-color"
+                style={{
+                  backgroundColor: mapData.terrain_colors?.[name] ?? "#808080",
+                }}
+              />
+              {mapData.isp_model === "BRANDAO" && name === "GRASS"
+                ? "Fast"
+                : mapData.isp_model === "BRANDAO" && name === "FOREST"
+                  ? "Slow"
+                  : name.toLowerCase().replaceAll("_", " ")}{" "}
+              (
+              {Number(speed).toLocaleString("en-US", {
+                maximumSignificantDigits: 6,
+              })}{" "}
+              m/s)
+            </span>
+          ))}
         <span className="legend-item">
-          <span className="legend-color legend-obstacle" />
-          Obstacle
+          <span
+            className={
+              mapData.isp_model === "BRANDAO"
+                ? "legend-color"
+                : "legend-color legend-obstacle"
+            }
+            style={
+              mapData.isp_model === "BRANDAO"
+                ? { backgroundColor: "#282828" }
+                : undefined
+            }
+          />
+          {mapData.isp_model === "BRANDAO" ? "Blocked" : "Obstacle"}
         </span>
       </div>
       {hasChanges && (

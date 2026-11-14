@@ -18,6 +18,11 @@ def generate_explanation_text(
     solver_status: str = "OPTIMAL",
     stop_reason: str | None = None,
 ) -> str:
+    if stop_reason == "COST_MODEL_MISMATCH":
+        return (
+            "Execution error: modeled edge costs differ from the costs applied to the candidate map. "
+            "The physical route validation is recorded separately and does not certify this execution."
+        )
     if modifications is None:
         if fallback_reason:
             return fallback_reason
@@ -40,7 +45,6 @@ def generate_explanation_text(
             "SOLVER_NOT_FOUND",
             "SOLVER_FAILED",
             "INCONSISTENT_COMPETING_PATH",
-            "COST_MODEL_MISMATCH",
         }:
             return "The execution failed before a usable candidate was available. See the recorded execution error."
         return "No usable candidate was returned. This inconclusive result does not establish infeasibility."
@@ -54,7 +58,9 @@ def generate_explanation_text(
             for node, target in modifications.terrain_assignments
         )
         validation = (
-            "The desired route is globally validated within the total cost tolerance."
+            "The candidate is optimal only within the reduced subgraph. Global optimality validation failed."
+            if stop_reason == "SUBGRAPH_OPTIMAL_ONLY"
+            else "The desired route is globally validated within the total cost tolerance."
             if solver_status == "PATH_VALIDATED"
             else "Global path validation has not passed."
         )
@@ -63,7 +69,9 @@ def generate_explanation_text(
             "including possible changes on competing routes. Each changed cell has unit intervention cost. "
             f"Preparation conversions are excluded. {validation}"
         )
-    subgraph_only = solver_status == "SUBGRAPH_OPTIMAL_ONLY"
+    subgraph_only = (
+        stop_reason == "SUBGRAPH_OPTIMAL_ONLY" or solver_status == "SUBGRAPH_OPTIMAL_ONLY"
+    )
     uncertified_candidate = solver_status in {
         "TIMEOUT",
         "CANDIDATE_UNVALIDATED",
