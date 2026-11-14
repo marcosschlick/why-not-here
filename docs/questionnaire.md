@@ -4,7 +4,7 @@
 
 `route-study-v4` is a fixed research protocol for non-specialists in autonomous
 navigation, prepared for a possible future evaluation; its current three-condition design is defined here.
-It uses a pool of six distinct saved scenarios selected by the administrator.
+It uses the six distinct scenarios prepared for the questionnaire.
 Every scenario belongs to the questionnaire and must contain a successful
 calculation, a valid map, two distinct routes and the cost justification and contrastive explanation.
 At participation start, the six scenarios are shuffled using a random attempt
@@ -13,7 +13,7 @@ three are used for assessments with explanations; the remaining three are used
 for predictions. The administrator does not assign scenarios to phases.
 Use **Prepare six scenarios**, choose only the grid size and generate six maps
 with the existing generator and its unchanged size profiles. The requested seeds
-are positive multiples of 42: 42, 84, 126, 168, 210, 252, then 294 and so on.
+are randomly selected multiples of 42 from 42 to 4200, without reuse within a questionnaire.
 One action prepares the maps sequentially because the pipeline permits only one
 operation at a time. Other generation and solver settings are captured when
 preparation starts and remain fixed; ISP is always monolithic with reduction
@@ -27,7 +27,7 @@ Every success is saved immediately with an editable generated title, original
 map, routes, requested/effective seeds, generation attempt, effective configuration,
 real solver output, explanations and interventions. Only a valid resolution
 response with `result.success: false` and a solver status discards a candidate
-and replaces it with a map using the next seed. Draw replacement routes and solve
+and replaces it with a map using a new seed. Draw replacement routes and solve
 again until six successes exist. Successful candidates are never recalculated.
 A saving failure retains the solved result for an idempotent saving retry.
 
@@ -53,7 +53,7 @@ their own effective settings; later normal simulations retain their previous sta
 
 After six consecutive generation failures, preparation pauses with the last error.
 Continue to generate the missing positions or return to the questionnaire. The
-configuration and next seed are persistent, including when generation fails after
+configuration and reserved seeds are persistent, including when generation fails after
 seed reservation. Grid size is fixed once reserved; use another questionnaire to
 choose another size. Unresolved maps and drawings remain in browser memory only.
 Internal navigation warns before discarding them, and reload/close uses the
@@ -574,7 +574,7 @@ only the old questionnaire tables once, then restart the services:
 
 ```sql
 DROP TABLE IF EXISTS answers, participations, participation_keys, questions,
-    scenarios, questionnaires;
+    scenarios, scenario_seed_reservations, questionnaires;
 ```
 
 This discards all old questionnaire data and responses. Initialization creates

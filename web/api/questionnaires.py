@@ -39,7 +39,7 @@ class QuestionnaireInput(BaseModel):
 
 
 def get_questionnaire(connection, questionnaire_id: int, *, lock: bool = False):
-    query = "SELECT id, title, description, status, protocol_version, created_at, closed_at, preparation_configuration, next_scenario_seed FROM questionnaires WHERE id = %s"
+    query = "SELECT id, title, description, status, protocol_version, created_at, closed_at, preparation_configuration FROM questionnaires WHERE id = %s"
     if lock:
         query += " FOR UPDATE"
     questionnaire = connection.execute(query, (questionnaire_id,)).fetchone()

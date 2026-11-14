@@ -127,7 +127,7 @@ export function ScenarioPreparation({
     }
     if (failures >= 6) {
       setError(
-        `Preparation paused after six consecutive generation failures. ${lastFailure} Saved scenarios and the seed sequence are preserved. Continue to try the next seeds, or return to the questionnaire.`,
+        `Preparation paused after six consecutive generation failures. ${lastFailure} Saved scenarios and reserved seeds are preserved. Continue to try new seeds, or return to the questionnaire.`,
       );
     } else {
       setError("");
@@ -321,11 +321,11 @@ export function ScenarioPreparation({
       </div>
       <p>
         Generate six maps, draw each alternative route manually, then solve the
-        batch. Failed scenarios are replaced using the next seed. Successful
+        batch. Failed scenarios are replaced using a new seed. Successful
         scenarios are saved immediately.
       </p>
       <p className="qa-muted">
-        Seeds: 42, 84, 126… · Monolithic ISP · No reduction. Unresolved maps and
+        Random unique seeds · Monolithic ISP · No reduction. Unresolved maps and
         drawings are temporary; you will be warned before leaving.
       </p>
       <div className="qa-form">
@@ -351,7 +351,7 @@ export function ScenarioPreparation({
         </label>
       </div>
       <p role="status">
-        {savedIds.length} / 6 successful scenarios saved. {message}
+        {message || `${savedIds.length} / 6 successful scenarios saved.`}
       </p>
       {error && (
         <p className="qa-error" role="alert">
@@ -394,6 +394,7 @@ export function ScenarioPreparation({
                 <span className="batch-stepper-title">
                   Batch Route Setup - Map {active + 1} of {candidates.length}
                 </span>
+                <span className="batch-stepper-sub">Define an alternative route for each map before solving.</span>
               </div>
               <div className="batch-steps-list">
                 {candidates.map((candidate, index) => {
@@ -407,7 +408,7 @@ export function ScenarioPreparation({
                       disabled={busy}
                       onClick={() => setActive(index)}
                     >
-                      <span>Map {index + 1} · Seed {candidate.map.config.MAP_DEFAULT_SEED}</span>
+                      <span>Seed {candidate.map.config.MAP_DEFAULT_SEED}</span>
                       <span className={`batch-step-status-pill ${ready ? "ready" : "pending"}`}>
                         {candidate.result ? "Ready to save" : ready ? "Ready" : "Pending"}
                       </span>

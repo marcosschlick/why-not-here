@@ -99,9 +99,9 @@ reproduction and measurement limitations.
 
 Use **Questionnaires** to create a draft and select **Prepare six scenarios**.
 Choose only the grid size; the existing generator and size profiles are preserved.
-Generate six maps with seeds 42, 84, 126 and successive positive multiples of 42.
+Generate six maps with randomly selected multiples of 42 from 42 to 4200, unique within each questionnaire.
 Draw all six alternative routes manually, then run monolithic ISP without reduction.
-Successes are saved immediately; failures are replaced with the next seeds and
+Successes are saved immediately; failures are replaced with new seeds and
 require new manual routes. After six consecutive generation failures, continue
 explicitly or leave. Unresolved drawings are temporary and leaving warns before
 discarding them. Successful scenarios, configuration and the seed cursor persist.

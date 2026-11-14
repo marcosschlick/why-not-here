@@ -1,3 +1,4 @@
+from secrets import choice
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -75,11 +76,25 @@ def generate_scenario_map(questionnaire_id: int, payload: ScenarioMapInput):
                 status_code=409,
                 detail="Grid size is fixed for this preparation. Create another questionnaire to change it.",
             )
-        seed = questionnaire["next_scenario_seed"]
+        reserved = connection.execute(
+            "SELECT seed FROM scenario_seed_reservations WHERE questionnaire_id = %s",
+            (questionnaire_id,),
+        ).fetchall()
+        used = {row["seed"] for row in reserved}
+        available = [42 * number for number in range(1, 101) if 42 * number not in used]
+        if not available:
+            raise HTTPException(
+                status_code=409, detail="All 100 scenario seeds have been reserved"
+            )
+        seed = choice(available)
         configuration = {**configuration, "MAP_DEFAULT_SEED": seed}
         connection.execute(
-            "UPDATE questionnaires SET preparation_configuration = %s, next_scenario_seed = %s WHERE id = %s",
-            (Jsonb(configuration), seed + 42, questionnaire_id),
+            "INSERT INTO scenario_seed_reservations (questionnaire_id, seed) VALUES (%s, %s)",
+            (questionnaire_id, seed),
+        )
+        connection.execute(
+            "UPDATE questionnaires SET preparation_configuration = %s WHERE id = %s",
+            (Jsonb(configuration), questionnaire_id),
         )
     with isolated_pipeline_state():
         generated = generate_map_data(
@@ -112,9 +127,10 @@ def solve_scenario(questionnaire_id: int, payload: ScenarioSolveInput):
         if (
             configuration is None
             or type(seed) is not int
-            or seed <= 0
-            or seed % 42
-            or seed >= questionnaire["next_scenario_seed"]
+            or not connection.execute(
+                "SELECT 1 FROM scenario_seed_reservations WHERE questionnaire_id = %s AND seed = %s",
+                (questionnaire_id, seed),
+            ).fetchone()
             or (payload.map.get("h"), payload.map.get("w"))
             != (configuration["MAP_H"], configuration["MAP_W"])
         ):
@@ -202,9 +218,10 @@ def create_scenario(questionnaire_id: int, payload: ScenarioInput):
         frozen = questionnaire["preparation_configuration"]
         if (
             type(seed) is not int
-            or seed <= 0
-            or seed % 42
-            or seed >= questionnaire["next_scenario_seed"]
+            or not connection.execute(
+                "SELECT 1 FROM scenario_seed_reservations WHERE questionnaire_id = %s AND seed = %s",
+                (questionnaire_id, seed),
+            ).fetchone()
             or frozen is None
             or payload.configuration != {**frozen, "MAP_DEFAULT_SEED": seed}
             or data["map"].get("base_seed") != seed

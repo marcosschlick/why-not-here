@@ -587,7 +587,7 @@ export function QuestionnaireAdmin({
     setConfirmation({
       title: "Discard Unsaved Changes",
       description: preparationDirty
-        ? "Unresolved maps and route drawings will be discarded. Successful scenarios, configuration and the seed sequence are saved."
+        ? "Unresolved maps and route drawings will be discarded. Successful scenarios, configuration and reserved seeds are saved."
         : "Discard unsaved changes?",
       confirmLabel: "Discard Changes",
       onConfirm: action,

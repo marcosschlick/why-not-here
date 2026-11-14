@@ -31,8 +31,14 @@ def initialize_database() -> None:
             closed_at TIMESTAMPTZ,
             access_token TEXT UNIQUE,
             allocation_remaining JSONB NOT NULL DEFAULT '[]',
-            preparation_configuration JSONB,
-            next_scenario_seed BIGINT NOT NULL DEFAULT 42 CHECK (next_scenario_seed > 0 AND next_scenario_seed % 42 = 0)
+            preparation_configuration JSONB
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS scenario_seed_reservations (
+            questionnaire_id BIGINT NOT NULL REFERENCES questionnaires(id) ON DELETE CASCADE,
+            seed INTEGER NOT NULL CHECK (seed BETWEEN 42 AND 4200 AND seed % 42 = 0),
+            PRIMARY KEY (questionnaire_id, seed)
         )
         """,
         """
@@ -40,7 +46,7 @@ def initialize_database() -> None:
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             questionnaire_id BIGINT NOT NULL REFERENCES questionnaires(id),
             title TEXT NOT NULL,
-            seed BIGINT NOT NULL CHECK (seed > 0 AND seed % 42 = 0),
+            seed BIGINT NOT NULL CHECK (seed BETWEEN 42 AND 4200 AND seed % 42 = 0),
             UNIQUE (questionnaire_id, seed),
             configuration JSONB NOT NULL,
             data JSONB NOT NULL
@@ -125,6 +131,10 @@ def initialize_database() -> None:
             }:
                 raise RuntimeError(
                     "Incompatible questionnaire schema. Prepare a route-study-v4 database; no data was changed. See docs/questionnaire.md."
+                )
+            if any(row["column_name"] == "next_scenario_seed" for row in existing):
+                raise RuntimeError(
+                    "Incompatible questionnaire seed schema. Prepare a new database; no data was changed. See docs/questionnaire.md."
                 )
             for statement in statements:
                 connection.execute(statement)
