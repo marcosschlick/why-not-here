@@ -2770,6 +2770,25 @@ kbd,
   padding: 1rem;
   color: var(--yale-blue);
 }
+.scenario-export-info {
+  display: flex;
+  flex: 1 1 18rem;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.scenario-export-path {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+.scenario-export-actions .btn {
+  margin-left: auto;
+}
+.scenario-export-error {
+  flex-basis: 100%;
+  color: var(--text-danger);
+}
 .results-container .status-pill.validated,
 .results-container .status-validated {
   color: var(--yale-blue);

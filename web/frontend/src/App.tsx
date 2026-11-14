@@ -14,7 +14,7 @@ import {
   reviewIndices,
   sameReviewGroup,
 } from "./utils/experiments";
-import { formatReductionMethod } from "./utils/formatters";
+import { directoryName, formatReductionMethod } from "./utils/formatters";
 import { Topbar } from "./components/Topbar";
 import { QuestionnaireAdmin } from "./components/QuestionnaireAdmin";
 import {
@@ -542,7 +542,7 @@ export function App() {
           },
         ],
       });
-      setSuccessMessage(`Configuration saved to ${result.saved_files[0]}`);
+      setSuccessMessage(`Configuration saved to /configurations/${directoryName(result.saved_files[0])}`);
       setCurrentStep("config");
     } catch (err) {
       setErrorMessage(
@@ -583,7 +583,7 @@ export function App() {
         })),
       );
       setSuccessMessage(
-        `Saved ${result.saved_files.length} configurations to ${result.saved_files[0].replace(/[\\/][^\\/]+$/, "")}/`,
+        `Saved ${result.saved_files.length} configurations to /configurations/${directoryName(result.saved_files[0].replace(/[\\/][^\\/]+$/, ""))}/`,
       );
       setIsBatchMode(false);
       setCurrentStep("config");
@@ -726,7 +726,6 @@ export function App() {
       return;
     }
     setExportGroup(batch.output_dir);
-    setSuccessMessage(`Batch results will be saved to ${batch.output_dir}/`);
     setCurrentStep("results");
     setActiveBatchResultIndex(0);
     for (let i = 0; i < finalQueue.length; i++) {
@@ -815,7 +814,6 @@ export function App() {
       }
     }
     setIsSolvingISP(false);
-    setSuccessMessage(`Batch results saved to ${batch.output_dir}/`);
   }
   function handleSelectQueueItem(item: QueueItem) {
     if (item.result) {
