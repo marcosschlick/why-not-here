@@ -6,12 +6,10 @@ export function ResultsExport({
   records,
   isSolving,
   name,
-  outputDirectory,
 }: {
   records: LastResult[];
   isSolving: boolean;
   name: string;
-  outputDirectory?: string | null;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -33,11 +31,6 @@ export function ResultsExport({
           {records.length} recorded execution{records.length === 1 ? "" : "s"} ·
           includes unsuccessful attempts
         </span>
-        {outputDirectory && (
-          <span className="scenario-export-path">
-            Results: /results/{outputDirectory.split(/[\\/]/).filter(Boolean).slice(-1)[0]}/
-          </span>
-        )}
       </div>
       <button
         type="button"

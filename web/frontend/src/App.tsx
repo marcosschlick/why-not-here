@@ -79,6 +79,7 @@ export function App() {
   const [exportGroup, setExportGroup] = useState("");
   const [batchDirectory, setBatchDirectory] = useState<{ name: string; output_dir: string } | null>(null);
   const [singleOutputDirectory, setSingleOutputDirectory] = useState<string | null>(null);
+  const [resultsNoticeDismissed, setResultsNoticeDismissed] = useState(false);
   const executionOrder = useRef(0);
   const attempts = useRef(new Map<string, number>());
   function nextExecution(
@@ -305,6 +306,7 @@ export function App() {
     }
     setElapsedTime(0);
     setIsSolvingISP(true);
+    setResultsNoticeDismissed(false);
     setErrorMessage(null);
     setSingleOutputDirectory(null);
     const attempt = (attempts.current.get("single") ?? 0) + 1;
@@ -710,6 +712,7 @@ export function App() {
     setQueue(finalQueue);
     setElapsedTime(0);
     setIsSolvingISP(true);
+    setResultsNoticeDismissed(false);
     setErrorMessage(null);
     let batch = batchDirectory;
     try {
@@ -837,6 +840,7 @@ export function App() {
   }
   const hasMapData = Boolean(mapData);
   const hasResults = Boolean(lastResult || (isBatchMode && queue.length > 0));
+  const outputDirectory = isBatchMode ? batchDirectory?.output_dir : singleOutputDirectory;
   function clearSimulation() {
     setMapData(null);
     setUserPath([]);
@@ -946,6 +950,19 @@ export function App() {
               className="alert-close"
               onClick={() => setSuccessMessage(null)}
               aria-label="Dismiss success message"
+            >
+              &times;
+            </button>
+          </div>
+        )}
+        {currentStep === "results" && outputDirectory && !resultsNoticeDismissed && (
+          <div className="queue-banner" role="status">
+            <span className="alert-text">Results saved to /results/{directoryName(outputDirectory)}/</span>
+            <button
+              type="button"
+              className="alert-close"
+              onClick={() => setResultsNoticeDismissed(true)}
+              aria-label="Dismiss results location"
             >
               &times;
             </button>
@@ -1291,7 +1308,7 @@ export function App() {
           <div key="step-results" className="step-container results-step">
             <ResultsView
               records={executionRecords.filter((record) => record.group === exportGroup).map((record) => record.result)}
-              outputDirectory={isBatchMode ? batchDirectory?.output_dir : singleOutputDirectory}
+              outputDirectory={outputDirectory}
               result={lastResult}
               mapData={
                 isBatchMode ? queue[activeBatchResultIndex]?.mapData : mapData

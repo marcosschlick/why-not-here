@@ -519,7 +519,7 @@ export function ResultsView({
 
   return (
     <section className="results-container">
-      <ResultsExport records={records} isSolving={isExecutionRunning} name={directoryName(outputDirectory)} outputDirectory={outputDirectory} />
+      <ResultsExport records={records} isSolving={isExecutionRunning} name={directoryName(outputDirectory)} />
       {isBatch && batchQueue && (
         <div className="batch-results-tabs-wrapper">
           <div

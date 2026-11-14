@@ -2783,11 +2783,6 @@ kbd,
   flex-direction: column;
   gap: 0.25rem;
 }
-.scenario-export-path {
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  overflow-wrap: anywhere;
-}
 .scenario-export-actions .btn {
   margin-left: auto;
 }
