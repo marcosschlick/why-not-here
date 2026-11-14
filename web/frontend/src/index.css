@@ -2106,10 +2106,17 @@ kbd,
   padding: 0.25rem 0.4rem;
   border: 1px solid transparent;
 }
-.batch-step-status-pill.ready {
+.batch-step-status-pill.ready,
+.batch-step-status-pill.solving,
+.batch-step-status-pill.saved {
   color: var(--text-structural);
   background: var(--surface-info);
   border-color: color-mix(in srgb, var(--azure-blue) 30%, transparent);
+}
+.batch-step-status-pill.failed {
+  color: var(--text-danger);
+  background: var(--surface-danger);
+  border-color: var(--lobster-pink);
 }
 .batch-step-status-pill.pending,
 .batch-tab-badge.status-pending,

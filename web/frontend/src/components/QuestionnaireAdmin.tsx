@@ -931,6 +931,7 @@ export function QuestionnaireAdmin({
                 }}
                 onDirtyChange={setPreparationDirty}
                 onBusyChange={setPreparationBusy}
+                onComplete={() => loadQuestionnaire(selected.id, true)}
                 onBack={() =>
                   confirmDiscard(() => {
                     void perform(() => loadQuestionnaire(selected.id, true));

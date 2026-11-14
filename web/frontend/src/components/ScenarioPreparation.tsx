@@ -53,12 +53,14 @@ export function ScenarioPreparation({
   questionnaireId,
   initial,
   onBack,
+  onComplete,
   onDirtyChange,
   onBusyChange,
 }: {
   questionnaireId: number;
   initial: PreparationState;
   onBack: () => void;
+  onComplete: () => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
 }) {
@@ -74,8 +76,9 @@ export function ScenarioPreparation({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [protocolSaved, setProtocolSaved] = useState(initial.protocolComplete);
+  const protocolSaved = initial.protocolComplete;
   const [retryPending, setRetryPending] = useState(false);
+  const [solveStatuses, setSolveStatuses] = useState<Record<number, "pending" | "solving" | "saved" | "failed">>({});
 
   useEffect(() => {
     let mounted = true;
@@ -166,10 +169,7 @@ export function ScenarioPreparation({
           : "Unable to save the protocol. Retry without solving again.",
       );
     }
-    setProtocolSaved(true);
-    setMessage(
-      "All six successful scenarios and the study protocol are saved. Preview is available in the questionnaire.",
-    );
+    await onComplete();
   }
 
   async function solve() {
@@ -194,13 +194,16 @@ export function ScenarioPreparation({
     setError("");
     setRetryPending(false);
     const pending = [...candidates];
+    setSolveStatuses(Object.fromEntries(pending.map((candidate) => [candidate.map.config.MAP_DEFAULT_SEED, "pending"])));
     const saved = [...savedIds];
     const remaining: Candidate[] = [];
     try {
       for (let index = 0; index < pending.length; index++) {
         const candidate = pending[index];
         const { map, path } = candidate;
+        const seed = map.config.MAP_DEFAULT_SEED;
         setActive(index);
+        setSolveStatuses((previous) => ({ ...previous, [seed]: "solving" }));
         setMessage(
           `Solving seed ${map.generation?.base_seed ?? map.config.MAP_DEFAULT_SEED}. ${saved.length} of 6 saved.`,
         );
@@ -208,7 +211,10 @@ export function ScenarioPreparation({
         if (!result) {
           try {
             const response = await solveScenarioISP(questionnaireId, map, path);
-            if (response.result.success === false) continue;
+            if (response.result.success === false) {
+              setSolveStatuses((previous) => ({ ...previous, [seed]: "failed" }));
+              continue;
+            }
             result = response.result;
           } catch (reason) {
             remaining.push(candidate, ...pending.slice(index + 1));
@@ -246,6 +252,7 @@ export function ScenarioPreparation({
           );
           saved.push(scenario.id);
           setSavedIds([...saved]);
+          setSolveStatuses((previous) => ({ ...previous, [seed]: "saved" }));
         } catch (reason) {
           remaining.push(solved, ...pending.slice(index + 1));
           setCandidates(remaining);
@@ -259,8 +266,12 @@ export function ScenarioPreparation({
       }
       setCandidates(remaining);
       if (saved.length === 6) await saveProtocol();
-      else await fillPositions(remaining, saved.length);
+      else {
+        await fillPositions(remaining, saved.length);
+        setSolveStatuses({});
+      }
     } catch (reason) {
+      setSolveStatuses({});
       setError(
         reason instanceof Error ? reason.message : "Preparation failed.",
       );
@@ -399,6 +410,10 @@ export function ScenarioPreparation({
               <div className="batch-steps-list">
                 {candidates.map((candidate, index) => {
                   const ready = Boolean(candidate.result) || !routeError(candidate);
+                  const status = solveStatuses[candidate.map.config.MAP_DEFAULT_SEED];
+                  const label = status
+                    ? { pending: "Pending", solving: "Solving", saved: "Saved", failed: "Failed" }[status]
+                    : candidate.result ? "Ready to save" : ready ? "Ready" : "Pending";
                   return (
                     <button
                       type="button"
@@ -409,8 +424,8 @@ export function ScenarioPreparation({
                       onClick={() => setActive(index)}
                     >
                       <span>Seed {candidate.map.config.MAP_DEFAULT_SEED}</span>
-                      <span className={`batch-step-status-pill ${ready ? "ready" : "pending"}`}>
-                        {candidate.result ? "Ready to save" : ready ? "Ready" : "Pending"}
+                      <span className={`batch-step-status-pill ${status ?? (ready ? "ready" : "pending")}`}>
+                        {label}
                       </span>
                     </button>
                   );
