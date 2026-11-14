@@ -861,11 +861,6 @@ export function App() {
       />
 
       <main className="main-content-wrapper">
-        <div className="workflow-context">
-          <div>
-            <strong>Simulation</strong>
-          </div>
-        </div>
         {errorMessage && (
           <div className="alert-banner">
             <span className="alert-icon">&times;</span>

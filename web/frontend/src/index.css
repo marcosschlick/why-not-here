@@ -2793,41 +2793,6 @@ kbd,
   font-size: 0.78rem;
 }
 
-.workflow-context {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  padding: 1rem 1.25rem;
-  color: var(--text-strong);
-  background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
-  border-left: 0.2rem solid var(--azure-blue);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-}
-
-.workflow-context > div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 0;
-}
-
-.workflow-context span {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  overflow-wrap: anywhere;
-}
-
-@media (max-width: 48rem) {
-  .workflow-context {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-}
-
 .scenario-export-actions {
   display: flex;
   flex-wrap: wrap;
