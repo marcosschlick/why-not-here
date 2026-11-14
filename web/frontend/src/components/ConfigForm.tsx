@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchMapProfiles } from "../services/api";
 import type { MapProfile, SystemConfig } from "../types";
+
+const reductionDescriptions: Record<string, string> = {
+  NONE: "Uses the full grid graph without reduction.",
+  BBOX: "Keeps the smallest rectangle containing the optimal and desired paths.",
+  FLOODFILL: "Keeps the optimal and desired paths and the region between them.",
+  SPARSIFIED: "Contracts eligible chains within the rectangle containing both paths.",
+  PATH_ONLY: "Keeps the nodes and consecutive edges of the optimal and desired paths.",
+};
+
 interface ConfigFormProps {
   benchmark: boolean;
   onBenchmarkChange: (enabled: boolean) => void;
@@ -268,6 +277,7 @@ export function ConfigForm({
                 </label>
                 <select
                   id="reductionMethod"
+                  aria-describedby="reduction-description"
                   disabled={benchmark}
                   value={reductionMethod}
                   onChange={(e) => setReductionMethod(e.target.value)}
@@ -282,6 +292,9 @@ export function ConfigForm({
                   </option>
                   <option value="PATH_ONLY">Path Only (Path Edges)</option>
                 </select>
+                <span id="reduction-description" className="benchmark-description">
+                  {reductionDescriptions[reductionMethod]}
+                </span>
               </div>
             </div>
 
@@ -298,6 +311,7 @@ export function ConfigForm({
                     disabled={benchmark}
                     role="switch"
                     aria-checked={useIncremental}
+                    aria-describedby="incremental-description"
                     className={`toggle-btn ${useIncremental ? "active" : ""}`}
                     onClick={() => setUseIncremental(!useIncremental)}
                   >
@@ -311,6 +325,9 @@ export function ConfigForm({
                     </span>
                   </button>
                 </div>
+                <span id="incremental-description" className="benchmark-description">
+                  Outside the benchmark, executing an incremental configuration with no reduction automatically runs three scenarios on the same map and route: normal incremental, Brandao monolithic and Brandao incremental.
+                </span>
               </div>
             </div>
             <div className="strategy-column">
@@ -323,6 +340,7 @@ export function ConfigForm({
                 </label>
                 <select
                   id="incrementalAstarScope"
+                  aria-describedby="incremental-scope-description"
                   value={incrementalAstarScope}
                   onChange={(event) =>
                     setIncrementalAstarScope(event.target.value)
@@ -335,6 +353,11 @@ export function ConfigForm({
                   <option value="GLOBAL">Global Grid</option>
                   <option value="SUBGRAPH">Reduced Subgraph</option>
                 </select>
+                <span id="incremental-scope-description" className="benchmark-description">
+                  {incrementalAstarScope === "SUBGRAPH"
+                    ? "Searches for competing paths in the reduced subgraph and validates subgraph-optimal candidates on the full grid."
+                    : "Searches for competing paths across the full grid."}
+                </span>
               </div>
             </div>
             <div className="strategy-column benchmark-setting">
@@ -378,13 +401,6 @@ export function ConfigForm({
           </div>
         </div>
 
-        {!benchmark && useIncremental && reductionMethod === "NONE" && (
-          <p className="benchmark-description">
-            {workflowMode === "create"
-              ? "Saves one normal configuration. Its execution automatically runs the normal scenario and both Brandao strategies."
-              : "Automatically runs three scenarios on the same map and route: normal incremental, Brandao monolithic and Brandao incremental."}
-          </p>
-        )}
         <div
           className={`advanced-settings-section ${isAdvancedOpen ? "is-open" : ""}`}
         >
