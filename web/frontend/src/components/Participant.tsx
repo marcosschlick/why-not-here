@@ -798,6 +798,7 @@ export function Participant({ preview }: { preview?: Preview }) {
       {!preview && (
         <header className="app-topbar qa-participant-header">
           <Brand />
+          <span className="qa-participant-title">Route planning study</span>
         </header>
       )}
       <main className="qa-content qa-participant">

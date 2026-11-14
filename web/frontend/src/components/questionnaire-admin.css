@@ -5,6 +5,11 @@
   background: var(--surface-page);
   color: var(--text-strong);
 }
+.qa-participant-title {
+  color: var(--text-inverse);
+  font-size: clamp(1.25rem, 2vw, 1.8rem);
+  font-weight: 700;
+}
 .qa-progress-status {
   display: flex;
   align-items: center;
