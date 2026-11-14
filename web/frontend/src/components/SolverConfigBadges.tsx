@@ -63,14 +63,14 @@ export function SolverConfigBadges({
   const gridSpecs = `${config.MAP_H}×${config.MAP_W} (${config.CONNECTIVITY}-Connected)`;
 
   return (
-    <section className="solver-params-bar">
+    <section className={`solver-params-bar${mapImageUrl ? " has-map" : ""}`}>
       <div className="solver-params-details">
         <div className="solver-params-header">
           <span className="solver-params-title">
-            Model, Solver &amp; Graph Parameters
+            Run Parameters
           </span>
           <span className="solver-params-subtitle">
-            Active configuration applied to this optimization run
+            Active configuration for this run
           </span>
         </div>
 
@@ -85,7 +85,7 @@ export function SolverConfigBadges({
           </div>
           <div className="solver-param-chip">
             <span className="param-chip-label">
-              Cooperative Scenario Budget
+              Time Budget
             </span>
             <span className="param-chip-value">
               {config.ISP_TIME_BUDGET_SEC ?? 1800} s
@@ -99,7 +99,7 @@ export function SolverConfigBadges({
           </div>
 
           <div className="solver-param-chip">
-            <span className="param-chip-label">Optimization Architecture</span>
+            <span className="param-chip-label">Solver</span>
             <span
               className={`param-chip-value ${
                 config.USE_INCREMENTAL_SOLVER
@@ -112,12 +112,12 @@ export function SolverConfigBadges({
           </div>
 
           <div className="solver-param-chip">
-            <span className="param-chip-label">Grid Resolution</span>
+            <span className="param-chip-label">Grid</span>
             <span className="param-chip-value">{gridSpecs}</span>
           </div>
 
           <div className="solver-param-chip">
-            <span className="param-chip-label">Procedural Seed</span>
+            <span className="param-chip-label">Seed</span>
             <span className="param-chip-value">
               #{config.MAP_DEFAULT_SEED ?? 42}
             </span>

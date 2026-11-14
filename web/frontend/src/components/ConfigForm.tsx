@@ -326,7 +326,7 @@ export function ConfigForm({
                   </button>
                 </div>
                 <span id="incremental-description" className="benchmark-description">
-                  Outside the benchmark, executing an incremental configuration with no reduction automatically runs three scenarios on the same map and route: normal incremental, Brandao monolithic and Brandao incremental.
+                  Incremental + None runs three scenarios per map and route outside benchmark.
                 </span>
               </div>
             </div>

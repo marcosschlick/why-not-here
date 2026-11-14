@@ -539,11 +539,10 @@ export function ResultsView({
                   onClick={() => handleTabSelect(idx)}
                 >
                   <span className="batch-tab-title">
-                    #{idx + 1} · {item.config.ISP_MODEL ?? "NORMAL"} ·{" "}
-                    {item.config.USE_INCREMENTAL_SOLVER
-                      ? "Incremental"
-                      : "Monolithic"}{" "}
-                    · {item.config.DEFAULT_REDUCTION_METHOD}
+                    #{idx + 1} · {item.config.ISP_MODEL === "BRANDAO" ? "Brandao · " : ""}
+                    {item.config.USE_INCREMENTAL_SOLVER ? "Incremental" : "Monolithic"}
+                    {item.config.ISP_MODEL !== "BRANDAO" &&
+                      ` · ${item.config.DEFAULT_REDUCTION_METHOD}`}
                   </span>
                   <span className={`batch-tab-badge status-${outcome}`}>
                     {tabLabel}
@@ -646,7 +645,7 @@ export function ResultsView({
           </div>
 
           {!hasCandidateModifications && (
-            <p className="results-map-notice">
+            <p className={`results-notice ${currentOutcome === "validated" ? "info" : "warning"}`}>
               {currentOutcome === "infeasible"
                 ? "No valid modifications could be calculated; the alternative route is shown."
                 : currentOutcome === "validated"
@@ -656,7 +655,7 @@ export function ResultsView({
           )}
           {currentResult?.solver_status === "OPTIMAL_INACCURATE" &&
             currentResult.success && (
-              <p className="solver-guarantee-notice">
+              <p className="results-notice info">
                 Global path validation passed, but OPTIMAL_INACCURATE does not
                 certify minimum intervention cardinality.
               </p>
@@ -865,7 +864,7 @@ export function ResultsView({
       )}
 
       {(currentResult?.execution_error || activeBatchItem?.error) && (
-        <p role="alert">
+        <p className="results-notice warning" role="alert">
           {currentResult?.execution_error || activeBatchItem?.error}
         </p>
       )}
