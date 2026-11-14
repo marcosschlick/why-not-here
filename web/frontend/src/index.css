@@ -274,6 +274,9 @@ kbd,
   cursor: not-allowed;
   opacity: 0.54;
 }
+.scenario-export-actions .btn:disabled {
+  filter: grayscale(1);
+}
 .btn-topbar-questionnaires,
 .btn-topbar-about,
 .btn,

@@ -1268,6 +1268,7 @@ export function App() {
                 }
               }}
               elapsedTime={elapsedTime}
+              isSolving={isSolvingISP}
             />
 
             {queue.length > 0 && !isBatchMode && (

@@ -28,6 +28,7 @@ interface ResultsViewProps {
   activeBatchIndex?: number;
   onSelectBatchIndex?: (index: number) => void;
   elapsedTime?: number;
+  isSolving: boolean;
   config?: SystemConfig | null;
   mapImageUrl?: string;
 }
@@ -154,6 +155,7 @@ export function ResultsView({
   activeBatchIndex,
   onSelectBatchIndex,
   elapsedTime,
+  isSolving: isExecutionRunning,
   config,
   mapImageUrl,
 }: ResultsViewProps) {
@@ -520,7 +522,7 @@ export function ResultsView({
 
   return (
     <section className="results-container">
-      <ResultsExport records={records} />
+      <ResultsExport records={records} isSolving={isExecutionRunning} />
       {isBatch && batchQueue && (
         <div className="batch-results-tabs-wrapper">
           <div

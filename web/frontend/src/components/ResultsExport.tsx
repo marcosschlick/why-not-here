@@ -2,7 +2,13 @@ import { useState } from "react";
 import type { LastResult } from "../types";
 import { exportScenarioResults } from "../services/api";
 
-export function ResultsExport({ records }: { records: LastResult[] }) {
+export function ResultsExport({
+  records,
+  isSolving,
+}: {
+  records: LastResult[];
+  isSolving: boolean;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function download() {
@@ -25,7 +31,8 @@ export function ResultsExport({ records }: { records: LastResult[] }) {
       <button
         type="button"
         className="btn btn-secondary"
-        disabled={busy || records.length === 0}
+        disabled={isSolving || busy || records.length === 0}
+        title={isSolving ? "Export is available after all scenarios finish." : undefined}
         onClick={() => void download()}
       >
         Export Results (CSV)
