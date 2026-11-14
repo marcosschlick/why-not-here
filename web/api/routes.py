@@ -18,11 +18,13 @@ from src.pipeline.artifact_names import (
 from src.pipeline.experiment_config import (
     apply_experiment_config,
     build_experiment_config,
+    expand_scenario_configurations,
     save_experiment_configurations,
     validate_experiment_config,
 )
 from src.pipeline.generate_map import generate_map, persist_map
-from src.pipeline.run_isp import run_isp
+from src.pipeline.reporting import serialize_result
+from src.pipeline.run_isp import grid_response, run_isp
 from src.pipeline.storage import (
     get_output_directory,
     reserve_output_directory,
@@ -46,7 +48,7 @@ from .schemas import (
     ImportConfigRequest,
     RunRequest,
     SaveConfigurationsRequest,
-    SemanticModificationsData,
+    ScenarioPlanRequest,
     SolveISPRequest,
 )
 
@@ -68,11 +70,12 @@ def exclusive_pipeline(function: Callable[..., Any]) -> Callable[..., Any]:
     return execute
 
 
-def _generation_metadata(grid: Grid) -> dict[str, int | None]:
+def _generation_metadata(grid: Grid) -> dict[str, int | float | None]:
     return {
         "base_seed": grid.base_seed,
         "effective_seed": grid.effective_seed,
         "generation_attempt": grid.generation_attempt,
+        "runtime_sec": getattr(grid, "generation_runtime_sec", None),
     }
 
 
@@ -128,6 +131,17 @@ def modify_config(payload: dict[str, Any]) -> dict[str, Any]:
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "success", "updated": updated_items}
+
+
+@router.post("/config/scenarios")
+def plan_scenarios(payload: ScenarioPlanRequest) -> dict[str, Any]:
+    try:
+        scenarios = expand_scenario_configurations(
+            payload.config, payload.benchmark, payload.purpose
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"configurations": scenarios}
 
 
 @router.post("/config/export")
@@ -209,7 +223,7 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
         optimal_path, optimal_cost, _ = astar(grid, start, goal)
 
         safe_optimal_cost = (
-            round(optimal_cost, 4)
+            optimal_cost
             if optimal_cost is not None
             and not math.isinf(optimal_cost)
             and not math.isnan(optimal_cost)
@@ -238,6 +252,7 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
             "grid": grid.to_dict(),
             "user_path": [list(pt) for pt in p_user],
         }
+        response_data["execution"] = raw_data.get("execution")
         return sanitize_floats(response_data)
     except HTTPException:
         raise
@@ -290,7 +305,7 @@ def generate_map_data(payload: GenerateMapRequest) -> dict[str, Any]:
         optimal_path, optimal_cost, _ = astar(grid, start, goal)
 
         safe_optimal_cost = (
-            round(optimal_cost, 4)
+            optimal_cost
             if optimal_cost is not None
             and not math.isinf(optimal_cost)
             and not math.isnan(optimal_cost)
@@ -367,101 +382,44 @@ def solve_isp_data(payload: SolveISPRequest) -> dict[str, Any]:
                 get_project_path(get_output_directory()) / "map" / "map.json"
             )
         )
-        naming = payload.naming.model_dump() if payload.naming else {}
+        naming = (
+            payload.naming.model_dump(exclude={"benchmark_group_id"})
+            if payload.naming
+            else {}
+        )
         output_dir = reserve_output_directory(
             grid.h,
             grid.w,
             **naming,
             incremental=config.USE_INCREMENTAL_SOLVER,
             reduction=config.DEFAULT_REDUCTION_METHOD,
+            isp_model=config.ISP_MODEL,
         )
         set_output_directory(output_dir)
         persist_map(grid, start=start, goal=goal)
-        result = run_isp(verbose=False, user_path=p_user, start=start, goal=goal)
+        result = run_isp(
+            verbose=False,
+            user_path=p_user,
+            start=start,
+            goal=goal,
+            grid=grid,
+            metadata=payload.execution.model_dump() if payload.execution else None,
+        )
         if not result:
             raise HTTPException(
                 status_code=500,
                 detail="ISP solver failed to produce a valid path or solution.",
             )
 
-        modifications = None
-        if result.modifications is not None:
-            modifications = SemanticModificationsData(
-                terrain=len(result.modifications.terrain_nodes),
-                obstacle=len(result.modifications.obstacle_nodes),
-                slope=len(result.modifications.slope_edges),
-                opened_terrain=len(result.modifications.opened_terrain_nodes),
-                opened_terrain_nodes=result.modifications.opened_terrain_nodes,
-                robot_speed=len(result.modifications.robot_speed_edges),
-                terrain_nodes=result.modifications.terrain_nodes,
-                obstacle_nodes=result.modifications.obstacle_nodes,
-                slope_edges=result.modifications.slope_edges,
-                terrain_assignments=result.modifications.terrain_assignments,
-                robot_speed_edges=result.modifications.robot_speed_edges,
-            ).model_dump(mode="json")
-
-        orig_cost = (
-            round(result.original_optimal_cost, 4)
-            if result.original_optimal_cost is not None
-            and not math.isinf(result.original_optimal_cost)
-            and not math.isnan(result.original_optimal_cost)
-            else None
-        )
-        final_cost = (
-            round(result.final_alternative_cost, 4)
-            if result.final_alternative_cost is not None
-            and not math.isinf(result.final_alternative_cost)
-            and not math.isnan(result.final_alternative_cost)
-            else None
-        )
-        runtime = (
-            round(result.runtime_sec, 3)
-            if result.runtime_sec is not None
-            and not math.isinf(result.runtime_sec)
-            and not math.isnan(result.runtime_sec)
-            else 0.0
-        )
-
-        last_result = {
-            "success": result.success,
-            "original_optimal_path": result.original_optimal_path,
-            "original_alternative_cost": (
-                ISPValidator.compute_path_cost(
-                    Grid.load(
-                        get_project_path(get_output_directory()) / "map" / "map.json"
-                    ),
-                    p_user,
+        last_result = serialize_result(result)
+        if result.prepared_grid is not None:
+            last_result["prepared_grid"] = grid_response(result.prepared_grid)
+            if result.modifications is not None:
+                last_result["modified_grid"] = grid_response(
+                    ISPValidator.apply_modifications(
+                        result.prepared_grid, result.modifications
+                    )
                 )
-                if p_user
-                else None
-            ),
-            "solver_status": result.solver_status,
-            "runtime_sec": runtime,
-            "iterations": result.iterations,
-            "graph_nodes": result.graph_nodes,
-            "graph_edges": result.graph_edges,
-            "path_metrics": result.path_metrics,
-            "iteration_metrics": result.iteration_metrics,
-            "original_optimal_cost": orig_cost,
-            "final_alternative_cost": final_cost,
-            "explanation_text": result.explanation_text,
-            "cost_baseline_text": result.cost_baseline_text,
-            "modifications": modifications,
-        }
-
-        if result.modifications is not None:
-            map_json_path = (
-                get_project_path(get_output_directory()) / "map" / "map.json"
-            )
-            original_grid = Grid.load(map_json_path)
-            prepare_endpoints(original_grid, start=start, goal=goal)
-            modified_grid = ISPValidator.apply_modifications(
-                original_grid, result.modifications
-            )
-            last_result["modified_grid"] = {
-                **modified_grid.to_dict(),
-                **_grid_layers(modified_grid),
-            }
 
         artifacts = collect_artifacts(get_output_directory())
 
@@ -470,7 +428,8 @@ def solve_isp_data(payload: SolveISPRequest) -> dict[str, Any]:
         with runner.lock:
             runner.state["last_result"] = sanitized_result
             runner.state["artifacts"] = artifacts
-            runner.state["status"] = "completed"
+            runner.state["status"] = sanitized_result["execution_status"]
+            runner.state["error"] = sanitized_result["execution_error"]
 
         return {
             "status": "success",

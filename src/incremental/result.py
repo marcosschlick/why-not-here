@@ -21,3 +21,5 @@ class ClosedLoopResult:
     graph_nodes: int | None = None
     graph_edges: int | None = None
     path_metrics: dict[str, float | int] | None = None
+    metrics: dict = field(default_factory=dict)
+    prepared_grid: object | None = None

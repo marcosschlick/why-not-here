@@ -250,7 +250,7 @@ def build_tactical_legend(
     handles.extend(
         mpatches.Patch(
             color=terrain_color_rgb(name),
-            label=f"{name.lower().replace('_', ' ')} ({speed:g} m/s)",
+            label=f"{('fast' if name == 'GRASS' else 'slow') if grid.isp_model == 'BRANDAO' and name in {'GRASS', 'FOREST'} else name.lower().replace('_', ' ')} ({speed:g} m/s)",
         )
         for name, speed in grid.speeds.items()
     )
@@ -264,6 +264,14 @@ def build_tactical_legend(
     )
 
     if modifications is not None:
+        if set(modifications.opened_terrain_nodes) & set(modifications.obstacle_nodes):
+            handles.append(
+                mpatches.Patch(
+                    facecolor="none",
+                    edgecolor="none",
+                    label="Compound cell actions: terrain-opening marker",
+                )
+            )
         changes = (
             (
                 len(modifications.terrain_nodes),

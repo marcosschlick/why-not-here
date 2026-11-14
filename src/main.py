@@ -8,7 +8,6 @@ if str(ROOT_DIR) not in sys.path:
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from src.pipeline.brandao_benchmark import run_brandao_benchmark
 from src.pipeline.experiment_config import execute_experiment, load_experiment_file
 from src.pipeline.generate_map import generate_map
 from src.pipeline.run_isp import run_isp
@@ -22,10 +21,6 @@ def main():
             data = load_experiment_file(config_path)
             execute_experiment(data, verbose=True)
             return
-        if arg1 in {"brandao", "brandao-benchmark"}:
-            map_path = sys.argv[2].strip() if len(sys.argv) > 2 else None
-            run_brandao_benchmark(map_path)
-            return
         if arg1.endswith(".json") or Path(arg1).is_file():
             data = load_experiment_file(arg1)
             execute_experiment(data, verbose=True)
@@ -36,10 +31,9 @@ def main():
         print(" [1] Generate map")
         print(" [2] Run A* and ISP on existing map")
         print(" [3] Run experiment from configuration file")
-        print(" [4] Run Brandao-inspired benchmark on the saved map")
         print(" [0] Exit")
         try:
-            choice = input("Choice (1-4): ").strip()
+            choice = input("Choice (1-3): ").strip()
         except (KeyboardInterrupt, EOFError):
             return
 
@@ -60,12 +54,10 @@ def main():
             execute_experiment(data, verbose=True)
         except (OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:
             print(f"Error executing experiment: {exc}")
-    elif choice == "4":
-        run_brandao_benchmark()
     elif choice in ("0", "q", "exit"):
         return
     else:
-        print(f"Invalid option: '{choice}'. Use 1, 2, 3, or 4.")
+        print(f"Invalid option: '{choice}'. Use 1, 2, or 3.")
 
 
 if __name__ == "__main__":

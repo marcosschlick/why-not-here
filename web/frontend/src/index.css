@@ -555,42 +555,6 @@ kbd,
 .strategy-column .toggle-btn:hover {
   border-color: var(--border-strong);
 }
-.conditional-field-wrapper {
-  margin-top: 0.75rem;
-  padding: 0.75rem;
-  background: var(--surface-subtle);
-  border: 1px solid var(--border-subtle);
-  border-left: 0.2rem solid var(--azure-blue);
-  border-radius: var(--radius-sm);
-  min-height: 5.85rem;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  animation: conditionalEnter var(--duration-normal) var(--ease-out);
-}
-.conditional-field-wrapper .form-group {
-  margin: 0;
-  width: 100%;
-}
-@keyframes conditionalEnter {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.conditional-inner-grid {
-  display: grid;
-  gap: 0.75rem;
-  width: 100%;
-}
-.conditional-inner-grid.has-scope {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
 
 .queue-tab-content {
   animation: tabContentEnter var(--duration-normal) var(--ease-out);
@@ -1416,9 +1380,7 @@ kbd,
 }
 .status-pill.completed,
 .status-pill.optimal,
-.status-pill.certified,
-.batch-tab-badge.status-completed,
-.batch-tab-badge.status-certified {
+.batch-tab-badge.status-completed {
   color: var(--text-structural);
   background: var(--surface-info);
   border-color: color-mix(in srgb, var(--azure-blue) 32%, transparent);
@@ -1446,8 +1408,7 @@ kbd,
   background: var(--surface-danger);
   border-color: var(--border-danger);
 }
-.queue-item-params,
-.modifications-badges {
+.queue-item-params {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
@@ -1654,31 +1615,11 @@ kbd,
     box-shadow var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out);
 }
-.metric-card.span-all {
-  grid-column: 1 / -1;
-  min-height: auto;
-}
 .metric-card.optimal-card {
   border-top: 0.2rem solid var(--azure-blue);
 }
 .metric-card.alternative-card {
   border-top: 0.2rem solid var(--lobster-pink);
-}
-.metric-card.modifications-card {
-  border-top: 0.2rem solid var(--yale-blue);
-}
-.iteration-table-wrapper {
-  overflow-x: auto;
-}
-.iteration-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
-}
-.iteration-table th,
-.iteration-table td {
-  padding: 0.45rem;
-  border-bottom: 1px solid var(--border-subtle);
 }
 .results-map-card {
   display: grid;
@@ -2435,8 +2376,7 @@ kbd,
   }
   .form-grid,
   .config-form-grid-pair,
-  .config-strategy-grid,
-  .conditional-inner-grid.has-scope {
+  .config-strategy-grid {
     grid-template-columns: 1fr;
   }
   .canvas-legend {
@@ -2537,15 +2477,13 @@ kbd,
   .modal-content,
   .confirm-modal-card,
   .loading-overlay-card,
-  .conditional-field-wrapper,
   .queue-tab-content,
   .step-container,
   .advanced-settings-body {
     transform: none !important;
   }
   .step-container,
-  .queue-tab-content,
-  .conditional-field-wrapper {
+  .queue-tab-content {
     animation: none !important;
   }
   .advanced-settings-collapse {
@@ -2661,39 +2599,6 @@ kbd,
 
 .config-step .config-strategy-grid {
   align-items: stretch;
-}
-
-.config-step .conditional-field-wrapper {
-  min-height: 5.85rem;
-  margin-top: 0.65rem;
-  padding: 0.7rem 0.75rem;
-  background: var(--config-surface-soft);
-  border-color: color-mix(in srgb, var(--azure-blue) 22%, transparent);
-  border-left: 0.2rem solid var(--azure-blue);
-  box-shadow: inset 0 1px 0
-    color-mix(in srgb, var(--bright-snow) 70%, transparent);
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out);
-}
-
-.config-step .conditional-field-wrapper.is-inactive {
-  background: var(--config-surface-soft);
-  border-color: var(--config-border);
-  border-left-color: color-mix(in srgb, var(--yale-blue) 35%, transparent);
-  box-shadow: none;
-}
-
-.config-step .conditional-field-wrapper.is-active {
-  background: var(--config-surface-selected);
-  border-color: color-mix(in srgb, var(--azure-blue) 36%, transparent);
-  border-left-color: var(--azure-blue);
-}
-
-.config-step .conditional-field-wrapper input,
-.config-step .conditional-field-wrapper select {
-  background: var(--bright-snow);
 }
 
 .config-step .advanced-settings-section {
@@ -2875,7 +2780,6 @@ kbd,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .config-step .conditional-field-wrapper,
   .config-step .advanced-settings-section,
   .config-step .advanced-settings-summary,
   .config-step .mode-tab,
@@ -2886,10 +2790,6 @@ kbd,
     animation: none !important;
     transition-duration: 1ms !important;
   }
-}
-
-.config-step .config-strategy-grid > .conditional-field-wrapper {
-  margin-top: 0;
 }
 
 .benchmark-description {
@@ -2925,15 +2825,33 @@ kbd,
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 80rem) {
-  .simulation-strategy-grid .conditional-inner-grid.has-scope {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 48rem) {
   .workflow-context {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+.scenario-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  color: var(--yale-blue);
+}
+.status-pill.validated,
+.status-validated {
+  color: var(--yale-blue);
+  background: var(--bright-snow);
+  border: 1px solid var(--yale-blue);
+}
+
+.status-pill.stopped,
+.status-pill.inconclusive,
+.status-stopped,
+.status-inconclusive {
+  color: var(--shadow-grey);
+  background: var(--bright-snow);
+  border: 1px solid var(--lobster-pink);
 }

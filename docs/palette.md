@@ -34,8 +34,12 @@ edge 0.05 cells wide, with no halo. Group changes of the same cell-based type
 transitively when both their row and column offsets are at most one. Connect
 grouped marker centers with rounded capsules 0.78 cells wide and an outer edge
 0.05 cells wide, preserving empty regions in the group's shape. Terrain,
-obstacle, and opened-terrain cell changes must not share coordinates; treat a shared
-coordinate as invalid semantic data.
+obstacle, and opened-terrain marker categories must not share coordinates; treat a shared
+marker coordinate as invalid visual data. Compound underlying actions remain separate
+in intervention records and counts. When opening impassable terrain also requires
+removing a physical obstacle in the same cell, use the opened-terrain marker once;
+its tooltip/explanation and action counts retain both interventions. Marker projection
+uses opened terrain, then changed terrain, then obstacle removal precedence.
 
 Draw each leveled slope edge as an individual rounded cross, centered at the
 edge midpoint. Align its 0.50-cell main stroke with the edge and its

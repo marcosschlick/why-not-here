@@ -57,7 +57,7 @@ export function SolverConfigBadges({
   const solverArchLabel = config.USE_INCREMENTAL_SOLVER
     ? `Incremental MILP (${config.DEFAULT_SOLVER || "HiGHS"}${
         hasReduction ? `, ${astarScopeLabel}` : ""
-      }, Max Iter: ${config.MAX_ISP_ITERATIONS ?? 150})`
+      })`
     : `Monolithic MILP (${config.DEFAULT_SOLVER || "HiGHS"})`;
 
   const gridSpecs = `${config.MAP_H}×${config.MAP_W} (${config.CONNECTIVITY}-Connected)`;
@@ -67,7 +67,7 @@ export function SolverConfigBadges({
       <div className="solver-params-details">
         <div className="solver-params-header">
           <span className="solver-params-title">
-            Solver &amp; Graph Parameters
+            Model, Solver &amp; Graph Parameters
           </span>
           <span className="solver-params-subtitle">
             Active configuration applied to this optimization run
@@ -75,6 +75,22 @@ export function SolverConfigBadges({
         </div>
 
         <div className="solver-params-grid">
+          <div className="solver-param-chip">
+            <span className="param-chip-label">Scenario</span>
+            <span className="param-chip-value">
+              {config.ISP_MODEL === "BRANDAO"
+                ? "Brandao adaptation (1:8, no slope effects)"
+                : "Normal terrain and elevation"}
+            </span>
+          </div>
+          <div className="solver-param-chip">
+            <span className="param-chip-label">
+              Cooperative Scenario Budget
+            </span>
+            <span className="param-chip-value">
+              {config.ISP_TIME_BUDGET_SEC ?? 1800} s
+            </span>
+          </div>
           <div className="solver-param-chip">
             <span className="param-chip-label">Graph Reduction</span>
             <span className="param-chip-value highlight-azure">

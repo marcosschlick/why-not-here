@@ -1,8 +1,5 @@
-# Incremental / Closed-loop settings (Brandão 2021: True = incremental cutting planes, False = monolithic single-step MILP)
+# Incremental cutting planes or monolithic inverse optimization.
 USE_INCREMENTAL_SOLVER = False
-MAX_ISP_ITERATIONS = 150
 INCREMENTAL_TOLERANCE = 1e-4
-CLOSED_LOOP_TIMEOUT_SEC = 1800.0
-
-# A* search scope for cutting planes ("GLOBAL" or "SUBGRAPH")
+# Competing path search; all returned candidates still require full-grid validation.
 INCREMENTAL_ASTAR_SCOPE = "GLOBAL"

@@ -1032,7 +1032,12 @@ export function TacticalMapLegend({
                 backgroundColor: mapData.terrain_colors?.[name] ?? "#808080",
               }}
             />
-            {name.toLowerCase().replaceAll("_", " ")} (
+            {mapData.isp_model === "BRANDAO" && name === "GRASS"
+              ? "Fast"
+              : mapData.isp_model === "BRANDAO" && name === "FOREST"
+                ? "Slow"
+                : name.toLowerCase().replaceAll("_", " ")}{" "}
+            (
             {Number(speed).toLocaleString("en-US", {
               maximumSignificantDigits: 6,
             })}{" "}
@@ -1047,6 +1052,12 @@ export function TacticalMapLegend({
       {hasChanges && (
         <div className="legend-group">
           <span className="legend-group-label">Changes</span>
+          {(modifications?.obstacle ?? 0) >
+            (modifications?.obstacle_nodes?.length ?? 0) && (
+            <span className="legend-item">
+              Compound cell actions use the terrain-opening marker
+            </span>
+          )}
           {terrainCount > 0 && (
             <span className="legend-item">
               <span className="legend-color legend-change-cell legend-change-terrain" />

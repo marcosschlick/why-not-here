@@ -21,6 +21,7 @@ class Grid:
         connectivity: int = CONNECTIVITY,
         max_slope_deg: float | None = None,
     ) -> None:
+        self.isp_model = "NORMAL"
         self.h = h
         self.w = w
         self.cell_size = config.CELL_SIZE if cell_size is None else cell_size
@@ -64,6 +65,8 @@ class Grid:
         return math.hypot(v[0] - u[0], v[1] - u[1]) * self.cell_size
 
     def get_slope(self, u: tuple[int, int], v: tuple[int, int]) -> float:
+        if self.isp_model == "BRANDAO":
+            return 0.0
         if (u, v) in self.leveled_slopes or (v, u) in self.leveled_slopes:
             return 0.0
 
@@ -182,6 +185,7 @@ class Grid:
 
     def to_dict(self) -> dict:
         return {
+            "isp_model": self.isp_model,
             "h": self.h,
             "w": self.w,
             "cell_size": self.cell_size,
@@ -239,7 +243,7 @@ class Grid:
             raise ValueError(
                 f"Missing map fields: {', '.join(sorted(missing_fields))}."
             )
-        unknown_fields = data.keys() - required_fields
+        unknown_fields = data.keys() - required_fields - {"isp_model"}
         if unknown_fields:
             raise ValueError(
                 f"Unknown map fields: {', '.join(sorted(unknown_fields))}."
@@ -251,6 +255,9 @@ class Grid:
             connectivity=data["connectivity"],
             max_slope_deg=data["max_slope_deg"],
         )
+        grid.isp_model = data.get("isp_model", "NORMAL")
+        if grid.isp_model not in {"NORMAL", "BRANDAO"}:
+            raise ValueError("Unknown grid ISP model.")
         grid.speeds = dict(data["speeds"])
         grid.load_terrain_matrix(data["terrain"])
         grid.load_elevation_matrix(data["elevation"])

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AboutModal } from "./components/AboutModal";
 import { ConfigForm } from "./components/ConfigForm";
 import { ConfirmModal } from "./components/ConfirmModal";
@@ -6,6 +6,7 @@ import type { ConfirmModalProps } from "./components/ConfirmModal";
 import { QueuePanel } from "./components/QueuePanel";
 import { ResultsView } from "./components/ResultsView";
 import { RouteCanvas } from "./components/RouteCanvas";
+import { executionStatus, requestFailure } from "./utils/execution";
 import { validateDrawingRoute } from "./utils/validateRoute";
 import {
   createExperimentItems,
@@ -24,6 +25,7 @@ import {
   solveISP,
 } from "./services/api";
 import type {
+  ExecutionMetadata,
   LastResult,
   MapData,
   QueueItem,
@@ -71,6 +73,25 @@ export function App() {
   );
   const [workflowMode, setWorkflowMode] = useState<"run" | "create">("run");
   const [benchmark, setBenchmark] = useState(false);
+  const [benchmarkRepetitions, setBenchmarkRepetitions] = useState(1);
+  const [executionRecords, setExecutionRecords] = useState<LastResult[]>([]);
+  const executionOrder = useRef(0);
+  const attempts = useRef(new Map<string, number>());
+  function nextExecution(
+    key: string,
+    group?: string,
+    repetition = 1,
+  ): ExecutionMetadata {
+    const attempt = (attempts.current.get(key) ?? 0) + 1;
+    attempts.current.set(key, attempt);
+    return {
+      run_id: crypto.randomUUID(),
+      benchmark_group_id: group,
+      repetition_index: repetition,
+      attempt_index: attempt,
+      execution_order: ++executionOrder.current,
+    };
+  }
   const [currentStep, setCurrentStep] = useState<
     "config" | "route_canvas" | "results"
   >("config");
@@ -145,27 +166,37 @@ export function App() {
     targetConfig: SystemConfig,
     useBenchmark: boolean,
   ) {
-    if (useBenchmark) {
-      const items = createExperimentItems(targetConfig, {}, true);
-      setQueue(items);
-      setActiveTabMode("queue");
-      await handleStartBatchReview(items);
-      return;
-    }
-    setIsBatchMode(false);
     setElapsedTime(0);
     setIsGeneratingMap(true);
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
-      const generated = await generateMap(targetConfig);
+      const items = await createExperimentItems(
+        targetConfig,
+        {},
+        useBenchmark,
+        undefined,
+        undefined,
+        benchmarkRepetitions,
+        workflowMode,
+      );
+      if (items.length > 1) {
+        setQueue(items);
+        if (useBenchmark) setActiveTabMode("queue");
+        await handleStartBatchReview(items);
+        return;
+      }
+      const generated = await generateMap(items[0].config);
+      setIsBatchMode(false);
       setLastResult(null);
       setMapData(generated);
       setUserPath(generated.auto_path || [generated.start]);
       setCurrentStep("route_canvas");
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Error generating map",
+        error instanceof Error
+          ? error.message
+          : "Error preparing map scenarios",
       );
     } finally {
       setIsGeneratingMap(false);
@@ -180,23 +211,29 @@ export function App() {
     setErrorMessage(null);
     try {
       const imported = await importConfig(parsedJson);
-      if (useBenchmark) {
-        const items = createExperimentItems(
-          imported.config,
-          {},
-          true,
-          imported,
-          imported.user_path,
-        );
+      const items = await createExperimentItems(
+        imported.config,
+        {
+          repetition_index: imported.execution?.repetition_index ?? 1,
+          benchmark_group_id: imported.execution?.benchmark_group_id,
+        },
+        useBenchmark,
+        imported,
+        imported.user_path,
+        benchmarkRepetitions,
+        workflowMode,
+      );
+      if (items.length > 1) {
         setQueue(items);
-        setActiveTabMode("queue");
+        if (useBenchmark) setActiveTabMode("queue");
         await handleStartBatchReview(items);
       } else {
+        const preparedMap = { ...imported, config: items[0].config };
         setIsBatchMode(false);
         setLastResult(null);
-        setMapData(imported);
+        setMapData(preparedMap);
         setUserPath(imported.user_path);
-        setConfig(imported.config);
+        setConfig(items[0].config);
         setCurrentStep("route_canvas");
       }
     } catch (error) {
@@ -226,13 +263,19 @@ export function App() {
       try {
         const imported = await importConfig(file.data);
         items.push(
-          ...createExperimentItems(
+          ...(await createExperimentItems(
             imported.config,
-            files.length > 1 ? { map_index: index + 1 } : {},
+            {
+              ...(files.length > 1 ? { map_index: index + 1 } : {}),
+              repetition_index: imported.execution?.repetition_index ?? 1,
+              benchmark_group_id: imported.execution?.benchmark_group_id,
+            },
             useBenchmark,
             imported,
             imported.user_path,
-          ),
+            benchmarkRepetitions,
+            workflowMode,
+          )),
         );
       } catch (error) {
         errors.push(
@@ -263,6 +306,15 @@ export function App() {
     setElapsedTime(0);
     setIsSolvingISP(true);
     setErrorMessage(null);
+    const attempt = (attempts.current.get("single") ?? 0) + 1;
+    attempts.current.set("single", attempt);
+    const execution: ExecutionMetadata = {
+      run_id: crypto.randomUUID(),
+      benchmark_group_id: mapData.execution?.benchmark_group_id,
+      repetition_index: mapData.execution?.repetition_index ?? 1,
+      attempt_index: attempt,
+      execution_order: ++executionOrder.current,
+    };
     try {
       const response = await solveISP(
         userPath,
@@ -270,6 +322,11 @@ export function App() {
         mapData.start,
         mapData.goal,
         mapData.grid,
+        undefined,
+        {
+          ...execution,
+          map_generation_sec: mapData.generation?.runtime_sec ?? undefined,
+        },
       );
       setMapData({
         ...mapData,
@@ -279,11 +336,22 @@ export function App() {
         optimal_path:
           response.result.original_optimal_path || mapData.optimal_path,
       });
+      setExecutionRecords((previous) => [...previous, response.result]);
       setLastResult(response.result);
       setArtifacts(response.artifacts);
       setCacheKey(Date.now());
       setCurrentStep("results");
     } catch (err) {
+      const failed = requestFailure(
+        err,
+        mapData.config,
+        mapData,
+        userPath,
+        execution,
+      );
+      setExecutionRecords((previous) => [...previous, failed]);
+      setLastResult(failed);
+      setCurrentStep("results");
       setErrorMessage(
         err instanceof Error ? err.message : "Error executing ISP solver",
       );
@@ -291,9 +359,32 @@ export function App() {
       setIsSolvingISP(false);
     }
   }, [mapData, userPath]);
-  function handleAddToQueue(newConfig: SystemConfig, useBenchmark: boolean) {
-    const items = createExperimentItems(newConfig, {}, useBenchmark);
-    setQueue((previous) => [...previous, ...items]);
+  async function handleAddToQueue(
+    newConfig: SystemConfig,
+    useBenchmark: boolean,
+  ): Promise<number> {
+    setIsGeneratingMap(true);
+    setErrorMessage(null);
+    try {
+      const items = await createExperimentItems(
+        newConfig,
+        {},
+        useBenchmark,
+        undefined,
+        undefined,
+        benchmarkRepetitions,
+        workflowMode,
+      );
+      setQueue((previous) => [...previous, ...items]);
+      return items.length;
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Error preparing scenarios",
+      );
+      return 0;
+    } finally {
+      setIsGeneratingMap(false);
+    }
   }
   function handleRemoveQueueItem(id: string) {
     const item = queue.find((entry) => entry.id === id);
@@ -305,7 +396,7 @@ export function App() {
       setConfirmation({
         title: "Discard Prepared Item",
         description: item.benchmarkGroup
-          ? "Discard this Benchmark group and its ten combinations?"
+          ? "Discard this scenario group and all its executions?"
           : "Discard this prepared item?",
         confirmLabel: "Discard Item",
         onConfirm: removeItem,
@@ -626,7 +717,7 @@ export function App() {
     setActiveBatchResultIndex(0);
     for (let i = 0; i < finalQueue.length; i++) {
       const item = finalQueue[i];
-      if (item.result?.success) continue;
+      if (item.status === "completed" || item.status === "saved") continue;
       setActiveBatchResultIndex(i);
       setQueue((prev) =>
         prev.map((it, idx) =>
@@ -634,6 +725,11 @@ export function App() {
             ? { ...it, status: "solving", error: undefined, result: undefined }
             : it,
         ),
+      );
+      const execution = nextExecution(
+        item.id,
+        item.benchmarkGroup ?? item.naming?.benchmark_group_id,
+        item.repetitionIndex ?? 1,
       );
       try {
         const effectivePath = item.userPath || item.mapData?.auto_path || [];
@@ -647,7 +743,13 @@ export function App() {
           item.mapData.goal,
           item.mapData.grid,
           item.naming,
+          {
+            ...execution,
+            map_generation_sec:
+              item.mapData.generation?.runtime_sec ?? undefined,
+          },
         );
+        setExecutionRecords((previous) => [...previous, response.result]);
         setQueue((prev) =>
           prev.map((it, idx) =>
             idx === i
@@ -663,10 +765,8 @@ export function App() {
                           ) || "",
                       }
                     : undefined,
-                  status: response.result.success ? "completed" : "failed",
-                  error: response.result.success
-                    ? undefined
-                    : response.result.explanation_text,
+                  status: executionStatus(response.result),
+                  error: response.result.execution_error ?? undefined,
                   result: response.result,
                   artifacts: response.artifacts,
                 }
@@ -681,9 +781,21 @@ export function App() {
       } catch (err) {
         const msg =
           err instanceof Error ? err.message : "Batch execution failed";
+        const failure = item.mapData
+          ? requestFailure(
+              err,
+              item.config,
+              item.mapData,
+              item.userPath ?? [],
+              execution,
+            )
+          : undefined;
+        if (failure) setExecutionRecords((previous) => [...previous, failure]);
         setQueue((prev) =>
           prev.map((it, idx) =>
-            idx === i ? { ...it, status: "failed", error: msg } : it,
+            idx === i
+              ? { ...it, status: "failed", error: msg, result: failure }
+              : it,
           ),
         );
       }
@@ -796,6 +908,8 @@ export function App() {
           <div key="step-config" className="step-container config-step">
             <ConfigForm
               benchmark={benchmark}
+              repetitions={benchmarkRepetitions}
+              onRepetitionsChange={setBenchmarkRepetitions}
               onBenchmarkChange={setBenchmark}
               onBeforeGenerate={(action) => {
                 if (!mapData && queue.length === 0) {
@@ -1021,7 +1135,7 @@ export function App() {
                                   <span>
                                     {workflowMode === "create"
                                       ? `Item ${idx + 1} (${item.config.MAP_H}x${item.config.MAP_W})`
-                                      : `Map ${reviewSteps.indexOf(idx) + 1} (${item.config.MAP_H}x${item.config.MAP_W})${item.benchmarkGroup ? " · 10 combinations" : ""}`}
+                                      : `Map ${reviewSteps.indexOf(idx) + 1} (${item.config.MAP_H}x${item.config.MAP_W})${item.groupKind === "benchmark" ? " · 12 scenarios per repetition" : item.groupKind === "comparison" ? " · 3 scenarios" : ""}`}
                                   </span>
                                   <span
                                     className={`batch-step-status-pill ${isItemConnected ? "ready" : "pending"}`}
@@ -1126,6 +1240,7 @@ export function App() {
         {currentStep === "results" && (
           <div key="step-results" className="step-container results-step">
             <ResultsView
+              records={executionRecords}
               result={lastResult}
               mapData={
                 isBatchMode ? queue[activeBatchResultIndex]?.mapData : mapData
@@ -1161,7 +1276,7 @@ export function App() {
                 }
                 startAgain();
               }}
-              batchQueue={isBatchMode && queue.length > 1 ? queue : undefined}
+              batchQueue={isBatchMode && queue.length > 0 ? queue : undefined}
               activeBatchIndex={activeBatchResultIndex}
               onSelectBatchIndex={(idx) => {
                 setActiveBatchResultIndex(idx);

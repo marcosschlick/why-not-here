@@ -3,12 +3,14 @@ import { fetchMapProfiles } from "../services/api";
 import type { MapProfile, SystemConfig } from "../types";
 interface ConfigFormProps {
   benchmark: boolean;
+  repetitions: number;
+  onRepetitionsChange: (value: number) => void;
   onBenchmarkChange: (enabled: boolean) => void;
   onBeforeGenerate?: (action: () => void) => void;
   onDraftChange: (config: SystemConfig) => void;
   initialConfig: SystemConfig | null;
   onGenerateMap: (config: SystemConfig, benchmark: boolean) => void;
-  onAddToQueue: (config: SystemConfig, benchmark: boolean) => void;
+  onAddToQueue: (config: SystemConfig, benchmark: boolean) => Promise<number>;
   onImportConfig?: (data: Record<string, unknown>, benchmark: boolean) => void;
   onImportBatchConfigs?: (
     configs: {
@@ -26,6 +28,8 @@ interface ConfigFormProps {
 }
 export function ConfigForm({
   benchmark,
+  repetitions,
+  onRepetitionsChange,
   onBenchmarkChange,
   onBeforeGenerate,
   onDraftChange,
@@ -73,14 +77,8 @@ export function ConfigForm({
   const [solver, setSolver] = useState<string>(
     initialConfig?.DEFAULT_SOLVER ?? "HIGHS",
   );
-  const [solverTimeout, setSolverTimeout] = useState<number>(
-    initialConfig?.SOLVER_TIMEOUT_SEC ?? 1800,
-  );
-  const [closedLoopTimeout, setClosedLoopTimeout] = useState<number>(
-    initialConfig?.CLOSED_LOOP_TIMEOUT_SEC ?? 1800.0,
-  );
-  const [maxIspIterations, setMaxIspIterations] = useState<number>(
-    initialConfig?.MAX_ISP_ITERATIONS ?? 150,
+  const [timeBudget, setTimeBudget] = useState(
+    initialConfig?.ISP_TIME_BUDGET_SEC ?? 1800,
   );
   const [incrementalAstarScope, setIncrementalAstarScope] = useState<string>(
     initialConfig?.INCREMENTAL_ASTAR_SCOPE ?? "GLOBAL",
@@ -113,9 +111,8 @@ export function ConfigForm({
       USE_INCREMENTAL_SOLVER: useIncremental,
       MAP_DEFAULT_SEED: Number(mapSeed),
       DEFAULT_SOLVER: solver,
-      SOLVER_TIMEOUT_SEC: Number(solverTimeout),
-      CLOSED_LOOP_TIMEOUT_SEC: Number(closedLoopTimeout),
-      MAX_ISP_ITERATIONS: Number(maxIspIterations),
+      ISP_TIME_BUDGET_SEC: Number(timeBudget),
+      ISP_MODEL: "NORMAL",
       INCREMENTAL_ASTAR_SCOPE: incrementalAstarScope,
     };
   }
@@ -136,12 +133,11 @@ export function ConfigForm({
     if (onBeforeGenerate) onBeforeGenerate(generate);
     else generate();
   }
-  function handleAddQueue() {
-    onAddToQueue(getCurrentConfig(), benchmark);
+  async function handleAddQueue() {
+    const count = await onAddToQueue(getCurrentConfig(), benchmark);
+    if (!count) return;
     setFeedback(
-      benchmark
-        ? "Benchmark group added to queue"
-        : "Configuration added to queue",
+      `${count} ${workflowMode === "create" ? "configuration(s)" : "execution(s)"} added to queue`,
     );
     setTimeout(() => setFeedback(null), 2500);
   }
@@ -267,7 +263,31 @@ export function ConfigForm({
             </div>
           </div>
 
-          <div className="config-strategy-grid simulation-strategy-grid">
+          {benchmark && (
+            <div className="form-grid">
+              <div className="form-group">
+                <label htmlFor="benchmarkRepetitions">
+                  <span>Repetitions per Prepared Scenario</span>
+                  <span className="form-group-hint">
+                    Same map and route · {12 * repetitions} executions
+                  </span>
+                </label>
+                <input
+                  id="benchmarkRepetitions"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={repetitions}
+                  onChange={(event) =>
+                    onRepetitionsChange(
+                      Math.max(1, Math.floor(Number(event.target.value) || 1)),
+                    )
+                  }
+                />
+              </div>
+            </div>
+          )}
+          <div className="config-strategy-grid">
             <div className="strategy-column">
               <div className="form-group">
                 <label htmlFor="reductionMethod">
@@ -321,52 +341,28 @@ export function ConfigForm({
                 </div>
               </div>
             </div>
-            <div
-              className={
-                "conditional-field-wrapper " +
-                (useIncremental || benchmark ? "is-active" : "is-inactive")
-              }
-            >
-              <div className="conditional-inner-grid has-scope">
-                <div className="form-group">
-                  <label htmlFor="maxIspIterations">
-                    <span>Max ISP Iterations</span>
-                    <span className="form-group-hint">Cutting-plane limit</span>
-                  </label>
-                  <input
-                    id="maxIspIterations"
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={maxIspIterations}
-                    onChange={(e) =>
-                      setMaxIspIterations(Number(e.target.value))
-                    }
-                    required
-                    disabled={!useIncremental && !benchmark}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="incrementalAstarScope">
-                    <span>Incremental A* Scope</span>
-                    <span className="form-group-hint">
-                      Competing paths search
-                    </span>
-                  </label>
-                  <select
-                    id="incrementalAstarScope"
-                    value={incrementalAstarScope}
-                    onChange={(e) => setIncrementalAstarScope(e.target.value)}
-                    disabled={
-                      (!useIncremental || reductionMethod === "NONE") &&
-                      !benchmark
-                    }
-                  >
-                    <option value="GLOBAL">Global Grid</option>
-                    <option value="SUBGRAPH">Reduced Subgraph</option>
-                  </select>
-                </div>
+            <div className="strategy-column">
+              <div className="form-group">
+                <label htmlFor="incrementalAstarScope">
+                  <span>Incremental A* Scope</span>
+                  <span className="form-group-hint">
+                    Competing paths search
+                  </span>
+                </label>
+                <select
+                  id="incrementalAstarScope"
+                  value={incrementalAstarScope}
+                  onChange={(event) =>
+                    setIncrementalAstarScope(event.target.value)
+                  }
+                  disabled={
+                    !benchmark &&
+                    (!useIncremental || reductionMethod === "NONE")
+                  }
+                >
+                  <option value="GLOBAL">Global Grid</option>
+                  <option value="SUBGRAPH">Reduced Subgraph</option>
+                </select>
               </div>
             </div>
             <div className="strategy-column benchmark-setting">
@@ -374,7 +370,7 @@ export function ConfigForm({
                 <label htmlFor="benchmarkToggle">
                   <span>Benchmark</span>
                   <span className="form-group-hint">
-                    10 combinations per map
+                    12 scenarios per map and repetition
                   </span>
                 </label>
                 <div className="toggle-container">
@@ -401,14 +397,22 @@ export function ConfigForm({
                   id="benchmark-description"
                   className="benchmark-description"
                 >
-                  Runs all solver and reduction combinations; individual choices
-                  are disabled.
+                  {workflowMode === "create"
+                    ? "Saves ten normal configurations per repetition; execution adds both Brandao scenarios."
+                    : "Runs ten normal combinations plus Brandao monolithic and incremental without reduction."}
                 </span>
               </div>
             </div>
           </div>
         </div>
 
+        {!benchmark && useIncremental && reductionMethod === "NONE" && (
+          <p className="benchmark-description">
+            {workflowMode === "create"
+              ? "Saves one normal configuration. Its execution automatically runs the normal scenario and both Brandao strategies."
+              : "Automatically runs three scenarios on the same map and route: normal incremental, Brandao monolithic and Brandao incremental."}
+          </p>
+        )}
         <div
           className={`advanced-settings-section ${isAdvancedOpen ? "is-open" : ""}`}
         >
@@ -476,40 +480,20 @@ export function ConfigForm({
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="solverTimeout">
-                        <span>Solver Timeout (sec)</span>
+                      <label htmlFor="ispTimeBudget">
+                        <span>Scenario Time Budget (sec)</span>
                         <span className="form-group-hint">
-                          Per-solve time limit
+                          Preparation through validation; cooperative deadline
                         </span>
                       </label>
                       <input
-                        id="solverTimeout"
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={solverTimeout}
-                        onChange={(e) =>
-                          setSolverTimeout(Number(e.target.value))
-                        }
-                        required
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="closedLoopTimeout">
-                        <span>Closed-Loop Timeout</span>
-                        <span className="form-group-hint">
-                          Seconds for the full process
-                        </span>
-                      </label>
-                      <input
-                        id="closedLoopTimeout"
+                        id="ispTimeBudget"
                         type="number"
                         min={0.001}
-                        step={1}
-                        value={closedLoopTimeout}
-                        onChange={(e) =>
-                          setClosedLoopTimeout(Number(e.target.value))
+                        step="any"
+                        value={timeBudget}
+                        onChange={(event) =>
+                          setTimeBudget(Number(event.target.value))
                         }
                         required
                       />

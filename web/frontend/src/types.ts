@@ -47,9 +47,8 @@ export interface SystemConfig {
   USE_INCREMENTAL_SOLVER: boolean;
   MAP_DEFAULT_SEED: number;
   DEFAULT_SOLVER?: string;
-  SOLVER_TIMEOUT_SEC?: number;
-  CLOSED_LOOP_TIMEOUT_SEC?: number;
-  MAX_ISP_ITERATIONS?: number;
+  ISP_TIME_BUDGET_SEC?: number;
+  ISP_MODEL?: "NORMAL" | "BRANDAO";
   INCREMENTAL_ASTAR_SCOPE?: string;
   MAP_ELEVATION_SCALE?: number;
   MAP_ELEVATION_FREQ?: number;
@@ -66,6 +65,7 @@ export interface SystemConfig {
 }
 
 export interface GridLayersData {
+  isp_model?: string;
   elevation: number[][];
   terrain: string[][];
   obstacle: number[][];
@@ -80,6 +80,7 @@ export interface GridLayersData {
 }
 
 export interface MapData extends GridLayersData {
+  execution?: Partial<ExecutionMetadata>;
   grid: Record<string, unknown>;
   h: number;
   w: number;
@@ -95,6 +96,7 @@ export interface MapData extends GridLayersData {
 }
 
 export interface MapGenerationMetadata {
+  runtime_sec?: number | null;
   base_seed: number | null;
   effective_seed: number | null;
   generation_attempt: number | null;
@@ -115,12 +117,15 @@ export interface SemanticModificationsData {
 }
 
 export interface LastResult {
+  execution_status?: "completed" | "failed";
+  execution_error?: string | null;
   success: boolean;
   original_optimal_path?: [number, number][];
   original_alternative_cost?: number | null;
   solver_status: string;
-  runtime_sec: number;
-  iterations: number;
+  runtime_sec: number | null;
+  iterations: number | null;
+  competing_paths_count?: number | null;
   graph_nodes?: number | null;
   graph_edges?: number | null;
   path_metrics?: {
@@ -143,7 +148,9 @@ export interface LastResult {
   final_alternative_cost?: number | null;
   cost_baseline_text?: string;
   modifications?: SemanticModificationsData | null;
+  prepared_grid?: GridLayersData;
   modified_grid?: GridLayersData;
+  metrics?: ScenarioMetrics;
 }
 
 export interface SolveResponse {
@@ -156,6 +163,8 @@ export interface SolveResponse {
 export interface NamingMetadata {
   map_index?: number;
   benchmark?: boolean;
+  benchmark_group_id?: string;
+  repetition_index?: number;
 }
 
 export interface QueueItem {
@@ -165,6 +174,8 @@ export interface QueueItem {
   outputDir?: string;
   naming?: NamingMetadata;
   benchmarkGroup?: string;
+  groupKind?: "benchmark" | "comparison";
+  repetitionIndex?: number;
   status:
     | "pending"
     | "generating_map"
@@ -197,4 +208,73 @@ export interface SaveConfigurationsPayload {
 
 export interface ImportConfigResponse extends MapData {
   user_path: [number, number][];
+}
+
+export interface ExecutionMetadata {
+  run_id: string;
+  benchmark_group_id?: string;
+  repetition_index: number;
+  attempt_index: number;
+  execution_order: number;
+  map_generation_sec?: number;
+}
+
+export interface ScenarioMetrics {
+  model?: string;
+  strategy?: string;
+  reduction?: string;
+  stop_reason?: string;
+  validation_status?: string;
+  cardinality_certified?: boolean;
+  certificate_scope?: string | null;
+  certificate_reason?: string;
+  deadline_outcome?: string;
+  deadline_exceeded?: boolean;
+  result_within_budget?: boolean;
+  validated_after_deadline?: boolean;
+  candidate_available?: boolean;
+  candidate_from_solver_limit?: boolean;
+  candidate_observed_after_deadline?: boolean;
+  cost_states?: Record<string, string>;
+  time_budget_sec?: number;
+  validation_gap_sec?: number | null;
+  final_original_path_cost?: number | null;
+  final_optimal_cost?: number | null;
+  full_graph_nodes?: number;
+  full_graph_edges?: number;
+  node_reduction_ratio?: number;
+  edge_reduction_ratio?: number;
+  initial_astar_expanded?: number;
+  validation_astar_expanded?: number;
+  cuts?: number;
+  timing?: Record<string, number>;
+  solver?: Record<string, string | number | boolean | null>;
+  interventions?: Record<string, number | null>;
+  preparation?: {
+    version?: string | null;
+    converted_blocked_cells?: number;
+    converted_nodes?: [number, number][];
+  };
+  memory?: {
+    method?: string | null;
+    initial_bytes?: number | null;
+    sampled_peak_bytes?: number | null;
+    sampling_interval_sec?: number | null;
+  };
+  identity?: Partial<ExecutionMetadata> & {
+    map_id?: string;
+    prepared_scenario_id?: string | null;
+    scenario_id?: string;
+    started_at?: string;
+    finished_at?: string;
+  };
+  reproduction?: {
+    configuration?: SystemConfig;
+    desired_path?: [number, number][];
+    base_seed?: number | null;
+    effective_seed?: number | null;
+    start?: [number, number];
+    goal?: [number, number];
+  };
+  error?: string;
 }

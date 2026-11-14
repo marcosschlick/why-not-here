@@ -5,11 +5,12 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from src import config
 from src.incremental import ClosedLoopResult
 from src.map.profiles import resolve_map_profile
-from src.pipeline.generate_map import generate_map
+from src.pipeline.generate_map import generate_map, persist_map
 from src.pipeline.run_isp import run_isp
 from src.pipeline.storage import (
     available_path,
@@ -43,11 +44,10 @@ CONFIG_REGISTRY = {
     "TERRAIN_COLORS": "config_terrain.py",
     "MAX_SLOPE_DEG": "config_terrain.py",
     "DEFAULT_SOLVER": "config_solver.py",
-    "SOLVER_TIMEOUT_SEC": "config_solver.py",
+    "ISP_TIME_BUDGET_SEC": "config_solver.py",
+    "ISP_MODEL": "config_isp.py",
     "DEFAULT_REDUCTION_METHOD": "config_reduction.py",
     "USE_INCREMENTAL_SOLVER": "config_incremental.py",
-    "MAX_ISP_ITERATIONS": "config_incremental.py",
-    "CLOSED_LOOP_TIMEOUT_SEC": "config_incremental.py",
     "INCREMENTAL_ASTAR_SCOPE": "config_incremental.py",
 }
 
@@ -116,16 +116,22 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
             {"NONE", "BBOX", "FLOODFILL", "SPARSIFIED", "PATH_ONLY"},
         ),
         ("INCREMENTAL_ASTAR_SCOPE", {"GLOBAL", "SUBGRAPH"}),
+        ("ISP_MODEL", {"NORMAL", "BRANDAO"}),
     ):
         value = str(candidate[key]).strip().upper()
         if value not in allowed:
             raise ValueError(f"{key} must be one of: {', '.join(sorted(allowed))}.")
         candidate[key] = value
 
+    if (
+        candidate["ISP_MODEL"] == "BRANDAO"
+        and candidate["DEFAULT_REDUCTION_METHOD"] != "NONE"
+    ):
+        raise ValueError("Brandao requires graph reduction NONE.")
+
     positive_float_keys = (
         "CELL_SIZE",
-        "CLOSED_LOOP_TIMEOUT_SEC",
-        "SOLVER_TIMEOUT_SEC",
+        "ISP_TIME_BUDGET_SEC",
         "MAP_ELEVATION_SCALE",
         "MAP_ELEVATION_FREQ",
         "MAP_MOISTURE_FREQ",
@@ -149,7 +155,6 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
         "MAP_MAX_GENERATION_ATTEMPTS",
         "MAP_H",
         "MAP_W",
-        "MAX_ISP_ITERATIONS",
     ):
         value = int(candidate[key])
         if value < 1:
@@ -337,6 +342,49 @@ def update_configurations(updates: dict[str, Any]) -> dict[str, Any]:
     return copy.deepcopy(applied)
 
 
+def expand_scenario_configurations(
+    parameters: dict[str, Any], benchmark: bool = False, purpose: str = "run"
+) -> list[dict[str, Any]]:
+    if purpose not in {"run", "create"}:
+        raise ValueError("Scenario purpose must be run or create.")
+    resolved = _build_configuration_candidate(
+        parameters, base=copy.deepcopy(DEFAULT_CONFIGURATIONS)
+    )
+    if resolved["ISP_MODEL"] != "NORMAL":
+        raise ValueError("Experiment configurations must describe a normal scenario.")
+    normal = {key: copy.deepcopy(resolved[key]) for key in EXPERIMENT_CONFIG_REGISTRY}
+    normal["MAP_PROFILE_VERSION"] = config.MAP_PROFILE_VERSION
+    scenarios = []
+    if benchmark:
+        for incremental in (False, True):
+            for reduction in ("NONE", "PATH_ONLY", "SPARSIFIED", "BBOX", "FLOODFILL"):
+                scenarios.append(
+                    {
+                        **copy.deepcopy(normal),
+                        "USE_INCREMENTAL_SOLVER": incremental,
+                        "DEFAULT_REDUCTION_METHOD": reduction,
+                    }
+                )
+    else:
+        scenarios.append(copy.deepcopy(normal))
+    include_brandao = benchmark or (
+        normal["USE_INCREMENTAL_SOLVER"]
+        and normal["DEFAULT_REDUCTION_METHOD"] == "NONE"
+    )
+    if purpose == "run" and include_brandao:
+        for incremental in (False, True):
+            scenarios.append(
+                {
+                    **copy.deepcopy(normal),
+                    "ISP_MODEL": "BRANDAO",
+                    "USE_INCREMENTAL_SOLVER": incremental,
+                    "DEFAULT_REDUCTION_METHOD": "NONE",
+                    "INCREMENTAL_ASTAR_SCOPE": "GLOBAL",
+                }
+            )
+    return scenarios
+
+
 def build_experiment_config(
     config_dict: dict[str, Any] | None = None,
     start: tuple[int, int] | list[int] | None = None,
@@ -344,8 +392,10 @@ def build_experiment_config(
     user_path: list[tuple[int, int]] | list[list[int]] | None = None,
 ) -> dict[str, Any]:
     current_system = _build_configuration_candidate(
-        config_dict or {}, base=get_all_configurations()
+        {"ISP_MODEL": "NORMAL", **(config_dict or {})}, base=get_all_configurations()
     )
+    if current_system["ISP_MODEL"] != "NORMAL":
+        raise ValueError("Only normal scenario configurations can be exported.")
 
     raw_start = start if start is not None else getattr(config, "START_COORD", None)
     raw_goal = goal if goal is not None else getattr(config, "GOAL_COORD", None)
@@ -388,7 +438,15 @@ def save_experiment_configurations(configurations: list[dict[str, Any]]) -> list
             (item.get("naming") or {}).get("benchmark", False),
             params["USE_INCREMENTAL_SOLVER"],
             params["DEFAULT_REDUCTION_METHOD"],
+            params["ISP_MODEL"],
+            (item.get("naming") or {}).get("repetition_index", 1),
         )
+        export_data["execution"] = {
+            "repetition_index": (item.get("naming") or {}).get("repetition_index", 1)
+        }
+        group_id = (item.get("naming") or {}).get("benchmark_group_id")
+        if group_id:
+            export_data["execution"]["benchmark_group_id"] = group_id
         prepared.append((name, json.dumps(export_data, indent=2) + "\n"))
 
     created_paths = []
@@ -427,6 +485,7 @@ def validate_experiment_config(
         "goal",
         "p_user",
         "persist_artifacts",
+        "execution",
     }
     unknown_keys = set(data) - allowed_keys
     if unknown_keys:
@@ -434,6 +493,21 @@ def validate_experiment_config(
             f"Unknown experiment parameters: {', '.join(sorted(unknown_keys))}."
         )
 
+    execution = data.get("execution", {})
+    if not isinstance(execution, dict) or set(execution) - {
+        "repetition_index",
+        "benchmark_group_id",
+        "execution_order",
+        "attempt_index",
+    }:
+        raise ValueError("Invalid execution metadata.")
+    for key in ("repetition_index", "execution_order", "attempt_index"):
+        if key in execution and (type(execution[key]) is not int or execution[key] < 1):
+            raise ValueError(f"{key} must be a positive integer.")
+    if "benchmark_group_id" in execution and not isinstance(
+        execution["benchmark_group_id"], str
+    ):
+        raise ValueError("benchmark_group_id must be a string.")
     raw_start = data.get("start")
     if not raw_start or not isinstance(raw_start, (list, tuple)) or len(raw_start) != 2:
         raise ValueError(
@@ -484,6 +558,11 @@ def validate_experiment_config(
     params = {
         key: candidate[key] for key in EXPERIMENT_CONFIG_REGISTRY if key in candidate
     }
+
+    if params["ISP_MODEL"] != "NORMAL":
+        raise ValueError(
+            "Only normal scenario configuration files can be imported or executed."
+        )
 
     map_h = params["MAP_H"]
     map_w = params["MAP_W"]
@@ -540,18 +619,43 @@ def load_experiment_file(file_path: str | Path) -> dict[str, Any]:
 
 
 def execute_experiment(
-    config_data: dict[str, Any],
-    verbose: bool = True,
-) -> ClosedLoopResult | None:
+    config_data: dict[str, Any], verbose: bool = True
+) -> list[ClosedLoopResult]:
     params, start, goal, p_user = validate_experiment_config(config_data)
-
-    if verbose:
-        print(f"Applying configuration for seed={params.get('MAP_DEFAULT_SEED')}...")
-
-    set_output_directory(reserve_output_directory(params["MAP_H"], params["MAP_W"]))
+    scenarios = expand_scenario_configurations(params)
     apply_experiment_config(params, start=start, goal=goal)
-
-    generate_map(verbose=verbose)
-    result = run_isp(verbose=verbose, user_path=p_user, start=start, goal=goal)
-
-    return result
+    generated = generate_map(verbose=verbose, persist_artifacts=False)
+    execution = dict(config_data.get("execution") or {})
+    execution.setdefault("benchmark_group_id", str(uuid4()))
+    results = []
+    for index, scenario in enumerate(scenarios, start=1):
+        apply_experiment_config(scenario, start=start, goal=goal)
+        output = reserve_output_directory(
+            generated.h,
+            generated.w,
+            benchmark=len(scenarios) > 1,
+            incremental=scenario["USE_INCREMENTAL_SOLVER"],
+            reduction=scenario["DEFAULT_REDUCTION_METHOD"],
+            isp_model=scenario["ISP_MODEL"],
+            repetition_index=execution.get("repetition_index", 1),
+        )
+        set_output_directory(output)
+        persist_map(generated, start=start, goal=goal)
+        if verbose:
+            strategy = (
+                "incremental" if scenario["USE_INCREMENTAL_SOLVER"] else "monolithic"
+            )
+            print(
+                f"Scenario {index}/{len(scenarios)}: {scenario['ISP_MODEL']} {strategy}"
+            )
+        results.append(
+            run_isp(
+                verbose=verbose,
+                user_path=p_user,
+                start=start,
+                goal=goal,
+                grid=generated,
+                metadata={**execution, "execution_order": index},
+            )
+        )
+    return results

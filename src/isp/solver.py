@@ -20,6 +20,7 @@ class ISPSolver(BaseISPSolver):
         | None = None,
         reduced_graph: ReducedGraph | None = None,
     ) -> tuple[bool, SemanticModifications | None, float]:
+        self.statistics = {}
         self.last_solver_status = None
         self.last_graph_nodes = None
         self.last_graph_edges = None
@@ -34,46 +35,52 @@ class ISPSolver(BaseISPSolver):
             self.last_solver_status = "OPTIMAL"
             return True, SemanticModifications([], [], []), 0.0
 
-        active_nodes, active_edges, costs = prepare_subgraph(
-            grid, alternative_path, reduced_graph, custom_edge_costs
-        )
+        self.budget.check()
+        with self.budget.phase("preparation_sec"):
+            active_nodes, active_edges, costs = prepare_subgraph(
+                grid, alternative_path, reduced_graph, custom_edge_costs
+            )
 
-        formulation = self._build_formulation(
-            grid,
-            alternative_path,
-            active_nodes=active_nodes,
-            active_edges=active_edges,
-            custom_edge_costs=costs,
-        )
-        if formulation is None:
-            self.last_solver_status = "INVALID_ALTERNATIVE_PATH"
-            return False, None, float("inf")
+        with self.budget.phase("model_build_sec"):
+            formulation = self._build_formulation(
+                grid,
+                alternative_path,
+                active_nodes=active_nodes,
+                active_edges=active_edges,
+                custom_edge_costs=costs,
+            )
+            if formulation is None:
+                self.last_solver_status = "INVALID_ALTERNATIVE_PATH"
+                return False, None, float("inf")
 
-        num_nodes = len(formulation.isp.nodes)
-        num_edges = len(formulation.isp.edges)
+            num_nodes = len(formulation.isp.nodes)
+            num_edges = len(formulation.isp.edges)
 
-        pi = cp.Variable(num_nodes)
-        lambda_ = cp.Variable(num_edges, nonneg=True)
-        A_T = lil_matrix((num_edges, num_nodes), dtype=np.float64)
-        for k, (u, v) in enumerate(formulation.isp.edges):
-            A_T[k, formulation.isp.node_to_idx[u]] = 1.0
-            A_T[k, formulation.isp.node_to_idx[v]] = -1.0
+            pi = cp.Variable(num_nodes)
+            lambda_ = cp.Variable(num_edges, nonneg=True)
+            A_T = lil_matrix((num_edges, num_nodes), dtype=np.float64)
+            for k, (u, v) in enumerate(formulation.isp.edges):
+                A_T[k, formulation.isp.node_to_idx[u]] = 1.0
+                A_T[k, formulation.isp.node_to_idx[v]] = -1.0
 
-        goal_idx = formulation.isp.node_to_idx[goal]
+            goal_idx = formulation.isp.node_to_idx[goal]
 
-        constraints = [
-            A_T.tocsr() @ pi + lambda_ == formulation.w_prime,
-            lambda_[formulation.x_alt > 0.0] == 0.0,
-            formulation.w_prime >= formulation.w_min,
-            pi[goal_idx] == 0.0,
-        ] + formulation.extra_constraints
+            constraints = [
+                A_T.tocsr() @ pi + lambda_ == formulation.w_prime,
+                formulation.w_prime @ formulation.x_alt
+                <= pi[formulation.isp.node_to_idx[start]]
+                - pi[goal_idx]
+                + self.tolerance,
+                formulation.w_prime >= formulation.w_min,
+                pi[goal_idx] == 0.0,
+            ] + formulation.extra_constraints
 
-        obj_expr = (
-            cp.sum(formulation.obj_terms)
-            if formulation.obj_terms
-            else cp.Constant(0.0)
-        )
-        problem = cp.Problem(cp.Minimize(obj_expr), constraints)
+            obj_expr = (
+                cp.sum(formulation.obj_terms)
+                if formulation.obj_terms
+                else cp.Constant(0.0)
+            )
+            problem = cp.Problem(cp.Minimize(obj_expr), constraints)
         success, cost = self._solve_milp(problem)
         if not success:
             return False, None, float("inf")

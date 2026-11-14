@@ -63,6 +63,7 @@ def generate_scenario_map(questionnaire_id: int, payload: ScenarioMapInput):
                 **resolve_map_profile(payload.height, payload.width),
                 "MAP_H": payload.height,
                 "MAP_W": payload.width,
+                "ISP_MODEL": "NORMAL",
                 "USE_INCREMENTAL_SOLVER": False,
                 "DEFAULT_REDUCTION_METHOD": "NONE",
             }
@@ -124,6 +125,7 @@ def solve_scenario(questionnaire_id: int, payload: ScenarioSolveInput):
         configuration = {
             **configuration,
             "MAP_DEFAULT_SEED": seed,
+            "ISP_MODEL": "NORMAL",
             "USE_INCREMENTAL_SOLVER": False,
             "DEFAULT_REDUCTION_METHOD": "NONE",
         }

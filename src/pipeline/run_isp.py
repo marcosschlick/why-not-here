@@ -1,500 +1,281 @@
+import json
 import time
+from datetime import UTC, datetime
+from uuid import uuid4
 
 from src import config
 from src.grid.grid import Grid
-from src.incremental import (
-    ClosedLoopResult,
-    ISPValidator,
-    solve_closed_loop,
-    validate_global_optimality,
-)
-from src.isp.precheck import validate_alternative_path
-from src.isp.solver import ISPSolver
+from src.incremental import ClosedLoopResult, ISPValidator, solve_closed_loop
+from src.isp.budget import ScenarioBudget, ScenarioDeadlineExceeded
+from src.isp.profile import prepare_scenario_grid
 from src.pipeline.storage import get_output_directory
-from src.planning import astar
-from src.reduction import create_reduced_graph
+from src.visual.appearance import resolve_map_appearance
 from src.visual.plotter import render_tactical_map
 
 from .artifact_names import (
-    ALTERNATIVE_PATH_IMAGE_FILENAME,
-    CHANGES_AND_PATHS_IMAGE_FILENAME,
-    CHANGES_IMAGE_FILENAME,
     MAP_DATA_FILENAME,
     MAP_DIRECTORY_NAME,
-    OPTIMAL_PATH_IMAGE_FILENAME,
-    PATH_COMPARISON_IMAGE_FILENAME,
     RESULTS_DIRECTORY_NAME,
-    RUN_LOG_FILENAME,
 )
-from .path_metrics import measure_paths
+from .reporting import (
+    ScenarioMemory,
+    content_id,
+    finite_data,
+    runtime_versions,
+    serialize_result,
+)
 from .utils import create_alternative_path, get_project_path, prepare_endpoints
 
 
-def format_artifact_skip_note(result: ClosedLoopResult) -> str | None:
-    modifications = result.modifications
-    has_candidates = modifications is not None and any(
-        (
-            modifications.terrain_nodes,
-            modifications.obstacle_nodes,
-            modifications.slope_edges,
-            modifications.opened_terrain_nodes,
-            modifications.robot_speed_edges,
-        )
-    )
-
-    if has_candidates:
-        return None
-
-    if result.success:
-        reason = "no semantic modifications were required"
-    elif modifications is not None and result.solver_status in {
-        "TIMEOUT",
-        "MAX_ITERATIONS_EXCEEDED",
-    }:
-        reason = "a candidate was found, but it contains no semantic changes to render"
-    elif result.solver_status == "INFEASIBLE":
-        reason = "no viable modifications were found"
-    elif result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
-        reason = "the solver returned no candidate before reaching its limit"
-    else:
-        reason = "the solver returned no candidate modifications"
-
-    return f"Note: Change images were omitted because {reason}."
-
-
 def format_artifact_status(result: ClosedLoopResult) -> str:
-    if not result.success:
-        return (
-            "Candidate intervention: global optimality not certified "
-            f"({result.solver_status})"
-        )
-    if result.solver_status == "OPTIMAL":
-        return "Minimum intervention: globally optimal"
-    if result.solver_status == "OPTIMAL_INACCURATE":
-        return "Path validated; minimum intervention not certified"
-    return f"Global path validated ({result.solver_status})"
+    if result.metrics.get("cardinality_certified"):
+        return "Global path validated; minimum cardinality certified in the declared domain"
+    if result.success:
+        return "Global path validated; minimum cardinality not certified"
+    return f"Candidate not globally validated ({result.metrics.get('stop_reason', result.solver_status)})"
+
+
+def grid_response(grid: Grid) -> dict:
+    from src.visual.layers import find_steep_cells
+
+    return {
+        **grid.to_dict(),
+        "terrain_colors": config.TERRAIN_COLORS,
+        "appearance": resolve_map_appearance(grid.h, grid.w),
+        "steep_cells": sorted(find_steep_cells(grid)),
+    }
 
 
 def run_isp(
     verbose: bool = True,
-    user_path: list[tuple[int, int]] | None = None,
-    start: tuple[int, int] | None = None,
-    goal: tuple[int, int] | None = None,
-) -> ClosedLoopResult | None:
-    map_dir = get_project_path(get_output_directory()) / MAP_DIRECTORY_NAME
-    map_json_path = map_dir / MAP_DATA_FILENAME
-    log_lines = []
-
-    msg_load = f"[2] Loading map from '{map_json_path}'..."
-    if verbose:
-        print(msg_load)
-    log_lines.append(msg_load)
-
-    grid = Grid.load(map_json_path)
-    start, goal = prepare_endpoints(grid, start=start, goal=goal)
-
-    p_star, cost_star, expanded = astar(grid, start, goal)
-    if not p_star:
-        print("Error: No traversable path found between start and goal.")
-        return None
-
-    if user_path is not None:
-        p_user = [tuple(p) for p in user_path]
-    else:
-        p_user = create_alternative_path(grid, start, goal)
-
-    validation_started = time.perf_counter()
-    is_valid, invalid_status, invalid_message = validate_alternative_path(
-        grid, start, goal, p_user
+    user_path=None,
+    start=None,
+    goal=None,
+    grid: Grid | None = None,
+    metadata: dict | None = None,
+) -> ClosedLoopResult:
+    output = get_project_path(get_output_directory())
+    source = (
+        grid
+        if grid is not None
+        else Grid.load(output / MAP_DIRECTORY_NAME / MAP_DATA_FILENAME)
     )
-    if not is_valid:
-        if verbose and invalid_message:
-            print(invalid_message)
-        return ClosedLoopResult(
-            success=False,
-            modifications=None,
-            explanation_text=invalid_message or "The alternative path is invalid.",
-            iterations=0,
-            competing_paths_count=0,
-            original_optimal_path=p_star if p_star else [],
-            original_optimal_cost=cost_star,
-            final_alternative_cost=float("inf"),
-            runtime_sec=time.perf_counter() - validation_started,
-            solver_status=invalid_status or "INVALID_ALTERNATIVE_PATH",
-            reduction_method=config.DEFAULT_REDUCTION_METHOD,
-            cost_baseline_text="",
-        )
-
-    cost_user_orig = ISPValidator.compute_path_cost(grid, p_user)
-
-    path_metrics = measure_paths(p_star, p_user, grid.cell_size)
-    msg_star = f"Optimal path (A*): {len(p_star)} points, {len(p_star) - 1} edges (cost: {cost_star:.2f}s, expanded: {expanded} nodes)"
-    log_lines.append(msg_star)
-    if verbose:
-        print(msg_star)
-
-    if cost_user_orig < float("inf"):
-        diff_sec = cost_user_orig - cost_star
-        pct = (diff_sec / cost_star) * 100.0 if cost_star > 0 else 0.0
-        msg_user = f"Alternative candidate path: {len(p_user)} points, {len(p_user) - 1} edges (cost: {cost_user_orig:.2f}s, +{diff_sec:.2f}s / +{pct:.1f}%)"
-    else:
-        msg_user = f"Alternative candidate path: {len(p_user)} points, {len(p_user) - 1} edges (cost: impassable in original map)"
-    log_lines.append(msg_user)
-    if verbose:
-        print(msg_user)
-
-    strategy_name = "INCREMENTAL" if config.USE_INCREMENTAL_SOLVER else "MONOLITHIC"
-    scope_str = (
-        f", A* Scope: {config.INCREMENTAL_ASTAR_SCOPE}"
-        if config.USE_INCREMENTAL_SOLVER and config.DEFAULT_REDUCTION_METHOD != "NONE"
-        else ""
-    )
-    msg_strat = f"Running ISP solver (Strategy: {strategy_name}, Reduction: {config.DEFAULT_REDUCTION_METHOD}{scope_str}, Solver: {config.DEFAULT_SOLVER})..."
-    log_lines.append(msg_strat)
-    if verbose:
-        print(msg_strat)
-
-    if config.USE_INCREMENTAL_SOLVER:
-        isp_result = solve_closed_loop(
-            grid,
-            start,
-            goal,
-            p_user,
-            reduction_method=config.DEFAULT_REDUCTION_METHOD,
-            solver_name=config.DEFAULT_SOLVER,
-            timeout=config.SOLVER_TIMEOUT_SEC,
-            global_timeout=config.CLOSED_LOOP_TIMEOUT_SEC,
-            max_iterations=config.MAX_ISP_ITERATIONS,
-            tolerance=config.INCREMENTAL_TOLERANCE,
-            astar_scope=config.INCREMENTAL_ASTAR_SCOPE,
-        )
-    else:
-        start_time = time.perf_counter()
-        reduced_graph = create_reduced_graph(
-            grid,
-            p_star if p_star else p_user,
-            p_user,
-            method=config.DEFAULT_REDUCTION_METHOD,
-        )
-        solver = ISPSolver(
-            solver_name=config.DEFAULT_SOLVER,
-            timeout=config.SOLVER_TIMEOUT_SEC,
-            tolerance=config.INCREMENTAL_TOLERANCE,
-        )
-        success, modifications, _ = solver.solve(
-            grid, start, goal, p_user, reduced_graph=reduced_graph
-        )
-        elapsed = time.perf_counter() - start_time
-
-        final_alt_cost = cost_user_orig
-        if success and modifications is not None:
-            is_globally_optimal, _, p_cost, _ = validate_global_optimality(
-                grid, start, goal, p_user, modifications
-            )
-            final_alt_cost = p_cost
-            if not is_globally_optimal:
-                solver_status = (
-                    "SUBGRAPH_OPTIMAL_ONLY"
-                    if reduced_graph is not None
-                    else "SUBOPTIMAL"
+    budget = ScenarioBudget(config.ISP_TIME_BUDGET_SEC)
+    memory = ScenarioMemory()
+    memory.start()
+    started_at = datetime.now(UTC).isoformat()
+    prepared = None
+    preparation = {}
+    p_user = []
+    result = None
+    try:
+        with budget.activate():
+            with budget.phase("preparation_sec"):
+                start, goal = prepare_endpoints(source, start=start, goal=goal)
+                p_user = (
+                    [tuple(point) for point in user_path]
+                    if user_path is not None
+                    else create_alternative_path(source, start, goal)
                 )
-                success = False
-            else:
-                solver_status = solver.last_solver_status or "OPTIMAL"
-        else:
-            solver_status = solver.last_solver_status or "SOLVER_FAILED"
-
-        if modifications is not None and (
-            success or solver_status == "SUBGRAPH_OPTIMAL_ONLY"
-        ):
-            explanation = ISPValidator.generate_explanation_text(
-                modifications, grid, solver_status=solver_status
-            )
-        elif solver_status == "OPTIMAL_INACCURATE":
-            explanation = (
-                "The MILP solver returned OPTIMAL_INACCURATE; the run is inconclusive "
-                "and does not certify minimum intervention cardinality."
-            )
-        else:
-            explanation = (
-                "The alternative path p' could not be made optimal by the planner "
-                "within the allowed intervention domain."
-            )
-        cost_baseline = ISPValidator.generate_cost_baseline_justification(
-            cost_star,
-            cost_user_orig,
-        )
-        isp_result = ClosedLoopResult(
-            success=success,
-            modifications=modifications,
-            explanation_text=explanation,
-            iterations=1,
-            competing_paths_count=1,
-            original_optimal_path=p_star if p_star else [],
-            original_optimal_cost=cost_star,
-            final_alternative_cost=final_alt_cost,
-            runtime_sec=elapsed,
-            solver_status=solver_status,
-            reduction_method=config.DEFAULT_REDUCTION_METHOD,
-            cost_baseline_text=cost_baseline,
-            graph_nodes=solver.last_graph_nodes,
-            graph_edges=solver.last_graph_edges,
-        )
-
-    isp_result.path_metrics = path_metrics
-    out_dir = get_project_path(get_output_directory())
-    results_dir = out_dir / RESULTS_DIRECTORY_NAME
-    results_dir.mkdir(parents=True, exist_ok=False)
-
-    optimal_image = results_dir / OPTIMAL_PATH_IMAGE_FILENAME
-    alternative_image = results_dir / ALTERNATIVE_PATH_IMAGE_FILENAME
-    comparison_image = results_dir / PATH_COMPARISON_IMAGE_FILENAME
-    changes_image = results_dir / CHANGES_IMAGE_FILENAME
-    changes_and_paths_image = results_dir / CHANGES_AND_PATHS_IMAGE_FILENAME
-    modifications = isp_result.modifications
-    has_candidate_modifications = modifications is not None and any(
-        (
-            modifications.terrain_nodes,
-            modifications.obstacle_nodes,
-            modifications.slope_edges,
-            modifications.opened_terrain_nodes,
-            modifications.robot_speed_edges,
-        )
-    )
-    changes_image.unlink(missing_ok=True)
-    changes_and_paths_image.unlink(missing_ok=True)
-
-    render_tactical_map(
-        grid=grid,
-        optimal_path=p_star,
-        title="Optimal path",
-        save_path=str(optimal_image),
-        subtitle="Planner: A*",
-    )
-
-    render_tactical_map(
-        grid=grid,
-        user_path=p_user,
-        title="Alternative path",
-        save_path=str(alternative_image),
-    )
-
-    render_tactical_map(
-        grid=grid,
-        optimal_path=p_star,
-        user_path=p_user,
-        title="Path comparison",
-        save_path=str(comparison_image),
-    )
-
-    saved_images = [optimal_image, alternative_image, comparison_image]
-
-    if has_candidate_modifications and modifications is not None:
-        mod_grid = ISPValidator.apply_modifications(grid, modifications)
-        artifact_status = format_artifact_status(isp_result)
-        render_tactical_map(
-            grid=grid,
-            modifications=modifications,
-            modified_grid=mod_grid,
-            endpoints=(start, goal),
-            title="Changes",
-            save_path=str(changes_image),
-            subtitle=artifact_status,
-        )
-        render_tactical_map(
-            grid=grid,
-            optimal_path=p_star,
-            user_path=p_user,
-            modifications=modifications,
-            modified_grid=mod_grid,
-            title="Changes and paths",
-            save_path=str(changes_and_paths_image),
-            subtitle=artifact_status,
-        )
-        saved_images.extend([changes_image, changes_and_paths_image])
-
-    mods = isp_result.modifications
-    n_terrain = len(mods.terrain_nodes) if mods else 0
-    n_obs = len(mods.obstacle_nodes) if mods else 0
-    n_slope = len(mods.slope_edges) if mods else 0
-    n_water = (
-        sum(
-            grid.get_cell(node).terrain == config.WATER_TERRAIN
-            for node in mods.opened_terrain_nodes
-        )
-        if mods
-        else 0
-    )
-    n_opened = len(mods.opened_terrain_nodes) if mods else 0
-    n_robot_speed = len(mods.robot_speed_edges) if mods else 0
-    artifact_skip_note = format_artifact_skip_note(isp_result)
-
-    if isp_result.success and isp_result.solver_status == "OPTIMAL":
-        solution_quality = "OPTIMAL (Certified Global Minimum Intervention)"
-    elif isp_result.solver_status == "OPTIMAL_INACCURATE" and isp_result.success:
-        solution_quality = "OPTIMAL_INACCURATE (Global path valid, minimum intervention cardinality not certified)"
-    elif isp_result.solver_status == "SUBGRAPH_OPTIMAL_ONLY":
-        solution_quality = "SUBGRAPH_OPTIMAL_ONLY (Candidate solution optimal only within reduced subgraph, failed global validation)"
-    elif isp_result.solver_status == "SUBOPTIMAL":
-        solution_quality = (
-            "SUBOPTIMAL (Candidate modifications failed global validation)"
-        )
-    elif isp_result.solver_status == "INFEASIBLE":
-        solution_quality = (
-            "INFEASIBLE (No viable semantic modifications found in intervention domain)"
-        )
-    elif isp_result.solver_status in {"TIMEOUT", "MAX_ITERATIONS_EXCEEDED"}:
-        outcome = (
-            "candidate found; global optimality not certified"
-            if isp_result.modifications is not None
-            else "no candidate found"
-        )
-        solution_quality = f"{isp_result.solver_status} ({outcome})"
-    else:
-        solution_quality = f"{isp_result.solver_status}"
-
-    strategy_label = (
-        "INCREMENTAL / ITERATIVE MILP"
-        if config.USE_INCREMENTAL_SOLVER
-        else "STANDARD MONOLITHIC MILP"
-    )
-    reduction_detail = isp_result.reduction_method
-    scope_detail = (
-        f", A* Scope: {config.INCREMENTAL_ASTAR_SCOPE}"
-        if config.USE_INCREMENTAL_SOLVER and config.DEFAULT_REDUCTION_METHOD != "NONE"
-        else ""
-    )
-    cost_star_str = f"{cost_star:.2f}s" if cost_star is not None else "-"
-    cost_user_orig_str = (
-        f"{cost_user_orig:.2f}s" if cost_user_orig < float("inf") else "Impassable (∞)"
-    )
-    final_alt_cost = isp_result.final_alternative_cost
-    final_cost_str = (
-        f"{final_alt_cost:.2f}s"
-        if final_alt_cost is not None and final_alt_cost < float("inf")
-        else "Impassable (∞)"
-    )
-
-    log_lines.append("-" * 60)
-    log_lines.append(
-        f"ISP Status: {isp_result.solver_status} "
-        f"(Method: {isp_result.reduction_method}, Iterations: {isp_result.iterations}, Time: {isp_result.runtime_sec:.3f}s)"
-    )
-    graph_line = f"Formulation graph: nodes={isp_result.graph_nodes}, directed_edges={isp_result.graph_edges}"
-    path_line = (
-        f"Path geometry: optimal={path_metrics['optimal_length_cells']:.3f} cells / {path_metrics['optimal_length_m']:.3f} m, "
-        f"alternative={path_metrics['alternative_length_cells']:.3f} cells / {path_metrics['alternative_length_m']:.3f} m, "
-        f"discrete Hausdorff={path_metrics['hausdorff_cells']:.3f} cells / {path_metrics['hausdorff_m']:.3f} m, "
-        f"cell_size={grid.cell_size:g} m"
-    )
-    log_lines.extend([graph_line, path_line])
-    if isp_result.iteration_metrics:
-        solver_attempts = sum(
-            bool(metric.get("solver_attempted"))
-            for metric in isp_result.iteration_metrics
-        )
-        completed_iterations = sum(
-            bool(metric.get("completed")) for metric in isp_result.iteration_metrics
-        )
-        log_lines.append(
-            f"Incremental diagnostics: {solver_attempts} solver attempts, "
-            f"{completed_iterations} completed iterations"
-        )
-        log_lines.append("Iteration timings and accumulated competing paths:")
-        for metric in isp_result.iteration_metrics:
-            log_lines.append(
-                " - Iteration {iteration}: preparation={preparation:.3f}s, "
-                "model_build={model_build:.3f}s, solver={solver:.3f}s, "
-                "validation={validation:.3f}s, status={status}, "
-                "solver_attempted={attempted}, completed={completed}, "
-                "candidate_available={candidate}, competing_paths={before}->{after}, "
-                "cut_added={cut}, graph_nodes={nodes}, graph_directed_edges={edges}".format(
-                    iteration=metric.get("iteration", "-"),
-                    preparation=float(metric.get("preparation_sec", 0.0)),
-                    model_build=float(metric.get("model_build_sec", 0.0)),
-                    solver=float(metric.get("solver_sec", 0.0)),
-                    validation=float(metric.get("validation_sec", 0.0)),
-                    status=metric.get("solver_status", "UNKNOWN"),
-                    attempted=metric.get("solver_attempted", False),
-                    completed=metric.get("completed", False),
-                    candidate=metric.get("candidate_available", False),
-                    before=metric.get("competing_paths_before", 0),
-                    after=metric.get("competing_paths_after", 0),
-                    cut=metric.get("cut_added", False),
-                    nodes=metric.get("graph_nodes"),
-                    edges=metric.get("graph_edges"),
+                prepared, preparation = prepare_scenario_grid(
+                    source, config.ISP_MODEL, p_user
                 )
+                budget.check()
+            result = solve_closed_loop(
+                prepared,
+                start,
+                goal,
+                p_user,
+                solver_name=config.DEFAULT_SOLVER,
+                budget=budget,
+                reduction_method=config.DEFAULT_REDUCTION_METHOD,
+                astar_scope=config.INCREMENTAL_ASTAR_SCOPE,
+                incremental=config.USE_INCREMENTAL_SOLVER,
             )
-    log_lines.append(f"Solution Quality: {solution_quality}")
-    log_lines.append(
-        f"Strategy: {strategy_label} (Solver: {config.DEFAULT_SOLVER}, Reduction: {reduction_detail}{scope_detail}, Max Iterations: {config.MAX_ISP_ITERATIONS})"
-    )
-    log_lines.append(
-        f"Cost Metrics: Initial A* Cost = {cost_star_str} | Original Alt Cost = {cost_user_orig_str} | Final Alt Cost = {final_cost_str}"
-    )
-    log_lines.append(
-        f"Endpoints: Start = [{start[0]}, {start[1]}] | Goal = [{goal[0]}, {goal[1]}]"
-    )
-    log_lines.append(
-        f"Modifications: {n_terrain} terrain, {n_obs} obstacles, {n_slope} slopes, {n_opened} opened terrain cells ({n_water} water), {n_robot_speed} robot speed activations"
-    )
-    log_lines.append(
-        f"\nContrastive Explanation (Experimental Group):\n{isp_result.explanation_text}"
-    )
-    if isp_result.cost_baseline_text:
-        log_lines.append(
-            f"\nCost Baseline Justification (Control Group):\n{isp_result.cost_baseline_text}"
+    except (
+        ScenarioDeadlineExceeded,
+        ValueError,
+        RuntimeError,
+        KeyError,
+        MemoryError,
+    ) as exc:
+        result = ClosedLoopResult(
+            False, None, str(exc), 0, 0, [], float("inf"), float("inf"), 0.0, "NOT_RUN"
         )
-    log_lines.append("\nSaved artifacts in output/:")
-    for img in saved_images:
-        log_lines.append(f" - {img.name}")
-    if artifact_skip_note:
-        log_lines.append(artifact_skip_note)
-    log_lines.append("-" * 60)
+        result.metrics.update(
+            stop_reason="TIME_BUDGET_EXHAUSTED"
+            if isinstance(exc, ScenarioDeadlineExceeded)
+            else "ERROR",
+            validation_status="NOT_RUN",
+            cardinality_certified=False,
+            error=str(exc),
+        )
+    finally:
+        elapsed = budget.elapsed_sec
+        memory_metrics = memory.finish()
+    result.runtime_sec = elapsed
+    result.prepared_grid = prepared
+    metrics = result.metrics
+    stop = metrics.get("stop_reason")
+    overrun = elapsed > budget.limit_sec
+    metrics.update(
+        timing={
+            **budget.timings,
+            "total_sec": elapsed,
+            "overhead_sec": max(0.0, elapsed - sum(budget.timings.values())),
+        },
+        time_budget_sec=budget.limit_sec,
+        deadline_exceeded=overrun,
+        deadline_outcome="STOPPED_AT_BUDGET"
+        if stop == "TIME_BUDGET_EXHAUSTED"
+        else "COMPLETED_AFTER_BUDGET"
+        if overrun
+        else "WITHIN_BUDGET",
+        result_within_budget=bool(result.success and not overrun),
+        validated_after_deadline=bool(
+            result.success
+            and metrics.get("validation_finished_elapsed_sec", elapsed)
+            > budget.limit_sec
+        ),
+        memory=memory_metrics,
+        preparation=preparation,
+        model=config.ISP_MODEL,
+        strategy="INCREMENTAL" if config.USE_INCREMENTAL_SOLVER else "MONOLITHIC",
+        reduction=config.DEFAULT_REDUCTION_METHOD,
+    )
+    from .experiment_config import get_experiment_configurations
 
-    log_content = "\n".join(log_lines) + "\n"
+    parameters = get_experiment_configurations()
+    source_id = content_id(source.to_dict())
+    prepared_id = (
+        content_id(
+            {
+                "grid": prepared.to_dict(),
+                "start": start,
+                "goal": goal,
+                "desired_path": p_user,
+                "tolerance_sec": config.INCREMENTAL_TOLERANCE,
+                "robot_speed_eligibility_ratio": config.ROBOT_SPEED_ELIGIBILITY_RATIO,
+                "formulation_version": "isp-grid-v2",
+            }
+        )
+        if prepared is not None
+        else None
+    )
+    metadata = metadata or {}
+    metrics["map_generation_sec"] = metadata.get(
+        "map_generation_sec", getattr(source, "generation_runtime_sec", None)
+    )
+    metrics["execution_order_scope"] = (
+        "caller_session" if "execution_order" in metadata else "single_execution"
+    )
+    metrics["identity"] = {
+        "run_id": metadata.get("run_id") or str(uuid4()),
+        "map_id": source_id,
+        "prepared_scenario_id": prepared_id,
+        "scenario_id": content_id({"prepared": prepared_id, "parameters": parameters}),
+        "benchmark_group_id": metadata.get("benchmark_group_id"),
+        "repetition_index": metadata.get("repetition_index", 1),
+        "attempt_index": metadata.get("attempt_index", 1),
+        "execution_order": metadata.get("execution_order", 1),
+        "started_at": started_at,
+        "finished_at": datetime.now(UTC).isoformat(),
+    }
+    metrics["reproduction"] = {
+        "configuration": parameters,
+        "start": start,
+        "goal": goal,
+        "desired_path": p_user,
+        "base_seed": source.base_seed,
+        "effective_seed": source.effective_seed,
+        "generation_attempt": source.generation_attempt,
+        "generation_profile": source.generation_profile,
+        "versions": runtime_versions(),
+        "formulation_version": "isp-grid-v2",
+        "requested_mip_gap": config.MIP_GAP_TOLERANCE,
+        "optimality_tolerance_sec": config.INCREMENTAL_TOLERANCE,
+        "robot_speed_eligibility_ratio": config.ROBOT_SPEED_ELIGIBILITY_RATIO,
+    }
+    results = output / RESULTS_DIRECTORY_NAME
+    results.mkdir(parents=True, exist_ok=False)
+    report_path = results / "scenario.json"
+
+    def persist_report():
+        report_path.write_text(
+            json.dumps(serialize_result(result), indent=2, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+
+    persist_report()
+    artifact_started = time.perf_counter_ns()
+    try:
+        if prepared is not None:
+            prepared.save(results / "prepared_map.json")
+            target = (
+                ISPValidator.apply_modifications(prepared, result.modifications)
+                if result.modifications is not None
+                else prepared
+            )
+            target.save(results / "candidate_map.json")
+            status = format_artifact_status(result)
+            profile = (
+                "Brandao adaptation: fast/slow 1:8, fixed obstacles, no slope effects"
+                if config.ISP_MODEL == "BRANDAO"
+                else "Normal traversal model"
+            )
+            for filename, title, optimal, desired in (
+                (
+                    "optimal_path.png",
+                    "Prepared optimal path",
+                    result.original_optimal_path,
+                    None,
+                ),
+                ("alternative_path.png", "Prepared alternative path", None, p_user),
+                (
+                    "path_comparison.png",
+                    "Prepared path comparison",
+                    result.original_optimal_path,
+                    p_user,
+                ),
+            ):
+                render_tactical_map(
+                    prepared,
+                    optimal_path=optimal,
+                    user_path=desired,
+                    title=title,
+                    save_path=results / filename,
+                    subtitle=profile,
+                )
+            if result.modifications is not None:
+                for filename, paths in (
+                    ("changes.png", False),
+                    ("changes_and_paths.png", True),
+                ):
+                    render_tactical_map(
+                        prepared,
+                        optimal_path=result.original_optimal_path if paths else None,
+                        user_path=p_user if paths else None,
+                        modifications=result.modifications,
+                        modified_grid=target,
+                        endpoints=(start, goal),
+                        title="Candidate interventions",
+                        subtitle=f"{profile}; {status}",
+                        save_path=results / filename,
+                    )
+    except (ValueError, RuntimeError, OSError, MemoryError) as exc:
+        metrics["artifact_error"] = str(exc)
+    metrics["artifact_sec"] = (time.perf_counter_ns() - artifact_started) / 1e9
+    persist_report()
+    log = (
+        f"Model: {metrics['model']} | Strategy: {metrics['strategy']} | Reduction: {metrics['reduction']}\n"
+        f"Stop reason: {stop} | Solver: {result.solver_status}\n"
+        f"Validation: {metrics.get('validation_status')} | Cardinality certified: {metrics.get('cardinality_certified', False)}\n"
+        f"Deadline: {metrics['deadline_outcome']} | Total ISP: {elapsed!r} s\n"
+        f"{result.explanation_text}\n"
+        f"Structured metrics: {report_path.name}\n"
+    )
+    (results / "log.txt").write_text(log, encoding="utf-8")
     if verbose:
-        print("-" * 60)
-        print(
-            f"ISP Status: {isp_result.solver_status} "
-            f"(Method: {isp_result.reduction_method}, Iterations: {isp_result.iterations}, Time: {isp_result.runtime_sec:.3f}s)"
-        )
-        print(f"Solution Quality: {solution_quality}")
-        print(graph_line)
-        print(path_line)
-        if isp_result.iteration_metrics:
-            print(
-                f"Incremental diagnostics: {solver_attempts} solver attempts, "
-                f"{completed_iterations} completed iterations"
-            )
-        print(
-            f"Strategy: {strategy_label} (Solver: {config.DEFAULT_SOLVER}, Reduction: {reduction_detail}{scope_detail}, Max Iterations: {config.MAX_ISP_ITERATIONS})"
-        )
-        print(
-            f"Cost Metrics: Initial A* Cost = {cost_star_str} | Original Alt Cost = {cost_user_orig_str} | Final Alt Cost = {final_cost_str}"
-        )
-        print(
-            f"Endpoints: Start = [{start[0]}, {start[1]}] | Goal = [{goal[0]}, {goal[1]}]"
-        )
-        print(
-            f"Modifications: {n_terrain} terrain, {n_obs} obstacles, {n_slope} slopes, {n_opened} opened terrain cells ({n_water} water), {n_robot_speed} robot speed activations"
-        )
-        print(
-            f"\nContrastive Explanation (Experimental Group):\n{isp_result.explanation_text}"
-        )
-        if isp_result.cost_baseline_text:
-            print(
-                f"\nCost Baseline Justification (Control Group):\n{isp_result.cost_baseline_text}"
-            )
-        print("\nSaved artifacts in output/:")
-        for img in saved_images:
-            print(f" - {img.name}")
-        if artifact_skip_note:
-            print(artifact_skip_note)
-        print("-" * 60)
-
-    log_path = results_dir / RUN_LOG_FILENAME
-    with open(log_path, "w", encoding="utf-8") as f:
-        f.write(log_content)
-
-    return isp_result
+        print(log)
+    result.metrics = finite_data(metrics)
+    return result

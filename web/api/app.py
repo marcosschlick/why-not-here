@@ -16,6 +16,7 @@ if str(SRC_DIR) not in sys.path:
 
 from src.pipeline.storage import get_output_directory
 from src.pipeline.utils import get_project_path
+from web.api.benchmark_export import router as benchmark_router
 from web.api.database import initialize_database
 from web.api.participation import public_router
 from web.api.participation import router as participation_router
@@ -58,6 +59,7 @@ async def protect_local_access(request, call_next):
 
 
 app.include_router(router)
+app.include_router(benchmark_router)
 app.include_router(questionnaires_router)
 app.include_router(scenarios_router)
 app.include_router(participation_router)

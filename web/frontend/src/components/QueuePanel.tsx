@@ -1,4 +1,5 @@
 import type { QueueItem } from "../types";
+import { scientificOutcomeLabel } from "../utils/execution";
 import { groupQueue } from "../utils/experiments";
 interface QueuePanelProps {
   queue: QueueItem[];
@@ -142,7 +143,8 @@ export function QueuePanel({
       <div className="queue-items-list">
         {groups.map((group, index) => {
           const item = group[0];
-          const isBenchmark = Boolean(item.benchmarkGroup);
+          const isGroup = Boolean(item.benchmarkGroup);
+          const isBenchmark = item.groupKind === "benchmark";
           const isCurrent = isProcessing && group.includes(queue[currentIndex]);
           const active = group.find(
             (entry) =>
@@ -151,7 +153,7 @@ export function QueuePanel({
           const allFinished = group.every((entry) =>
             ["completed", "failed", "saved"].includes(entry.status),
           );
-          const status = !isBenchmark
+          const status = !isGroup
             ? item.status
             : (active?.status ??
               (allFinished
@@ -195,9 +197,13 @@ export function QueuePanel({
                 <span className="param-tag">
                   Seed: #{item.config.MAP_DEFAULT_SEED}
                 </span>
-                {isBenchmark ? (
+                {isGroup ? (
                   <span className="param-tag">
-                    Benchmark · {group.length} combinations
+                    {isBenchmark ? "Benchmark" : "Scenario comparison"} ·{" "}
+                    {group.length}{" "}
+                    {workflowMode === "create"
+                      ? "configurations"
+                      : "executions"}
                   </span>
                 ) : (
                   <>
@@ -211,20 +217,24 @@ export function QueuePanel({
                     </span>
                   </>
                 )}
-                {!isBenchmark && item.outputDir && (
+                {!isGroup && item.outputDir && (
                   <span className="param-tag">Dir: {item.outputDir}</span>
                 )}
-                {!isBenchmark && item.savedFile && (
+                {!isGroup && item.savedFile && (
                   <span className="param-tag">Saved: {item.savedFile}</span>
                 )}
               </div>
 
-              {!isBenchmark && item.result && (
+              {!isGroup && item.result && (
                 <div className="queue-item-result-snippet">
                   <span>
-                    Status: <strong>{item.result.solver_status}</strong> &bull;{" "}
-                    Time: {item.result.runtime_sec}s &bull; Iter:{" "}
-                    {item.result.iterations}
+                    Result:{" "}
+                    <strong>{scientificOutcomeLabel(item.result)}</strong>{" "}
+                    &bull; Time:{" "}
+                    {item.result.runtime_sec == null
+                      ? "Unavailable"
+                      : `${item.result.runtime_sec}s`}{" "}
+                    &bull; Iter: {item.result.iterations ?? "Unavailable"}
                   </span>
                 </div>
               )}
@@ -239,12 +249,12 @@ export function QueuePanel({
                   }}
                   title={
                     item.benchmarkGroup
-                      ? "Remove all ten combinations in this Benchmark group"
+                      ? "Remove every scenario and repetition in this group"
                       : "Remove configuration from queue"
                   }
                   aria-label={
                     item.benchmarkGroup
-                      ? "Remove Benchmark group"
+                      ? "Remove scenario group"
                       : "Remove item"
                   }
                 >

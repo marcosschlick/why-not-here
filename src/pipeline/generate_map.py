@@ -1,3 +1,5 @@
+import time
+
 from src import config
 from src.grid.grid import Grid
 from src.map.generator import generate_map as create_map
@@ -14,6 +16,7 @@ def generate_map(verbose: bool = True, persist_artifacts: bool = True) -> Grid:
             f"[1] Generating procedural map ({config.MAP_H}x{config.MAP_W}, seed={config.MAP_DEFAULT_SEED})..."
         )
 
+    generation_started = time.perf_counter_ns()
     grid = create_map(
         h=config.MAP_H,
         w=config.MAP_W,
@@ -22,6 +25,7 @@ def generate_map(verbose: bool = True, persist_artifacts: bool = True) -> Grid:
         max_slope_deg=config.MAX_SLOPE_DEG,
     )
 
+    grid.generation_runtime_sec = (time.perf_counter_ns() - generation_started) / 1e9
     if verbose:
         print(
             "Generation accepted: "

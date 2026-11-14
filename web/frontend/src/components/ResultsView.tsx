@@ -7,6 +7,8 @@ import type {
   SemanticModificationsData,
   SystemConfig,
 } from "../types";
+import { ResultsExport } from "./ResultsExport";
+import { scientificOutcome, scientificOutcomeLabel } from "../utils/execution";
 import { SolverConfigBadges } from "./SolverConfigBadges";
 import { formatReductionMethod } from "../utils/formatters";
 import { useMapCanvasFit } from "../utils/useMapCanvasFit";
@@ -16,6 +18,7 @@ import { hasTerrainOverride } from "../utils/terrainAccess";
 
 interface ResultsViewProps {
   result: LastResult | null;
+  records?: LastResult[];
   mapData?: MapData | null;
   userPath?: GridPoint[];
   artifacts: string[];
@@ -52,6 +55,25 @@ function formatDistance(
       ? "Unavailable"
       : `${formatMetric(meters, 3)} m`;
   return `${cellValue} / ${meterValue}`;
+}
+
+function formatRouteCost(
+  value: number | null | undefined,
+  state?: string,
+): string {
+  if (typeof value === "number" && Number.isFinite(value))
+    return `${formatMetric(value, 2)} s`;
+  if (state === "IMPASSABLE") return "Impassable";
+  if (state === "UNREACHABLE") return "No path";
+  return "Unavailable";
+}
+
+function formatValidation(status?: string): string {
+  if (status === "VALID") return "Validated";
+  if (status === "INVALID") return "Not validated";
+  if (status === "INCOMPLETE") return "Incomplete";
+  if (status === "NOT_RUN") return "Not performed";
+  return "Unknown";
 }
 
 function getArtifactTitle(artifactPath: string): string {
@@ -122,6 +144,7 @@ function ArtifactCard({
 
 export function ResultsView({
   result,
+  records = [],
   mapData,
   userPath = [],
   artifacts,
@@ -142,7 +165,7 @@ export function ResultsView({
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [hoveredCell, setHoveredCell] = useState<GridPoint | null>(null);
 
-  const isBatch = Boolean(batchQueue && batchQueue.length > 1);
+  const isBatch = Boolean(batchQueue && batchQueue.length > 0);
   const currentBatchIdx =
     activeBatchIndex !== undefined ? activeBatchIndex : internalBatchIndex;
 
@@ -171,17 +194,28 @@ export function ResultsView({
     ? activeBatchItem?.mapData?.map_image_url
     : mapImageUrl;
   const originalMapData = isBatch ? activeBatchItem?.mapData : mapData;
+  const preparedMapData = useMemo(
+    () =>
+      originalMapData && currentResult?.prepared_grid
+        ? {
+            ...originalMapData,
+            ...currentResult.prepared_grid,
+            optimal_path: currentResult.original_optimal_path ?? [],
+          }
+        : originalMapData,
+    [originalMapData, currentResult],
+  );
   const modifiedGrid = currentResult?.modified_grid;
   const currentMapData = useMemo(
     () =>
-      originalMapData && modifiedGrid
+      preparedMapData && modifiedGrid
         ? {
-            ...originalMapData,
+            ...preparedMapData,
             ...modifiedGrid,
-            terrain_colors: originalMapData.terrain_colors,
+            terrain_colors: preparedMapData.terrain_colors,
           }
-        : originalMapData,
-    [originalMapData, modifiedGrid],
+        : preparedMapData,
+    [preparedMapData, modifiedGrid],
   );
   const currentUserPath = isBatch
     ? (activeBatchItem?.userPath ??
@@ -211,7 +245,7 @@ export function ResultsView({
   const currentStatus = isBatch
     ? activeBatchItem?.status
     : result
-      ? "completed"
+      ? (result.execution_status ?? "completed")
       : "pending";
   const isSolving = isBatch ? currentStatus === "solving" : false;
 
@@ -287,7 +321,9 @@ export function ResultsView({
     return null;
   }
 
-  const hasModifications = (modifications: SemanticModificationsData | null | undefined) => {
+  const hasModifications = (
+    modifications: SemanticModificationsData | null | undefined,
+  ) => {
     if (!modifications) return false;
     const count =
       modifications.terrain +
@@ -305,46 +341,19 @@ export function ResultsView({
     );
   };
 
-  type RunOutcome =
-    | "queued"
-    | "solving"
-    | "certified"
-    | "candidate"
-    | "infeasible"
-    | "error";
-
-  const getRunOutcome = (
+  type RunOutcome = "queued" | "solving" | ReturnType<typeof scientificOutcome>;
+  function getRunOutcome(
     status: string | null | undefined,
-    result: {
-      success?: boolean;
-      solver_status?: string;
-      modifications?: SemanticModificationsData | null;
-    } | null | undefined,
-  ): RunOutcome => {
+    result: LastResult | null | undefined,
+  ): RunOutcome {
     if (status === "solving") return "solving";
-    if (status === "pending" || status === "generating_map" || status === "awaiting_route") {
+    if (["pending", "generating_map", "awaiting_route"].includes(status ?? ""))
       return "queued";
-    }
-    if (result?.solver_status === "OPTIMAL" && result?.success !== false) {
-      return "certified";
-    }
-    if (result?.solver_status === "INFEASIBLE") {
-      return "infeasible";
-    }
-    if (hasModifications(result?.modifications)) {
-      return "candidate";
-    }
-    if (status === "failed" || result?.success === false) {
-      return "error";
-    }
-    return "certified";
-  };
+    if (status === "failed") return "error";
+    return result ? scientificOutcome(result) : "inconclusive";
+  }
 
   const currentOutcome = getRunOutcome(currentStatus, currentResult);
-  const isFailed =
-    currentOutcome === "candidate" ||
-    currentOutcome === "infeasible" ||
-    currentOutcome === "error";
   const currentModifications = currentResult?.modifications ?? null;
   const hasCandidateModifications = hasModifications(currentModifications);
   const visibleModifications: SemanticModificationsData | null =
@@ -358,19 +367,14 @@ export function ResultsView({
       ? `${currentResult.runtime_sec.toFixed(3)}s`
       : "-";
 
-  const origCostDisplay =
-    typeof currentResult?.original_optimal_cost === "number"
-      ? `${currentResult.original_optimal_cost.toFixed(2)}s`
-      : "-";
-
-  const altCostDisplay =
-    typeof currentResult?.final_alternative_cost === "number"
-      ? isFailed
-        ? `${currentResult.final_alternative_cost.toFixed(2)}s (Suboptimal)`
-        : `${currentResult.final_alternative_cost.toFixed(2)}s`
-      : isFailed
-        ? "Impassable (∞)"
-        : "-";
+  const origCostDisplay = formatRouteCost(
+    currentResult?.original_optimal_cost,
+    currentResult?.metrics?.cost_states?.original_optimal,
+  );
+  const altCostDisplay = formatRouteCost(
+    currentResult?.final_alternative_cost,
+    currentResult?.metrics?.cost_states?.final_alternative,
+  );
 
   function handleCopy(text: string, key: string) {
     if (navigator?.clipboard?.writeText) {
@@ -504,6 +508,7 @@ export function ResultsView({
 
   return (
     <section className="results-container">
+      <ResultsExport records={records} />
       {isBatch && batchQueue && (
         <div className="batch-results-tabs-wrapper">
           <div
@@ -517,17 +522,13 @@ export function ResultsView({
               const tabLabel =
                 item.status === "saved"
                   ? "Saved"
-                  : outcome === "certified"
-                    ? "Certified"
-                    : outcome === "candidate"
-                      ? "Candidate"
-                      : outcome === "infeasible"
-                        ? "Infeasible"
-                        : outcome === "error"
-                          ? "Error"
-                          : outcome === "solving"
-                            ? "Solving"
-                            : "Queued";
+                  : outcome === "solving"
+                    ? "Solving"
+                    : outcome === "queued"
+                      ? "Queued"
+                      : item.result
+                        ? scientificOutcomeLabel(item.result)
+                        : "Inconclusive";
               return (
                 <button
                   key={item.id}
@@ -538,7 +539,12 @@ export function ResultsView({
                   onClick={() => handleTabSelect(idx)}
                 >
                   <span className="batch-tab-title">
-                    Run {idx + 1}: {item.config.MAP_H}x{item.config.MAP_W}
+                    #{idx + 1} · {item.config.ISP_MODEL ?? "NORMAL"} ·{" "}
+                    {item.config.USE_INCREMENTAL_SOLVER
+                      ? "Incremental"
+                      : "Monolithic"}{" "}
+                    · {item.config.DEFAULT_REDUCTION_METHOD} · Rep{" "}
+                    {item.repetitionIndex ?? 1}
                   </span>
                   <span className={`batch-tab-badge status-${outcome}`}>
                     {tabLabel}
@@ -558,18 +564,13 @@ export function ResultsView({
               : "Results & Metrics"}
           </h2>
           <span className={`status-pill large ${currentOutcome}`}>
-            Solver:{" "}
             {currentOutcome === "solving"
-              ? "OPTIMIZING..."
+              ? "Solving"
               : currentOutcome === "queued"
-                ? "QUEUED"
-                : currentOutcome === "certified"
-                  ? "OPTIMAL (CERTIFIED)"
-                  : currentOutcome === "candidate"
-                    ? "CANDIDATE (UNVERIFIED)"
-                    : currentOutcome === "infeasible"
-                      ? "INFEASIBLE"
-                      : "ERROR"}
+                ? "Queued"
+                : currentResult
+                  ? scientificOutcomeLabel(currentResult)
+                  : "Inconclusive"}
           </span>
         </div>
 
@@ -590,16 +591,18 @@ export function ResultsView({
             <div>
               <h3>Interactive Tactical Map</h3>
               <p className="subtitle">
-                Alternative route and semantic ISP modifications rendered from
-                the active map data.
+                {currentConfig?.ISP_MODEL === "BRANDAO"
+                  ? "Brandao adaptation: fast/slow costs 1:8, fixed obstacles and no slope effects."
+                  : "Alternative route and ISP interventions on the active map."}
               </p>
             </div>
             <div className="results-map-controls">
-              {currentOutcome === "candidate" && (
-                <span className="candidate-solution-badge candidate">
-                  CANDIDATE SOLUTION (NOT GLOBALLY CERTIFIED)
-                </span>
-              )}
+              {currentOutcome === "inconclusive" &&
+                currentResult?.metrics?.candidate_available && (
+                  <span className="candidate-solution-badge candidate">
+                    CANDIDATE (GLOBAL VALIDATION NOT PASSED)
+                  </span>
+                )}
               {currentOutcome === "infeasible" && (
                 <span className="candidate-solution-badge infeasible">
                   NO FEASIBLE INTERVENTION
@@ -647,9 +650,9 @@ export function ResultsView({
             <p className="results-map-notice">
               {currentOutcome === "infeasible"
                 ? "No valid modifications could be calculated; the alternative route is shown."
-                : currentOutcome === "certified"
-                  ? "The certified solution requires no semantic modifications."
-                  : "No valid semantic modifications were returned; the alternative route is shown."}
+                : currentOutcome === "validated"
+                  ? "The alternative route is validated; no changes are displayed."
+                  : "No semantic changes are displayed; see validation and candidate status."}
             </p>
           )}
           {currentResult?.solver_status === "OPTIMAL_INACCURATE" &&
@@ -665,7 +668,7 @@ export function ResultsView({
             ref={setMapCanvasContainer}
           >
             <TacticalMapCanvas
-              mapData={originalMapData ?? currentMapData}
+              mapData={preparedMapData ?? currentMapData}
               userPath={currentUserPath}
               optimalPath={currentMapData.optimal_path}
               modifications={visibleModifications}
@@ -731,7 +734,7 @@ export function ResultsView({
           </p>
           {isSolving && typeof elapsedTime === "number" && (
             <div className="batch-elapsed-timer">
-              Elapsed solver time: <strong>{elapsedTime}s</strong>
+              Elapsed workflow time: <strong>{elapsedTime}s</strong>
             </div>
           )}
         </div>
@@ -753,20 +756,31 @@ export function ResultsView({
             <span className="metric-value">{runtimeDisplay}</span>
           </div>
 
-          <div className="metric-card">
-            <span className="metric-label">ISP Iterations</span>
-            <span className="metric-value">
-              {currentResult.iterations ?? 0}
-            </span>
-          </div>
+          {currentConfig?.USE_INCREMENTAL_SOLVER && (
+            <div className="metric-card">
+              <span className="metric-label">ISP Iterations</span>
+              <span className="metric-value">
+                {formatMetric(currentResult.iterations)}
+              </span>
+            </div>
+          )}
 
           <div className="metric-card optimal-card">
-            <span className="metric-label">Initial Cost (A*)</span>
+            <span className="metric-label">Initial Optimal Route Cost</span>
             <span className="metric-value">{origCostDisplay}</span>
           </div>
 
           <div className="metric-card alternative-card">
-            <span className="metric-label">Alternative Cost</span>
+            <span className="metric-label">Initial Alternative Route Cost</span>
+            <span className="metric-value">
+              {formatRouteCost(
+                currentResult.original_alternative_cost,
+                currentResult.metrics?.cost_states?.original_alternative,
+              )}
+            </span>
+          </div>
+          <div className="metric-card alternative-card">
+            <span className="metric-label">Final Alternative Route Cost</span>
             <span className="metric-value">{altCostDisplay}</span>
           </div>
 
@@ -810,66 +824,51 @@ export function ResultsView({
             </span>
           </div>
 
-          {currentConfig?.USE_INCREMENTAL_SOLVER && (
-            <div className="metric-card span-all">
-              <span className="metric-label">Graph Size by Iteration</span>
-              {currentResult.iteration_metrics?.length ? (
-                <div className="iteration-table-wrapper">
-                  <table className="iteration-table">
-                    <thead>
-                      <tr>
-                        <th scope="col">Iteration</th>
-                        <th scope="col">Nodes</th>
-                        <th scope="col">Directed edges</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentResult.iteration_metrics.map((metric, index) => (
-                        <tr key={index}>
-                          <td>{formatMetric(metric.iteration)}</td>
-                          <td>{formatMetric(metric.graph_nodes)}</td>
-                          <td>{formatMetric(metric.graph_edges)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <span>Unavailable</span>
+          <div className="metric-card">
+            <span className="metric-label">Global Route Validation</span>
+            <span className="metric-value">
+              {formatValidation(currentResult.metrics?.validation_status)}
+            </span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">ISP Interventions</span>
+            <span className="metric-value">
+              {formatMetric(currentResult.metrics?.interventions?.total)}
+            </span>
+            {currentConfig?.ISP_MODEL === "BRANDAO" &&
+              currentResult.metrics?.candidate_available && (
+                <span className="metric-label">
+                  Slow → fast:{" "}
+                  {formatMetric(
+                    currentResult.metrics.interventions?.slow_to_fast,
+                  )}{" "}
+                  · Fast → slow:{" "}
+                  {formatMetric(
+                    currentResult.metrics.interventions?.fast_to_slow,
+                  )}
+                </span>
               )}
+          </div>
+          {currentConfig?.ISP_MODEL === "BRANDAO" && (
+            <div className="metric-card">
+              <span className="metric-label">Preparation Conversions</span>
+              <span className="metric-value">
+                {formatMetric(
+                  currentResult.metrics?.preparation?.converted_blocked_cells,
+                )}
+              </span>
+              <span className="metric-label">
+                Excluded from ISP interventions
+              </span>
             </div>
           )}
-
-          <div className="metric-card span-all modifications-card">
-            <span className="metric-label">Semantic Modifications Applied</span>
-            <div className="modifications-badges">
-              <span className="mod-badge terrain">
-                Terrain: {currentResult.modifications?.terrain ?? 0} modified
-              </span>
-              <span className="mod-badge obstacle">
-                Obstacles: {currentResult.modifications?.obstacle ?? 0} removed
-              </span>
-              <span className="mod-badge slope">
-                Slopes: {currentResult.modifications?.slope ?? 0} leveled
-              </span>
-              <span className="mod-badge opened-terrain">
-                Terrain opened:{" "}
-                {currentResult.modifications?.opened_terrain ?? 0}
-              </span>
-              <span className="mod-badge">
-                Robot speed:{" "}
-                {currentResult.modifications?.robot_speed ??
-                  currentResult.modifications?.robot_speed_edges?.length ??
-                  0}{" "}
-                activated
-              </span>
-            </div>
-          </div>
         </div>
       )}
 
-      {activeBatchItem?.error && !currentResult && (
-        <p role="alert">{activeBatchItem.error}</p>
+      {(currentResult?.execution_error || activeBatchItem?.error) && (
+        <p role="alert">
+          {currentResult?.execution_error || activeBatchItem?.error}
+        </p>
       )}
 
       {currentResult && explanationText && (

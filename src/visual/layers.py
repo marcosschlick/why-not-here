@@ -76,6 +76,9 @@ def draw_modifications(
     modifications: SemanticModifications,
     edge_width: float,
 ) -> None:
+    from src.isp.types import marker_modifications
+
+    modifications = marker_modifications(modifications)
     _validate_cell_modification_categories(modifications)
     origin_x = ax.transData.transform((0, 0))[0]
     next_x = ax.transData.transform((1, 0))[0]

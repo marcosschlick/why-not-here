@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -8,12 +8,22 @@ class NamingMetadata(BaseModel):
 
     map_index: int | None = Field(default=None, ge=1)
     benchmark: bool = False
+    benchmark_group_id: str | None = Field(default=None, max_length=128)
+    repetition_index: int = Field(default=1, ge=1)
 
 
 class RunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     runs: int = Field(default=1, ge=1)
+
+
+class ScenarioPlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    config: dict[str, Any]
+    benchmark: bool = False
+    purpose: Literal["run", "create"] = "run"
 
 
 class GenerateMapRequest(BaseModel):
@@ -43,9 +53,21 @@ class GenerateMapRequest(BaseModel):
     extra_config: dict[str, Any] | None = None
 
 
+class ExecutionMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str = Field(min_length=1, max_length=128)
+    benchmark_group_id: str | None = Field(default=None, max_length=128)
+    repetition_index: int = Field(default=1, ge=1)
+    attempt_index: int = Field(default=1, ge=1)
+    execution_order: int = Field(default=1, ge=1)
+    map_generation_sec: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+
+
 class SolveISPRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    execution: ExecutionMetadata | None = None
     user_path: list[tuple[int, int]] | None = None
     map: dict[str, Any] | None = None
     config: dict[str, Any] | None = None

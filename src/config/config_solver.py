@@ -1,4 +1,5 @@
-# Solver settings: HiGHS is the default; Gurobi is an optional backend.
+# HiGHS is the default; Gurobi is an optional installed backend.
 DEFAULT_SOLVER = "HIGHS"
-SOLVER_TIMEOUT_SEC = 1800.0
+# Cooperative budget for preparation, model construction, solving and validation.
+ISP_TIME_BUDGET_SEC = 1800.0
 MIP_GAP_TOLERANCE = 1e-4

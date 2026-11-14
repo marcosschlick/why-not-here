@@ -71,12 +71,31 @@ artifacts; execution persists the displayed map in a fresh folder. Import JSON
 using the browser file picker. Old configurations and API calls containing
 removed name or destination options must be recreated in the current format.
 
-Enable **Benchmark** to create ten configurations or executions per map:
-monolithic and incremental, each with `NONE`, `PATH_ONLY`, `SPARSIFIED`, `BBOX`
-and `FLOODFILL`. Each group shares the exact map, seed, endpoints and one reviewed
-route. Each imported configuration is also expanded. Names identify solver and reduction,
-results have separate directories, and removing a variant removes its group.
-Benchmark is unavailable for questionnaire scenarios.
+Enable **Benchmark** to run twelve scenarios per map and repetition: ten normal
+combinations (monolithic/incremental × `NONE`, `PATH_ONLY`, `SPARSIFIED`, `BBOX`,
+`FLOODFILL`) followed by Brandao monolithic and incremental, both without
+reduction. Outside the full benchmark, configuring normal incremental with
+`NONE` automatically runs the normal scenario plus both Brandao strategies on
+the same source map, endpoints and alternative route. Other individual settings
+run only their normal scenario. There is no manual traversal-model selector.
+
+Configuration files contain only normal scenarios. An individual configuration
+saves one file; a full benchmark saves ten normal files per repetition. Importing
+or executing a normal incremental/`NONE` file generates the trio automatically,
+including `python -B src/main.py run configuration.json`. Brandao remains an
+internal, separately recorded model with fast/slow 1:8 costs and no slope effects.
+Its time differences from normal scenarios cannot be attributed solely to solver
+strategy. No legacy conversion or deduplication is applied.
+
+Both strategies use one cooperative preparation-through-validation budget.
+Queue `Completed` means all scenarios were processed without execution errors;
+it does not mean that all routes were validated. Individual outcomes distinguish
+validation, infeasibility, inconclusive results and limits. Results use the existing
+metric cards; detailed diagnostics remain in **Export Scenarios (CSV)** and
+**Export Iterations (CSV)**, including unsuccessful attempts and execution order.
+Benchmark remains unavailable for questionnaire scenarios.
+See [Computational ISP benchmark](docs/benchmark.md) for formulas, metric units,
+reproduction and measurement limitations.
 
 Use **Questionnaires** to create a draft and select **Prepare six scenarios**.
 Choose only the grid size; the existing generator and size profiles are preserved.

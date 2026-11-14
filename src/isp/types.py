@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import cvxpy as cp
 import numpy as np
@@ -32,3 +32,19 @@ class MIPFormulation:
     z_slope: cp.Variable | None
     z_opened_terrain: cp.Variable | None
     z_robot_speed: cp.Variable | None
+
+
+def marker_modifications(modifications: SemanticModifications) -> SemanticModifications:
+    opened = set(modifications.opened_terrain_nodes)
+    terrain = set(modifications.terrain_nodes)
+    return replace(
+        modifications,
+        obstacle_nodes=[
+            node
+            for node in modifications.obstacle_nodes
+            if node not in opened | terrain
+        ],
+        terrain_nodes=[
+            node for node in modifications.terrain_nodes if node not in opened
+        ],
+    )

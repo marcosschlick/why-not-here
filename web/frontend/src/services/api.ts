@@ -1,4 +1,6 @@
 import type {
+  ExecutionMetadata,
+  LastResult,
   ImportConfigResponse,
   MapData,
   MapProfile,
@@ -49,6 +51,7 @@ export async function solveISP(
   goal?: [number, number],
   map?: Record<string, unknown>,
   naming?: NamingMetadata,
+  execution?: ExecutionMetadata,
 ): Promise<SolveResponse> {
   const response = await fetch("/api/isp/solve", {
     method: "POST",
@@ -62,6 +65,7 @@ export async function solveISP(
       start,
       goal,
       naming,
+      execution,
     }),
   });
   if (!response.ok) {
@@ -152,4 +156,52 @@ export async function importConfig(
     );
   }
   return response.json();
+}
+
+export async function exportScenarioResults(
+  records: LastResult[],
+  kind: "scenarios" | "iterations",
+): Promise<void> {
+  const compact = records.map(({ prepared_grid, modified_grid, ...record }) => {
+    void prepared_grid;
+    void modified_grid;
+    return record;
+  });
+  const response = await fetch("/api/benchmarks/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ records: compact, kind }),
+  });
+  if (!response.ok) throw new Error("Failed to export scenario results.");
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${kind}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function planScenarioConfigurations(
+  config: SystemConfig,
+  benchmark: boolean,
+  purpose: "run" | "create",
+): Promise<SystemConfig[]> {
+  const response = await fetch("/api/config/scenarios", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      config: { ...config, ISP_MODEL: "NORMAL" },
+      benchmark,
+      purpose,
+    }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => null);
+    throw new Error(
+      error?.detail || "Failed to prepare scenario configurations.",
+    );
+  }
+  return (await response.json()).configurations;
 }

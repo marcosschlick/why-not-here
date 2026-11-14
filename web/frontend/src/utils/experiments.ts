@@ -4,43 +4,43 @@ import type {
   QueueItem,
   SystemConfig,
 } from "../types";
+import { planScenarioConfigurations } from "../services/api";
 
-export function createExperimentItems(
+export async function createExperimentItems(
   config: SystemConfig,
   naming: NamingMetadata,
   benchmark: boolean,
   mapData?: MapData,
   userPath?: [number, number][],
-): QueueItem[] {
+  repetitions = 1,
+  purpose: "run" | "create" = "run",
+): Promise<QueueItem[]> {
   const group = crypto.randomUUID();
-  const variants = benchmark
-    ? [false, true].flatMap((incremental) =>
-        ["NONE", "PATH_ONLY", "SPARSIFIED", "BBOX", "FLOODFILL"].map(
-          (reduction) => ({ incremental, reduction }),
-        ),
-      )
-    : [
-        {
-          incremental: config.USE_INCREMENTAL_SOLVER,
-          reduction: config.DEFAULT_REDUCTION_METHOD,
+  const variants = await planScenarioConfigurations(config, benchmark, purpose);
+  const grouped = benchmark || variants.length > 1;
+  return Array.from({ length: benchmark ? repetitions : 1 }, (_, repetition) =>
+    variants.map<QueueItem>((parameters, index) => {
+      const repetitionIndex = benchmark
+        ? repetition + 1
+        : (naming.repetition_index ?? 1);
+      return {
+        id: `${group}-${repetition}-${index}`,
+        benchmarkGroup: grouped ? group : undefined,
+        groupKind: benchmark ? "benchmark" : grouped ? "comparison" : undefined,
+        repetitionIndex,
+        naming: {
+          ...naming,
+          benchmark: grouped,
+          benchmark_group_id: grouped ? group : naming.benchmark_group_id,
+          repetition_index: repetitionIndex,
         },
-      ];
-  return variants.map(({ incremental, reduction }, index) => {
-    const parameters = {
-      ...config,
-      USE_INCREMENTAL_SOLVER: incremental,
-      DEFAULT_REDUCTION_METHOD: reduction,
-    };
-    return {
-      id: `${group}-${index}`,
-      benchmarkGroup: benchmark ? group : undefined,
-      naming: { ...naming, benchmark },
-      config: parameters,
-      mapData: mapData ? { ...mapData, config: parameters } : undefined,
-      userPath,
-      status: mapData ? "awaiting_route" : "pending",
-    };
-  });
+        config: parameters,
+        mapData: mapData ? { ...mapData, config: parameters } : undefined,
+        userPath,
+        status: mapData ? "awaiting_route" : "pending",
+      };
+    }),
+  ).flat();
 }
 
 export function sameReviewGroup(item: QueueItem, current: QueueItem): boolean {

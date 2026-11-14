@@ -16,6 +16,7 @@ def apply_semantic_modifications(
         connectivity=grid.connectivity,
         max_slope_deg=grid.max_slope_deg,
     )
+    new_grid.isp_model = grid.isp_model
     new_grid.speeds = dict(grid.speeds)
     new_grid.robot_speed_theoretical = grid.robot_speed_theoretical
     new_grid.robot_speed_edges = set(grid.robot_speed_edges) | set(

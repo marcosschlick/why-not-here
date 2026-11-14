@@ -22,12 +22,18 @@ def experiment_name(
     benchmark: bool = False,
     incremental: bool = False,
     reduction: str = "NONE",
+    isp_model: str = "NORMAL",
+    repetition_index: int = 1,
 ) -> str:
     name = f"experiment-{height}x{width}-{datetime.now():%Y%m%d-%H%M%S}"
     if map_index is not None:
         name += f"-map-{map_index}"
     if benchmark:
         name += f"-{'incremental' if incremental else 'monolithic'}-{reduction.lower()}"
+    if isp_model == "BRANDAO":
+        name += "-brandao"
+    if benchmark:
+        name += f"-rep-{repetition_index}"
     return name
 
 
@@ -48,10 +54,21 @@ def reserve_output_directory(
     benchmark: bool = False,
     incremental: bool = False,
     reduction: str = "NONE",
+    isp_model: str = "NORMAL",
+    repetition_index: int = 1,
 ) -> Path:
     directory = get_project_path("results")
     directory.mkdir(parents=True, exist_ok=True)
-    name = experiment_name(height, width, map_index, benchmark, incremental, reduction)
+    name = experiment_name(
+        height,
+        width,
+        map_index,
+        benchmark,
+        incremental,
+        reduction,
+        isp_model,
+        repetition_index,
+    )
     while True:
         target = available_path(directory, name)
         try:

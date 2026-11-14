@@ -16,23 +16,65 @@ def generate_explanation_text(
     grid: Grid | None = None,
     fallback_reason: str | None = None,
     solver_status: str = "OPTIMAL",
+    stop_reason: str | None = None,
 ) -> str:
+    if modifications is None:
+        if fallback_reason:
+            return fallback_reason
+        reason = stop_reason or solver_status
+        if reason == "INFEASIBLE":
+            return "The solver reported infeasibility in the current formulation and intervention domain. No candidate intervention is available."
+        if reason in {
+            "TIME_BUDGET_EXHAUSTED",
+            "TIME_LIMIT",
+            "TIMEOUT",
+            "SOLVER_LIMIT",
+            "INTERRUPTED",
+            "VALIDATED_AFTER_SOLVER_LIMIT",
+        }:
+            return "The execution stopped at a time or solver limit before a usable candidate was available. Feasibility remains undetermined."
+        if reason in {
+            "ERROR",
+            "REQUEST_ERROR",
+            "SOLVER_ERROR",
+            "SOLVER_NOT_FOUND",
+            "SOLVER_FAILED",
+            "INCONSISTENT_COMPETING_PATH",
+            "COST_MODEL_MISMATCH",
+        }:
+            return "The execution failed before a usable candidate was available. See the recorded execution error."
+        return "No usable candidate was returned. This inconclusive result does not establish infeasibility."
+    if grid is not None and grid.isp_model == "BRANDAO":
+        improved = sum(
+            grid.get_cell(node).terrain == "FOREST" and target == "GRASS"
+            for node, target in modifications.terrain_assignments
+        )
+        worsened = sum(
+            grid.get_cell(node).terrain == "GRASS" and target == "FOREST"
+            for node, target in modifications.terrain_assignments
+        )
+        validation = (
+            "The desired route is globally validated within the total cost tolerance."
+            if solver_status == "PATH_VALIDATED"
+            else "Global path validation has not passed."
+        )
+        return (
+            f"Brandao-inspired adaptation: {improved} slow-to-fast and {worsened} fast-to-slow cell changes, "
+            "including possible changes on competing routes. Each changed cell has unit intervention cost. "
+            f"Preparation conversions are excluded. {validation}"
+        )
     subgraph_only = solver_status == "SUBGRAPH_OPTIMAL_ONLY"
     uncertified_candidate = solver_status in {
         "TIMEOUT",
-        "MAX_ITERATIONS_EXCEEDED",
+        "CANDIDATE_UNVALIDATED",
+        "TIME_LIMIT",
+        "SOLVER_LIMIT",
+        "INTERRUPTED",
     }
     subgraph_message = (
         "The candidate makes the alternative route p' optimal only within the reduced subgraph. "
         "Global optimality validation failed; there is no global optimality certification."
     )
-    if modifications is None:
-        if subgraph_only:
-            return subgraph_message
-        if fallback_reason:
-            return fallback_reason
-        return "No feasible intervention was found to make the alternative route p' optimal."
-
     has_terrain = bool(modifications.terrain_nodes)
     obstacle_nodes = modifications.obstacle_nodes
     if grid is not None:
@@ -67,7 +109,7 @@ def generate_explanation_text(
             else (
                 "This contrastive explanation describes why the planner selected the optimal route p* "
                 "over the alternative route p': terrain, traversability, and robot capabilities determine their traversal times. "
-                "The minimum interventions needed to make the alternative route p' optimal are:"
+                "The candidate interventions proposed to make the alternative route p' optimal are:"
             )
         )
     ]

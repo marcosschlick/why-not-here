@@ -1,6 +1,7 @@
 import heapq
 
 from ..grid import Grid
+from ..isp.budget import check_deadline
 from .heuristics import euclidean_time_heuristic
 
 
@@ -46,6 +47,8 @@ def astar(
     nodes_expanded = 0
 
     while open_heap:
+        if nodes_expanded % 128 == 0:
+            check_deadline()
         _, _, _, current = heapq.heappop(open_heap)
 
         if current in closed_set:
