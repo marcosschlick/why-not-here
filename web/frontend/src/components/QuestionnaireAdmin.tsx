@@ -494,8 +494,8 @@ export function QuestionnaireAdmin({
   const publicLink =
     selected?.status === "active" ? publicParticipantLink() : null;
   const [copyStatus, setCopyStatus] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const sidebarToggleRef = useRef<HTMLButtonElement>(null);
+  const [selectorOpen, setSelectorOpen] = useState(true);
+  const selectorToggleRef = useRef<HTMLButtonElement>(null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<number | null>(null);
   const [renamingScenario, setRenamingScenario] = useState<number | null>(null);
@@ -657,16 +657,16 @@ export function QuestionnaireAdmin({
   function select(id: number) {
     if (busy) return;
     if (id === selected?.id) {
-      setSidebarOpen(false);
-      sidebarToggleRef.current?.focus();
+      setSelectorOpen(false);
+      selectorToggleRef.current?.focus();
       return;
     }
     confirmDiscard(() => {
       setSelecting(true);
       void perform(async () => {
         await loadQuestionnaire(id, true);
-        setSidebarOpen(false);
-        sidebarToggleRef.current?.focus();
+        setSelectorOpen(false);
+        selectorToggleRef.current?.focus();
         setCopyStatus("");
         setConfirmDelete(false);
       }).finally(() => setSelecting(false));
@@ -801,81 +801,64 @@ export function QuestionnaireAdmin({
         onOpenAbout={onOpenAbout}
       />
       <div className="qa-app">
-        <div
-          className={`qa-layout ${sidebarOpen ? "" : "qa-layout-collapsed"}`}
-        >
-          <aside className="qa-sidebar" id="questionnaire-sidebar">
-            <button
-              type="button"
-              ref={sidebarToggleRef}
-              className="qa-sidebar-toggle"
-              aria-label={
-                sidebarOpen ? "Hide questionnaires" : "Show questionnaires"
-              }
-              title={
-                sidebarOpen ? "Hide questionnaires" : "Show questionnaires"
-              }
-              aria-expanded={sidebarOpen}
-              aria-controls="questionnaire-sidebar"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
-              <span className="qa-sidebar-toggle-icon" aria-hidden="true">
-                {sidebarOpen ? "‹" : "›"}
-              </span>
-            </button>
-            <div className="qa-sidebar-content" inert={!sidebarOpen}>
-              <div className="qa-side-header">
-                <div className="qa-side-heading">
-                  <h2>Questionnaires</h2>
-                </div>
-                <p className="qa-sidebar-subtitle">
-                  Create and manage local drafts.
-                </p>
+        <div className="qa-layout">
+          <main className="qa-content">
+            <section className="qa-selector" aria-label="Questionnaires">
+              <div className="qa-selector-bar">
+                <button
+                  type="button"
+                  ref={selectorToggleRef}
+                  className="qa-selector-toggle"
+                  aria-expanded={selectorOpen}
+                  aria-controls="questionnaire-list"
+                  onClick={() => setSelectorOpen(!selectorOpen)}
+                >
+                  <span className="qa-selector-indicator" aria-hidden="true">{selectorOpen ? "−" : "+"}</span>
+                  <span className="qa-selector-label">
+                    <span>Questionnaires</span>
+                    <strong>{selected?.title || "New questionnaire"}</strong>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={newDraft}
+                  disabled={busy && !selecting}
+                  aria-disabled={busy}
+                >
+                  + New
+                </button>
               </div>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={newDraft}
-                disabled={busy && !selecting}
-                aria-disabled={busy}
-                title="Create a new draft questionnaire"
-              >
-                <span>+</span> New
-              </button>
-              {list.length === 0 ? (
-                <div className="qa-sidebar-empty-card">
-                  <p className="qa-empty-title">No questionnaires yet</p>
-                  <p className="qa-empty-desc">
-                    Click &ldquo;+ New&rdquo; above to start drafting your first
-                    study.
-                  </p>
-                </div>
-              ) : (
-                <nav aria-label="Questionnaires" className="qa-nav-list">
-                  {list.map((item) => (
-                    <button
-                      className={`qa-list-item ${selected?.id === item.id ? "is-active" : ""}`}
-                      key={item.id}
-                      aria-current={
-                        selected?.id === item.id ? "page" : undefined
-                      }
-                      onClick={() => select(item.id)}
-                      disabled={busy && !selecting}
-                      aria-disabled={busy}
-                      type="button"
-                    >
-                      <strong>{item.title}</strong>
-                      <span>{item.status}</span>
-                    </button>
-                  ))}
-                </nav>
-              )}
-            </div>
-          </aside>
-          <span className="qa-visually-hidden" role="status">
-            {selecting ? "Loading questionnaire…" : ""}
-          </span>
-          <main className="qa-content" inert={selecting}>
+              <div id="questionnaire-list" className="qa-selector-content" hidden={!selectorOpen}>
+                {list.length === 0 ? (
+                  <div className="qa-selector-empty">
+                    <p className="qa-empty-title">No questionnaires yet</p>
+                    <p className="qa-empty-desc">Use + New to create your first study.</p>
+                  </div>
+                ) : (
+                  <nav aria-label="Questionnaires" className="qa-nav-list">
+                    {list.map((item) => (
+                      <button
+                        className={`qa-list-item ${selected?.id === item.id ? "is-active" : ""}`}
+                        key={item.id}
+                        aria-current={selected?.id === item.id ? "page" : undefined}
+                        onClick={() => select(item.id)}
+                        disabled={busy && !selecting}
+                        aria-disabled={busy}
+                        type="button"
+                      >
+                        <strong>{item.title}</strong>
+                        <span>{item.status}</span>
+                      </button>
+                    ))}
+                  </nav>
+                )}
+              </div>
+            </section>
+            <span className="qa-visually-hidden" role="status">
+              {selecting ? "Loading questionnaire…" : ""}
+            </span>
+            <div className="qa-selection-content" inert={selecting}>
             {error && (
               <div
                 className="qa-error"
@@ -1400,6 +1383,7 @@ export function QuestionnaireAdmin({
                 )}
               </>
             )}
+            </div>
           </main>
         </div>
       </div>
