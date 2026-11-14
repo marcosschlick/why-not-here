@@ -160,7 +160,6 @@ export async function importConfig(
 
 export async function exportScenarioResults(
   records: LastResult[],
-  kind: "scenarios" | "iterations",
 ): Promise<void> {
   const compact = records.map(({ prepared_grid, modified_grid, ...record }) => {
     void prepared_grid;
@@ -170,13 +169,13 @@ export async function exportScenarioResults(
   const response = await fetch("/api/benchmarks/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ records: compact, kind }),
+    body: JSON.stringify({ records: compact }),
   });
   if (!response.ok) throw new Error("Failed to export scenario results.");
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${kind}.csv`;
+  link.download = "scenarios.csv";
   document.body.appendChild(link);
   link.click();
   link.remove();

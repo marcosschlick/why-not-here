@@ -1,5 +1,4 @@
-import json
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import APIRouter
 from fastapi.responses import Response
@@ -16,95 +15,41 @@ class ResultsExport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     records: list[dict[str, Any]] = Field(min_length=1)
-    kind: Literal["scenarios", "iterations"] = "scenarios"
 
 
-def flatten(value: dict, prefix: str = "") -> dict:
-    row = {}
-    for key, item in value.items():
-        name = f"{prefix}_{key}" if prefix else key
-        if isinstance(item, dict):
-            row.update(flatten(item, name))
-        elif isinstance(item, list):
-            row[name] = json.dumps(
-                item, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-            )
-        else:
-            row[name] = item
-    return row
-
-
-SUMMARY_FIELDS = (
-    "identity_run_id",
-    "identity_map_id",
-    "identity_prepared_scenario_id",
-    "identity_scenario_id",
-    "identity_benchmark_group_id",
-    "identity_attempt_index",
-    "identity_execution_order",
-    "identity_started_at",
-    "identity_finished_at",
+FIELDS = (
+    "run_id",
+    "benchmark_group_id",
+    "map_id",
+    "prepared_scenario_id",
+    "attempt_index",
+    "execution_order",
     "model",
     "strategy",
     "reduction",
+    "astar_scope",
+    "solver",
+    "map_height",
+    "map_width",
+    "connectivity",
+    "effective_seed",
+    "execution_status",
     "solver_status",
     "stop_reason",
-    "success",
     "validation_status",
     "cardinality_certified",
     "certificate_scope",
-    "certificate_reason",
+    "candidate_available",
     "deadline_outcome",
     "time_budget_sec",
-    "deadline_exceeded",
-    "result_within_budget",
-    "validated_after_deadline",
-    "candidate_available",
-    "candidate_from_solver_limit",
     "runtime_sec",
-    "original_optimal_cost",
-    "original_alternative_cost",
-    "final_alternative_cost",
-    "final_original_path_cost",
-    "final_optimal_cost",
-    "validation_gap_sec",
+    "preparation_sec",
+    "model_build_sec",
+    "solver_sec",
+    "validation_sec",
     "iterations",
-    "competing_paths_count",
     "cuts",
-    "graph_nodes",
-    "graph_edges",
-    "full_graph_nodes",
-    "full_graph_edges",
-    "reproduction_configuration_json",
-    "reproduction_desired_path",
-    "error",
-)
-SUMMARY_FIELDS += (
-    "timing_preparation_sec",
-    "timing_model_build_sec",
-    "timing_solver_sec",
-    "timing_validation_sec",
-    "timing_total_sec",
-    "timing_overhead_sec",
-    "solver_objective",
-    "solver_lower_bound",
-    "solver_effective_gap",
-    "solver_requested_mip_gap",
-    "solver_variables",
-    "solver_constraints",
-    "solver_integer_variables",
-    "solver_canonical_variables",
-    "solver_canonical_constraints",
-    "solver_native_status",
-    "solver_native_solver_sec",
-    "solver_solver_time_limit_sec",
-    "solver_bound_usable",
-    "node_reduction_ratio",
-    "edge_reduction_ratio",
-    "initial_astar_expanded",
-    "validation_astar_expanded",
     "interventions_total",
-    "interventions_distinct_cells",
     "interventions_terrain",
     "interventions_obstacle",
     "interventions_opened_terrain",
@@ -112,104 +57,157 @@ SUMMARY_FIELDS += (
     "interventions_robot_speed",
     "interventions_slow_to_fast",
     "interventions_fast_to_slow",
-    "preparation_version",
     "preparation_converted_blocked_cells",
-    "preparation_converted_nodes",
-    "memory_sampled_peak_bytes",
-    "memory_initial_bytes",
-    "memory_sampling_interval_sec",
-    "memory_method",
-    "memory_exact_scenario_peak_bytes",
-    "path_metrics_optimal_length_cells",
-    "path_metrics_optimal_length_m",
-    "path_metrics_alternative_length_cells",
-    "path_metrics_alternative_length_m",
-    "path_metrics_hausdorff_cells",
-    "path_metrics_hausdorff_m",
-    "reproduction_base_seed",
-    "reproduction_effective_seed",
-    "reproduction_start",
-    "reproduction_goal",
-    "reproduction_formulation_version",
-    "candidate_observed_elapsed_sec",
-    "candidate_observed_after_deadline",
-    "validation_finished_elapsed_sec",
-    "map_generation_sec",
-    "artifact_sec",
-)
-ITERATION_FIELDS = (
-    "identity_run_id",
-    "identity_scenario_id",
-    "identity_execution_order",
-    "iteration",
-)
-
-
-ITERATION_FIELDS += (
-    "solver_status",
-    "stop_reason",
-    "solver_attempted",
-    "completed",
-    "candidate_available",
-    "preparation_sec",
-    "model_build_sec",
-    "solver_sec",
-    "validation_sec",
-    "competing_paths_before",
-    "competing_paths_after",
-    "cut_added",
     "graph_nodes",
     "graph_edges",
+    "full_graph_nodes",
+    "full_graph_edges",
+    "optimal_length_m",
+    "alternative_length_m",
+    "hausdorff_m",
+    "original_optimal_cost",
+    "original_optimal_cost_state",
+    "original_alternative_cost",
+    "original_alternative_cost_state",
+    "final_alternative_cost",
+    "final_alternative_cost_state",
+    "final_optimal_cost",
+    "validation_gap_sec",
     "solver_objective",
     "solver_lower_bound",
     "solver_effective_gap",
+    "memory_sampled_peak_bytes",
+    "error",
 )
 
 
-def export_rows(records: list[dict], kind: str):
-    for supplied in records:
-        record = finite_data(supplied)
-        metrics = record.get("metrics") or {}
-        if kind == "iterations":
-            for iteration in record.get("iteration_metrics") or []:
-                yield {
-                    **flatten({"identity": metrics.get("identity", {})}),
-                    **flatten(iteration),
-                }
-        else:
-            base = {
-                key: value
-                for key, value in record.items()
-                if key
-                not in {
-                    "metrics",
-                    "iteration_metrics",
-                    "modified_grid",
-                    "prepared_grid",
-                }
-            }
-            row = {**flatten(base), **flatten(metrics)}
-            row["reproduction_configuration_json"] = json.dumps(
-                metrics.get("reproduction", {}).get("configuration"),
-                sort_keys=True,
-                separators=(",", ":"),
-                allow_nan=False,
+def export_row(supplied: dict[str, Any]) -> dict[str, Any]:
+    record = finite_data(supplied)
+    metrics = record.get("metrics") or {}
+    identity = metrics.get("identity") or {}
+    reproduction = metrics.get("reproduction") or {}
+    configuration = reproduction.get("configuration") or {}
+    timing = metrics.get("timing") or {}
+    interventions = metrics.get("interventions") or {}
+    preparation = metrics.get("preparation") or {}
+    solver = metrics.get("solver") or {}
+    memory = metrics.get("memory") or {}
+    paths = record.get("path_metrics") or {}
+    cost_states = metrics.get("cost_states") or {}
+    return {
+        **{
+            key: identity.get(key)
+            for key in (
+                "run_id",
+                "benchmark_group_id",
+                "map_id",
+                "prepared_scenario_id",
+                "attempt_index",
+                "execution_order",
             )
-            yield row
+        },
+        **{
+            key: metrics.get(key)
+            for key in (
+                "model",
+                "strategy",
+                "reduction",
+                "astar_scope",
+                "stop_reason",
+                "validation_status",
+                "cardinality_certified",
+                "certificate_scope",
+                "candidate_available",
+                "deadline_outcome",
+                "time_budget_sec",
+                "cuts",
+                "full_graph_nodes",
+                "full_graph_edges",
+                "final_optimal_cost",
+                "validation_gap_sec",
+            )
+        },
+        **{
+            key: record.get(key)
+            for key in (
+                "execution_status",
+                "solver_status",
+                "runtime_sec",
+                "iterations",
+                "graph_nodes",
+                "graph_edges",
+                "original_optimal_cost",
+                "original_alternative_cost",
+                "final_alternative_cost",
+            )
+        },
+        **{
+            key: timing.get(key)
+            for key in (
+                "preparation_sec",
+                "model_build_sec",
+                "solver_sec",
+                "validation_sec",
+            )
+        },
+        **{
+            f"interventions_{key}": interventions.get(key)
+            for key in (
+                "total",
+                "terrain",
+                "obstacle",
+                "opened_terrain",
+                "slope",
+                "robot_speed",
+                "slow_to_fast",
+                "fast_to_slow",
+            )
+        },
+        **{
+            key: paths.get(key)
+            for key in (
+                "optimal_length_m",
+                "alternative_length_m",
+                "hausdorff_m",
+            )
+        },
+        **{
+            f"{key}_cost_state": cost_states.get(key)
+            for key in (
+                "original_optimal",
+                "original_alternative",
+                "final_alternative",
+            )
+        },
+        **{
+            f"solver_{key}": solver.get(key)
+            for key in (
+                "objective",
+                "lower_bound",
+                "effective_gap",
+            )
+        },
+        "solver": configuration.get("DEFAULT_SOLVER"),
+        "map_height": configuration.get("MAP_H"),
+        "map_width": configuration.get("MAP_W"),
+        "connectivity": configuration.get("CONNECTIVITY"),
+        "effective_seed": reproduction.get("effective_seed"),
+        "preparation_converted_blocked_cells": preparation.get(
+            "converted_blocked_cells"
+        ),
+        "memory_sampled_peak_bytes": memory.get("sampled_peak_bytes"),
+        "error": record.get("execution_error") or metrics.get("error"),
+    }
 
 
 @router.post("/export")
 def export_results(payload: ResultsExport):
-    rows = list(export_rows(payload.records, payload.kind))
-    fixed = SUMMARY_FIELDS if payload.kind == "scenarios" else ITERATION_FIELDS
-    fields = fixed + tuple(
-        sorted(set().union(*(row.keys() for row in rows)) - set(fixed))
-    )
+    rows = (export_row(record) for record in payload.records)
     return Response(
-        render_csv(rows, fields, missing="NA"),
+        render_csv(rows, FIELDS, missing="NA"),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": f'attachment; filename="{payload.kind}.csv"',
+            "Content-Disposition": 'attachment; filename="scenarios.csv"',
             "Cache-Control": "no-store",
         },
     )

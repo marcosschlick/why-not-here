@@ -248,20 +248,24 @@ solver tolerances and available package/runtime versions. Hashes include map
 provenance and do not depend on output-directory names.
 
 The Web results view exports recorded terminal attempts via local
-`POST /api/benchmarks/export` with `{records, kind}`. It formats supplied session
+`POST /api/benchmarks/export` with `{records}`. It formats supplied session
 records without scanning stored results. HTTP failures are exported as request
 errors with unknown solver/validation state; a failed request does not prove that
 the server stopped. Session export also works while later scenarios are running.
 
-- `scenarios.csv`: one row per scenario execution or additional attempt,
-  with stable core columns plus sorted additional available fields.
-- `iterations.csv`: one row per attempted iteration, including incomplete attempts,
-  with run identifiers, stages, cuts, paths, sizes and solver diagnostics.
+`scenarios.csv` contains one row per execution or additional attempt and a fixed
+set of columns. It includes run and map identities, model, strategy, reduction,
+grid and solver settings, outcome and certification, timing, iteration and
+intervention counts, graph sizes, route lengths and Hausdorff distance, route
+costs, solver bounds and sampled process memory. These measurements support the
+performance comparisons in Eder and Steinbauer-Wagner (2024) and Brandao et al.
+(2021); the normal and Brandao models have different intervention domains and
+should not be treated as equivalent. Per-iteration data and detailed reproduction
+information remain available in `scenario.json` when an execution record is written.
 
-Missing values use `NA`; structured JSON uses null. `cost_states` distinguishes
-impassable/unreachable costs from unmeasured costs. Configuration and routes are
-retained as JSON-compatible fields. Internal and exported floats keep their
-precision; UI rounding does not modify records. Both exporters share the
+Missing CSV values use `NA`; structured JSON uses null. Cost-state columns distinguish
+impassable/unreachable costs from unmeasured costs. Internal and exported floats keep their
+precision; UI rounding does not modify records. The exporter shares the
 questionnaire's UTF-8 BOM, standard comma-separated CSV quoting and formula-string
 neutralization. Negative numeric values remain numeric. Questionnaire CSV columns
 and response-selection behavior are preserved.
