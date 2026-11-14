@@ -397,7 +397,7 @@ def solve_isp_data(payload: SolveISPRequest) -> dict[str, Any]:
             )
         )
         naming = (
-            payload.naming.model_dump(exclude={"benchmark_group_id"})
+            payload.naming.model_dump(include={"map_index", "benchmark"})
             if payload.naming
             else {}
         )
