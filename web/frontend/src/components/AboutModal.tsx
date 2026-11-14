@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useI18n } from "../i18n";
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -6,6 +7,7 @@ interface AboutModalProps {
 }
 
 export function AboutModal({ isOpen, onClose }: AboutModalProps) {
+  const { t } = useI18n();
   const [isRendered, setIsRendered] = useState<boolean>(isOpen);
   const [isVisible, setIsVisible] = useState<boolean>(isOpen);
 
@@ -68,15 +70,16 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
               Why Not Here?
             </h2>
             <p className="about-paper-subtitle">
-              Contrastive Explanations for 2D Grid Navigation via Inverse
-              Shortest Path (ISP)
+              {t(
+                "Contrastive Explanations for 2D Grid Navigation via Inverse Shortest Path (ISP)",
+              )}
             </p>
           </div>
           <button
             type="button"
             className="btn-modal-close"
             onClick={onClose}
-            aria-label="Close modal"
+            aria-label={t("Close modal")}
           >
             &times;
           </button>
@@ -87,13 +90,13 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
             <div className="about-question-icon">?</div>
             <div className="about-question-content">
               <span className="about-question-lead">
-                Core Contrastive Question
+                {t("Core Contrastive Question")}
               </span>
               <p className="about-question-text">
-                &ldquo;Why was the optimal route{" "}
-                <strong className="symbol-opt">p*</strong> chosen instead of the
-                user-expected alternative{" "}
-                <strong className="symbol-user">p&apos;</strong>?&rdquo;
+                “{t("Why was the optimal route")}{" "}
+                <strong className="symbol-opt">p*</strong>{" "}
+                {t("chosen instead of the user-expected alternative")}{" "}
+                <strong className="symbol-user">p&apos;</strong>?”
               </p>
             </div>
           </div>
@@ -102,60 +105,62 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
             <div className="about-mechanic-card">
               <div className="mechanic-header">
                 <span className="mechanic-num">1</span>
-                <h3>Optimal Planning (A*)</h3>
+                <h3>{t("Optimal Planning (A*)")}</h3>
               </div>
               <p>
-                Computes the least-cost path (
-                <strong className="symbol-opt">p*</strong>) over 2D grids
-                accounting for distance, terrain speeds, elevation slope, robot
-                speed, physical obstacles, and impassable biomes (water, dense
-                forest).
+                {t("Computes the least-cost path (")}
+                <strong className="symbol-opt">p*</strong>
+                {t(
+                  ") over 2D grids accounting for distance, terrain speeds, elevation slope, robot speed, physical obstacles, and impassable biomes (water, dense forest).",
+                )}
               </p>
             </div>
 
             <div className="about-mechanic-card">
               <div className="mechanic-header">
                 <span className="mechanic-num">2</span>
-                <h3>Semantic ISP (MILP)</h3>
+                <h3>{t("Semantic ISP (MILP)")}</h3>
               </div>
               <p>
-                Solves a Mixed-Integer Linear Program seeking minimum-cost
-                interventions making{" "}
-                <strong className="symbol-user">p&apos;</strong> optimal: cell
-                openings, directed slope corrections, environmental speed limits
-                at 1 m/s, and hypothetical robot capability at 5 m/s. Brandao
-                retains its separate terrain-assignment model.
+                {t(
+                  "Solves a Mixed-Integer Linear Program seeking minimum-cost interventions making",
+                )}{" "}
+                <strong className="symbol-user">p&apos;</strong>{" "}
+                {t(
+                  "optimal: cell openings, directed slope corrections, environmental speed limits at 1 m/s, and hypothetical robot capability at 5 m/s. Brandao retains its separate terrain-assignment model.",
+                )}
               </p>
             </div>
 
             <div className="about-mechanic-card">
               <div className="mechanic-header">
                 <span className="mechanic-num">3</span>
-                <h3>Scalability &amp; Certification</h3>
+                <h3>{t("Scalability & Certification")}</h3>
               </div>
               <p>
-                Supports graph reduction (Bounding Box, Reachable Set, Path
-                Only, Sparsified), incremental cutting-plane solving, and batch
-                runs. Full-grid route validation and certification of the
-                minimum intervention objective are reported separately.
+                {t(
+                  "Supports graph reduction (Bounding Box, Reachable Set, Path Only, Sparsified), incremental cutting-plane solving, and batch runs. Full-grid route validation and certification of the minimum intervention objective are reported separately.",
+                )}
               </p>
             </div>
 
             <div className="about-mechanic-card">
               <div className="mechanic-header">
                 <span className="mechanic-num">4</span>
-                <h3>Human-Subjects Questionnaires</h3>
+                <h3>{t("Human-Subjects Questionnaires")}</h3>
               </div>
               <p>
-                Enables structured evaluation studies using saved simulation
-                scenarios, combining explanation assessment and route prediction
-                tasks for participants.
+                {t(
+                  "Enables structured evaluation studies using saved simulation scenarios, combining explanation assessment and route prediction tasks for participants.",
+                )}
               </p>
             </div>
           </div>
 
           <div className="about-meta-box">
-            <span className="about-meta-label">Authors &amp; Affiliation</span>
+            <span className="about-meta-label">
+              {t("Authors & Affiliation")}
+            </span>
             <span className="about-meta-value">
               Marcos da Silva Schlick, Abner Gilead Araujo Guedes, Victor
               Machado Alves &bull; IFSul (Sant&apos;Ana do Livramento, Brazil)
@@ -166,8 +171,9 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
         <div className="about-modal-footer">
           <div className="about-footer-content">
             <span className="about-footer-note">
-              Why Not Here? &bull; Explainable Artificial Intelligence Planning
-              (XAIP)
+              {t(
+                "Why Not Here? · Explainable Artificial Intelligence Planning (XAIP)",
+              )}
             </span>
             <a
               className="about-github-link"
@@ -175,7 +181,7 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
               target="_blank"
               rel="noreferrer"
             >
-              GitHub Repository
+              {t("GitHub Repository")}
             </a>
           </div>
           <button
@@ -183,7 +189,7 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
             className="btn btn-primary btn-sm"
             onClick={onClose}
           >
-            Close
+            {t("Close")}
           </button>
         </div>
       </div>

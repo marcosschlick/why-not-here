@@ -1,4 +1,5 @@
 import { Brand } from "./Brand";
+import { useI18n } from "../i18n";
 
 export interface TopbarProps {
   activeView: "simulation" | "admin";
@@ -18,6 +19,7 @@ export function Topbar({
   onOpenAdmin,
   onOpenAbout,
 }: TopbarProps) {
+  const { t } = useI18n();
   const isAdmin = activeView === "admin";
   return (
     <header className="app-topbar">
@@ -27,7 +29,7 @@ export function Topbar({
         <nav
           className="topbar-segmented-stepper"
           role="tablist"
-          aria-label="Workflow Steps"
+          aria-label={t("Workflow Steps")}
         >
           <button
             type="button"
@@ -37,7 +39,7 @@ export function Topbar({
             onClick={() => onSelectStep("config")}
           >
             <span className="stepper-indicator">{hasMapData ? "✓" : "1"}</span>
-            <span className="stepper-label">Configuration</span>
+            <span className="stepper-label">{t("Configuration")}</span>
           </button>
 
           <button
@@ -49,7 +51,7 @@ export function Topbar({
             disabled={!hasMapData}
           >
             <span className="stepper-indicator">{hasResults ? "✓" : "2"}</span>
-            <span className="stepper-label">Route Definition</span>
+            <span className="stepper-label">{t("Route Definition")}</span>
           </button>
 
           <button
@@ -61,7 +63,7 @@ export function Topbar({
             disabled={!hasResults}
           >
             <span className="stepper-indicator">3</span>
-            <span className="stepper-label">Results &amp; Metrics</span>
+            <span className="stepper-label">{t("Results & Metrics")}</span>
           </button>
         </nav>
 
@@ -88,20 +90,20 @@ export function Topbar({
             <rect x="3" y="2.5" width="10" height="11.5" rx="1.5" />
             <path d="M5.5 6h5M5.5 9h5M5.5 12h3" />
           </svg>
-          <span>Questionnaires</span>
+          <span>{t("Questionnaires")}</span>
         </button>
 
         <button
           type="button"
           className="btn-topbar-about"
           onClick={onOpenAbout}
-          title="About the research and scientific principles"
-          aria-label="About the research and scientific principles"
+          title={t("About the research and scientific principles")}
+          aria-label={t("About the research and scientific principles")}
         >
           <span className="about-btn-icon" aria-hidden="true">
             ⓘ
           </span>
-          <span>About</span>
+          <span>{t("About")}</span>
         </button>
       </div>
     </header>

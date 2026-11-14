@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchMapProfiles } from "../services/api";
 import type { MapProfile, SystemConfig } from "../types";
+import { presentError, useI18n } from "../i18n";
 
 const reductionDescriptions: Record<string, string> = {
   NONE: "Uses the full grid graph without reduction.",
   BBOX: "Keeps the smallest rectangle containing the optimal and desired paths.",
   FLOODFILL: "Keeps the optimal and desired paths and the region between them.",
-  SPARSIFIED: "Contracts eligible chains within the rectangle containing both paths.",
-  PATH_ONLY: "Keeps the nodes and consecutive edges of the optimal and desired paths.",
+  SPARSIFIED:
+    "Contracts eligible chains within the rectangle containing both paths.",
+  PATH_ONLY:
+    "Keeps the nodes and consecutive edges of the optimal and desired paths.",
 };
 
 interface ConfigFormProps {
@@ -50,6 +53,7 @@ export function ConfigForm({
   onSwitchMode,
   queueCount,
 }: ConfigFormProps) {
+  const { language, t, n } = useI18n();
   const [mapSizes, setMapSizes] = useState<MapProfile[]>([]);
   const [profilesError, setProfilesError] = useState<string | null>(null);
   const [mapH, setMapH] = useState<number>(initialConfig?.MAP_H ?? 64);
@@ -61,12 +65,19 @@ export function ConfigForm({
         if (active) setMapSizes(profiles);
       })
       .catch((error: Error) => {
-        if (active) setProfilesError(error.message);
+        if (active)
+          setProfilesError(
+            presentError(
+              language,
+              error,
+              "Failed to load automatic map profiles.",
+            ),
+          );
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [language]);
   const [connectivity, setConnectivity] = useState<number>(
     initialConfig?.CONNECTIVITY ?? 8,
   );
@@ -142,7 +153,10 @@ export function ConfigForm({
     const count = await onAddToQueue(getCurrentConfig(), benchmark);
     if (!count) return;
     setFeedback(
-      `${count} ${workflowMode === "create" ? "configuration(s)" : "execution(s)"} added to queue`,
+      t("{count} {kind} added to queue", {
+        count: n(count),
+        kind: workflowMode === "create" ? t("configurations") : t("executions"),
+      }),
     );
     setTimeout(() => setFeedback(null), 2500);
   }
@@ -158,12 +172,8 @@ export function ConfigForm({
       );
       if (activeMode === "queue") onImportBatchConfigs?.(items, benchmark);
       else onImportConfig?.(items[0].data, benchmark);
-    } catch (error) {
-      setImportError(
-        error instanceof Error
-          ? error.message
-          : "Failed to import configuration.",
-      );
+    } catch {
+      setImportError(t("Failed to import configuration."));
     } finally {
       setIsImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -171,7 +181,11 @@ export function ConfigForm({
   }
   return (
     <div className="config-card">
-      <div className="mode-tabs" role="tablist" aria-label="Operational Mode">
+      <div
+        className="mode-tabs"
+        role="tablist"
+        aria-label={t("Operational Mode")}
+      >
         <button
           type="button"
           role="tab"
@@ -179,7 +193,7 @@ export function ConfigForm({
           className={`mode-tab ${workflowMode === "run" ? "active" : ""}`}
           onClick={() => onSwitchWorkflowMode("run")}
         >
-          Run Experiment
+          {t("Run Experiment")}
         </button>
         <button
           type="button"
@@ -188,11 +202,15 @@ export function ConfigForm({
           className={`mode-tab ${workflowMode === "create" ? "active" : ""}`}
           onClick={() => onSwitchWorkflowMode("create")}
         >
-          Create Configuration
+          {t("Create Configuration")}
         </button>
       </div>
 
-      <div className="mode-tabs" role="tablist" aria-label="Execution Mode">
+      <div
+        className="mode-tabs"
+        role="tablist"
+        aria-label={t("Execution Mode")}
+      >
         <button
           type="button"
           role="tab"
@@ -200,7 +218,7 @@ export function ConfigForm({
           className={`mode-tab ${activeMode === "individual" ? "active" : ""}`}
           onClick={() => onSwitchMode("individual")}
         >
-          Single Run
+          {t("Single Run")}
         </button>
         <button
           type="button"
@@ -209,20 +227,22 @@ export function ConfigForm({
           className={`mode-tab ${activeMode === "queue" ? "active" : ""}`}
           onClick={() => onSwitchMode("queue")}
         >
-          <span>Batch Queue</span>
-          {queueCount > 0 && <span className="tab-badge">{queueCount}</span>}
+          <span>{t("Batch Queue")}</span>
+          {queueCount > 0 && <span className="tab-badge">{n(queueCount)}</span>}
         </button>
       </div>
 
       <fieldset className="config-fieldset">
-        <legend>Pipeline Configuration</legend>
+        <legend>{t("Pipeline Configuration")}</legend>
 
         <div className="config-form-section">
           <div className="config-form-grid-pair">
             <div className="form-group">
               <label htmlFor="mapSize">
-                <span>Map Size</span>
-                <span className="form-group-hint">Approved resolutions</span>
+                <span>{t("Map Size")}</span>
+                <span className="form-group-hint">
+                  {t("Approved resolutions")}
+                </span>
               </label>
               <select
                 id="mapSize"
@@ -233,7 +253,7 @@ export function ConfigForm({
                   (size) => size.height === mapH && size.width === mapW,
                 ) && (
                   <option value={`${mapH}x${mapW}`}>
-                    {mapH}×{mapW}
+                    {n(mapH)}×{n(mapW)}
                   </option>
                 )}
                 {mapSizes.map((option) => (
@@ -241,7 +261,7 @@ export function ConfigForm({
                     key={`${option.height}x${option.width}`}
                     value={`${option.height}x${option.width}`}
                   >
-                    {option.height}×{option.width}
+                    {n(option.height)}×{n(option.width)}
                   </option>
                 ))}
               </select>
@@ -254,16 +274,20 @@ export function ConfigForm({
 
             <div className="form-group">
               <label htmlFor="connectivity">
-                <span>Connectivity</span>
-                <span className="form-group-hint">Neighborhood</span>
+                <span>{t("Connectivity")}</span>
+                <span className="form-group-hint">{t("Neighborhood")}</span>
               </label>
               <select
                 id="connectivity"
                 value={connectivity}
                 onChange={(e) => setConnectivity(Number(e.target.value))}
               >
-                <option value={8}>8-Connected (Chebyshev / Diagonal)</option>
-                <option value={4}>4-Connected (Manhattan / Orthogonal)</option>
+                <option value={8}>
+                  {t("8-Connected (Chebyshev / Diagonal)")}
+                </option>
+                <option value={4}>
+                  {t("4-Connected (Manhattan / Orthogonal)")}
+                </option>
               </select>
             </div>
           </div>
@@ -272,8 +296,10 @@ export function ConfigForm({
             <div className="strategy-column">
               <div className="form-group">
                 <label htmlFor="reductionMethod">
-                  <span>Graph Reduction</span>
-                  <span className="form-group-hint">Pruning strategy</span>
+                  <span>{t("Graph Reduction")}</span>
+                  <span className="form-group-hint">
+                    {t("Pruning strategy")}
+                  </span>
                 </label>
                 <select
                   id="reductionMethod"
@@ -282,18 +308,23 @@ export function ConfigForm({
                   value={reductionMethod}
                   onChange={(e) => setReductionMethod(e.target.value)}
                 >
-                  <option value="NONE">None (Full Grid Graph)</option>
-                  <option value="BBOX">BBOX (Bounding Box)</option>
+                  <option value="NONE">{t("None (Full Grid Graph)")}</option>
+                  <option value="BBOX">{t("BBOX (Bounding Box)")}</option>
                   <option value="FLOODFILL">
-                    Floodfill (Region Between Paths)
+                    {t("Floodfill (Region Between Paths)")}
                   </option>
                   <option value="SPARSIFIED">
-                    Sparsified (Chain Contraction)
+                    {t("Sparsified (Chain Contraction)")}
                   </option>
-                  <option value="PATH_ONLY">Path Only (Path Edges)</option>
+                  <option value="PATH_ONLY">
+                    {t("Path Only (Path Edges)")}
+                  </option>
                 </select>
-                <span id="reduction-description" className="benchmark-description">
-                  {reductionDescriptions[reductionMethod]}
+                <span
+                  id="reduction-description"
+                  className="benchmark-description"
+                >
+                  {t(reductionDescriptions[reductionMethod])}
                 </span>
               </div>
             </div>
@@ -301,8 +332,10 @@ export function ConfigForm({
             <div className="strategy-column">
               <div className="form-group">
                 <label htmlFor="incrementalToggle">
-                  <span>Incremental Solver</span>
-                  <span className="form-group-hint">Cutting-plane method</span>
+                  <span>{t("Incremental Solver")}</span>
+                  <span className="form-group-hint">
+                    {t("Cutting-plane method")}
+                  </span>
                 </label>
                 <div className="toggle-container">
                   <button
@@ -317,25 +350,30 @@ export function ConfigForm({
                   >
                     <span className="toggle-label">
                       {useIncremental
-                        ? "Active (Incremental)"
-                        : "Inactive (Monolithic)"}
+                        ? t("Active (Incremental)")
+                        : t("Inactive (Monolithic)")}
                     </span>
                     <span className="switch-pill">
                       <span className="switch-knob" />
                     </span>
                   </button>
                 </div>
-                <span id="incremental-description" className="benchmark-description">
-                  Incremental + None runs three scenarios per map and route outside benchmark.
+                <span
+                  id="incremental-description"
+                  className="benchmark-description"
+                >
+                  {t(
+                    "Incremental + None runs three scenarios per map and route outside benchmark.",
+                  )}
                 </span>
               </div>
             </div>
             <div className="strategy-column">
               <div className="form-group">
                 <label htmlFor="incrementalAstarScope">
-                  <span>Incremental A* Scope</span>
+                  <span>{t("Incremental A* Scope")}</span>
                   <span className="form-group-hint">
-                    Competing paths search
+                    {t("Competing paths search")}
                   </span>
                 </label>
                 <select
@@ -349,31 +387,38 @@ export function ConfigForm({
                     benchmark || !useIncremental || reductionMethod === "NONE"
                   }
                 >
-                  <option value="GLOBAL">Global Grid</option>
-                  <option value="SUBGRAPH">Reduced Subgraph</option>
+                  <option value="GLOBAL">{t("Global Grid")}</option>
+                  <option value="SUBGRAPH">{t("Reduced Subgraph")}</option>
                 </select>
-                <span id="incremental-scope-description" className="benchmark-description">
+                <span
+                  id="incremental-scope-description"
+                  className="benchmark-description"
+                >
                   {benchmark
-                    ? "Benchmark runs both scopes; None uses global search for both."
+                    ? t(
+                        "Benchmark runs both scopes; None uses global search for both.",
+                      )
                     : incrementalAstarScope === "SUBGRAPH"
-                      ? "Searches the subgraph and validates optimal candidates on the full grid."
-                      : "Searches for competing paths across the full grid."}
+                      ? t(
+                          "Searches the subgraph and validates optimal candidates on the full grid.",
+                        )
+                      : t("Searches for competing paths across the full grid.")}
                 </span>
               </div>
             </div>
             <div className="strategy-column benchmark-setting">
               <div className="form-group">
                 <label htmlFor="benchmarkToggle">
-                  <span>Benchmark</span>
+                  <span>{t("Benchmark")}</span>
                   <span className="form-group-hint">
-                    17 scenarios per map
+                    {t("17 scenarios per map")}
                   </span>
                 </label>
                 <div className="toggle-container">
                   <button
                     type="button"
                     id="benchmarkToggle"
-                    aria-label="Benchmark"
+                    aria-label={t("Benchmark")}
                     role="switch"
                     aria-checked={benchmark}
                     aria-describedby="benchmark-description"
@@ -382,7 +427,7 @@ export function ConfigForm({
                     disabled={isGenerating}
                   >
                     <span className="toggle-label">
-                      {benchmark ? "On" : "Off"}
+                      {benchmark ? t("On") : t("Off")}
                     </span>
                     <span className="switch-pill">
                       <span className="switch-knob" />
@@ -394,8 +439,12 @@ export function ConfigForm({
                   className="benchmark-description"
                 >
                   {workflowMode === "create"
-                    ? "Saves fifteen normal configurations per map; execution adds both Brandao scenarios."
-                    : "Runs fifteen normal combinations plus Brandao monolithic and incremental without reduction."}
+                    ? t(
+                        "Saves fifteen normal configurations per map; execution adds both Brandao scenarios.",
+                      )
+                    : t(
+                        "Runs fifteen normal combinations plus Brandao monolithic and incremental without reduction.",
+                      )}
                 </span>
               </div>
             </div>
@@ -418,14 +467,16 @@ export function ConfigForm({
               </span>
               <div className="advanced-summary-content">
                 <span className="advanced-summary-title">
-                  Advanced Settings
+                  {t("Advanced Settings")}
                 </span>
                 <span className="advanced-summary-desc">
-                  Solver limits and map seed
+                  {t("Solver limits and map seed")}
                 </span>
               </div>
             </div>
-            <span className="advanced-settings-badge">Automatic terrain</span>
+            <span className="advanced-settings-badge">
+              {t("Automatic terrain")}
+            </span>
           </button>
 
           <div
@@ -437,13 +488,15 @@ export function ConfigForm({
               <div className="advanced-settings-body">
                 <div className="advanced-group">
                   <h4 className="advanced-group-title">
-                    Planning &amp; Execution
+                    {t("Planning & Execution")}
                   </h4>
                   <div className="form-grid">
                     <div className="form-group">
                       <label htmlFor="mapSeed">
-                        <span>Map Default Seed</span>
-                        <span className="form-group-hint">Noise RNG seed</span>
+                        <span>{t("Map Default Seed")}</span>
+                        <span className="form-group-hint">
+                          {t("Noise RNG seed")}
+                        </span>
                       </label>
                       <input
                         id="mapSeed"
@@ -456,8 +509,10 @@ export function ConfigForm({
 
                     <div className="form-group">
                       <label htmlFor="defaultSolver">
-                        <span>MILP Solver</span>
-                        <span className="form-group-hint">HiGHS engine</span>
+                        <span>{t("MILP Solver")}</span>
+                        <span className="form-group-hint">
+                          {t("HiGHS engine")}
+                        </span>
                       </label>
                       <select
                         id="defaultSolver"
@@ -470,9 +525,11 @@ export function ConfigForm({
 
                     <div className="form-group">
                       <label htmlFor="ispTimeBudget">
-                        <span>Scenario Time Budget (sec)</span>
+                        <span>{t("Scenario Time Budget (sec)")}</span>
                         <span className="form-group-hint">
-                          Preparation through validation; cooperative deadline
+                          {t(
+                            "Preparation through validation; cooperative deadline",
+                          )}
                         </span>
                       </label>
                       <input
@@ -503,7 +560,7 @@ export function ConfigForm({
                 onClick={handleDirectRun}
                 disabled={isGenerating}
               >
-                {isGenerating ? "Generating Map..." : "Generate Map"}
+                {isGenerating ? t("Generating Map...") : t("Generate Map")}
               </button>
             )}
 
@@ -515,8 +572,8 @@ export function ConfigForm({
                 disabled={isGenerating}
               >
                 {workflowMode === "create"
-                  ? "+ Add Configuration"
-                  : "+ Add to Queue"}
+                  ? t("+ Add Configuration")
+                  : t("+ Add to Queue")}
               </button>
             )}
 
@@ -528,11 +585,13 @@ export function ConfigForm({
                 disabled={isGenerating || isImporting}
                 title={
                   activeMode === "queue"
-                    ? "Import one or more configuration JSON files into the queue"
-                    : "Import configuration JSON and load alternative route"
+                    ? t(
+                        "Import one or more configuration JSON files into the queue",
+                      )
+                    : t("Import configuration JSON and load alternative route")
                 }
               >
-                {isImporting ? "Opening..." : "Import Configuration"}
+                {isImporting ? t("Opening...") : t("Import Configuration")}
               </button>
             )}
           </div>
@@ -553,7 +612,7 @@ export function ConfigForm({
             type="button"
             className="alert-close"
             onClick={() => setImportError(null)}
-            aria-label="Dismiss notification"
+            aria-label={t("Dismiss notification")}
           >
             &times;
           </button>

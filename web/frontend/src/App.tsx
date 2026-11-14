@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { AboutModal } from "./components/AboutModal";
 import { ConfigForm } from "./components/ConfigForm";
 import { ConfirmModal } from "./components/ConfirmModal";
@@ -33,6 +39,8 @@ import type {
   SaveConfigurationItem,
   SystemConfig,
 } from "./types";
+import { FrontendError, presentError, useI18n } from "./i18n";
+import { LanguageProvider } from "./LanguageProvider";
 function isSameMap(a?: SystemConfig | null, b?: SystemConfig | null): boolean {
   if (!a || !b) return false;
   const mapConfigKeys: (keyof SystemConfig)[] = [
@@ -67,7 +75,11 @@ function arePathsEqual(
   return p1.every(([r1, c1], i) => r1 === p2[i][0] && c1 === p2[i][1]);
 }
 export function App() {
+  const { language, t, n } = useI18n();
   const [showAdmin, setShowAdmin] = useState(false);
+  useLayoutEffect(() => {
+    document.documentElement.lang = showAdmin ? "en" : language;
+  }, [language, showAdmin]);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const initialConfigRef = useRef<SystemConfig | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<"individual" | "queue">(
@@ -75,17 +87,21 @@ export function App() {
   );
   const [workflowMode, setWorkflowMode] = useState<"run" | "create">("run");
   const [benchmark, setBenchmark] = useState(false);
-  const [executionRecords, setExecutionRecords] = useState<{ group: string; result: LastResult }[]>([]);
+  const [executionRecords, setExecutionRecords] = useState<
+    { group: string; result: LastResult }[]
+  >([]);
   const [exportGroup, setExportGroup] = useState("");
-  const [batchDirectory, setBatchDirectory] = useState<{ name: string; output_dir: string } | null>(null);
-  const [singleOutputDirectory, setSingleOutputDirectory] = useState<string | null>(null);
+  const [batchDirectory, setBatchDirectory] = useState<{
+    name: string;
+    output_dir: string;
+  } | null>(null);
+  const [singleOutputDirectory, setSingleOutputDirectory] = useState<
+    string | null
+  >(null);
   const [resultsNoticeDismissed, setResultsNoticeDismissed] = useState(false);
   const executionOrder = useRef(0);
   const attempts = useRef(new Map<string, number>());
-  function nextExecution(
-    key: string,
-    group?: string,
-  ): ExecutionMetadata {
+  function nextExecution(key: string, group?: string): ExecutionMetadata {
     const attempt = (attempts.current.get(key) ?? 0) + 1;
     attempts.current.set(key, attempt);
     return {
@@ -158,14 +174,12 @@ export function App() {
         setConfig(initialConfig);
       } catch (err) {
         setErrorMessage(
-          err instanceof Error
-            ? err.message
-            : "Failed to load server configuration",
+          presentError(language, err, "Failed to load server configuration"),
         );
       }
     }
     loadInitial();
-  }, []);
+  }, [language]);
   async function handleGenerateMap(
     targetConfig: SystemConfig,
     useBenchmark: boolean,
@@ -197,9 +211,7 @@ export function App() {
       setCurrentStep("route_canvas");
     } catch (error) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Error preparing map scenarios",
+        presentError(language, error, "Error preparing map scenarios"),
       );
     } finally {
       setIsGeneratingMap(false);
@@ -240,9 +252,7 @@ export function App() {
       }
     } catch (error) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Error importing configuration",
+        presentError(language, error, "Error importing configuration"),
       );
     } finally {
       setIsGeneratingMap(false);
@@ -280,13 +290,15 @@ export function App() {
         );
       } catch (error) {
         errors.push(
-          `${file.name}: ${error instanceof Error ? error.message : "Import failed"}`,
+          `${file.name}: ${presentError(language, error, "Import failed")}`,
         );
       }
     }
     setQueue((previous) => [...previous, ...items]);
     if (items.length)
-      setSuccessMessage(`Imported ${items.length} items to the queue.`);
+      setSuccessMessage(
+        t("Imported {count} items to the queue.", { count: n(items.length) }),
+      );
     if (errors.length) setErrorMessage(errors.join("; "));
     setIsGeneratingMap(false);
   }
@@ -301,7 +313,7 @@ export function App() {
       mapData.connectivity,
     );
     if (routeError) {
-      setErrorMessage(routeError);
+      setErrorMessage(t(routeError));
       return;
     }
     setElapsedTime(0);
@@ -339,7 +351,10 @@ export function App() {
         optimal_path:
           response.result.original_optimal_path || mapData.optimal_path,
       });
-      setExecutionRecords((previous) => [...previous, { group: execution.run_id, result: response.result }]);
+      setExecutionRecords((previous) => [
+        ...previous,
+        { group: execution.run_id, result: response.result },
+      ]);
       setSingleOutputDirectory(response.output_dir);
       setLastResult(response.result);
       setArtifacts(response.artifacts);
@@ -353,16 +368,19 @@ export function App() {
         userPath,
         execution,
       );
-      setExecutionRecords((previous) => [...previous, { group: execution.run_id, result: failed }]);
+      setExecutionRecords((previous) => [
+        ...previous,
+        { group: execution.run_id, result: failed },
+      ]);
       setLastResult(failed);
       setCurrentStep("results");
       setErrorMessage(
-        err instanceof Error ? err.message : "Error executing ISP solver",
+        presentError(language, err, "Error executing ISP solver"),
       );
     } finally {
       setIsSolvingISP(false);
     }
-  }, [mapData, userPath]);
+  }, [mapData, userPath, language, t]);
   async function handleAddToQueue(
     newConfig: SystemConfig,
     useBenchmark: boolean,
@@ -382,7 +400,7 @@ export function App() {
       return items.length;
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Error preparing scenarios",
+        presentError(language, error, "Error preparing scenarios"),
       );
       return 0;
     } finally {
@@ -397,11 +415,11 @@ export function App() {
       );
     if (item?.mapData) {
       setConfirmation({
-        title: "Discard Prepared Item",
+        title: t("Discard Prepared Item"),
         description: item.benchmarkGroup
-          ? "Discard this scenario group and all its executions?"
-          : "Discard this prepared item?",
-        confirmLabel: "Discard Item",
+          ? t("Discard this scenario group and all its executions?")
+          : t("Discard this prepared item?"),
+        confirmLabel: t("Discard Item"),
         onConfirm: removeItem,
       });
       return;
@@ -416,9 +434,9 @@ export function App() {
     };
     if (queue.some((item) => item.mapData)) {
       setConfirmation({
-        title: "Discard Prepared Items",
-        description: "Discard the prepared items?",
-        confirmLabel: "Discard Items",
+        title: t("Discard Prepared Items"),
+        description: t("Discard the prepared items?"),
+        confirmLabel: t("Discard Items"),
         onConfirm: clearQueue,
       });
       return;
@@ -463,9 +481,7 @@ export function App() {
       setCurrentStep("route_canvas");
     } catch (err) {
       setErrorMessage(
-        err instanceof Error
-          ? err.message
-          : "Error generating initial batch map",
+        presentError(language, err, "Error generating initial batch map"),
       );
       setIsBatchMode(false);
     } finally {
@@ -520,9 +536,7 @@ export function App() {
         setUserPath(initialPath);
       } catch (err) {
         setErrorMessage(
-          err instanceof Error
-            ? err.message
-            : `Error generating map for item ${targetIndex + 1}`,
+          presentError(language, err, "Error generating map for item {item}"),
         );
       } finally {
         setIsGeneratingMap(false);
@@ -547,11 +561,15 @@ export function App() {
         ],
       });
       resetPreparation();
-      setSuccessMessage(`Configuration saved to /configurations/${directoryName(result.saved_files[0])}`);
+      setSuccessMessage(
+        t("Configuration saved to {path}", {
+          path: `/configurations/${directoryName(result.saved_files[0])}`,
+        }),
+      );
       setCurrentStep("config");
     } catch (err) {
       setErrorMessage(
-        err instanceof Error ? err.message : "Error saving configuration",
+        presentError(language, err, "Error saving configuration"),
       );
     } finally {
       setIsGeneratingMap(false);
@@ -559,7 +577,7 @@ export function App() {
   }
   async function handleSaveBatchConfigurations(finalQueue: QueueItem[]) {
     if (finalQueue.some((item) => !item.mapData || !item.userPath?.length)) {
-      setErrorMessage("Every batch item must have a map and route.");
+      setErrorMessage(t("Every batch item must have a map and route."));
       return;
     }
     setElapsedTime(0);
@@ -582,15 +600,16 @@ export function App() {
       });
       resetPreparation();
       setSuccessMessage(
-        `Saved ${result.saved_files.length} configurations to /configurations/${directoryName(result.saved_files[0].replace(/[\\/][^\\/]+$/, ""))}/`,
+        t("Saved {count} configurations to {path}", {
+          count: n(result.saved_files.length),
+          path: `/configurations/${directoryName(result.saved_files[0].replace(/[\\/][^\\/]+$/, ""))}/`,
+        }),
       );
       setIsBatchMode(false);
       setCurrentStep("config");
     } catch (err) {
       setErrorMessage(
-        err instanceof Error
-          ? err.message
-          : "Error saving batch configurations",
+        presentError(language, err, "Error saving batch configurations"),
       );
     } finally {
       setIsGeneratingMap(false);
@@ -658,7 +677,9 @@ export function App() {
             : it,
         ),
       );
-      setBatchRouteFeedback(`Route copied from Map #${sourceIdx + 1}`);
+      setBatchRouteFeedback(
+        t("Route copied from Map #{map}", { map: n(sourceIdx + 1) }),
+      );
       setTimeout(() => setBatchRouteFeedback(null), 3500);
     }
   }
@@ -682,7 +703,9 @@ export function App() {
       ),
     );
     setBatchRouteFeedback(
-      `Route applied to all ${targetIndices.length + 1} identical maps`,
+      t("Route applied to all {count} identical maps", {
+        count: n(targetIndices.length + 1),
+      }),
     );
     setTimeout(() => setBatchRouteFeedback(null), 3500);
   }
@@ -705,7 +728,9 @@ export function App() {
     );
     if (invalid >= 0) {
       setErrorMessage(
-        `Review the route for map ${invalid + 1} before solving the batch.`,
+        t("Review the route for map {map} before solving the batch.", {
+          map: n(invalid + 1),
+        }),
       );
       return;
     }
@@ -721,7 +746,9 @@ export function App() {
         setBatchDirectory(batch);
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to create batch directory.");
+      setErrorMessage(
+        presentError(language, error, "Failed to create batch directory."),
+      );
       setIsSolvingISP(false);
       return;
     }
@@ -746,7 +773,7 @@ export function App() {
       try {
         const effectivePath = item.userPath || item.mapData?.auto_path || [];
         if (!item.mapData) {
-          throw new Error("Batch item has no generated map.");
+          throw new FrontendError("Batch item has no generated map.");
         }
         const response = await solveISP(
           effectivePath,
@@ -761,7 +788,10 @@ export function App() {
               item.mapData.generation?.runtime_sec ?? undefined,
           },
         );
-        setExecutionRecords((previous) => [...previous, { group: batch.output_dir, result: response.result }]);
+        setExecutionRecords((previous) => [
+          ...previous,
+          { group: batch.output_dir, result: response.result },
+        ]);
         setQueue((prev) =>
           prev.map((it, idx) =>
             idx === i
@@ -792,8 +822,7 @@ export function App() {
         }
         setCacheKey(Date.now());
       } catch (err) {
-        const msg =
-          err instanceof Error ? err.message : "Batch execution failed";
+        const msg = presentError(language, err, "Batch execution failed");
         const failure = item.mapData
           ? requestFailure(
               err,
@@ -803,11 +832,21 @@ export function App() {
               execution,
             )
           : undefined;
-        if (failure) setExecutionRecords((previous) => [...previous, { group: batch.output_dir, result: failure }]);
+        if (failure)
+          setExecutionRecords((previous) => [
+            ...previous,
+            { group: batch.output_dir, result: failure },
+          ]);
         setQueue((prev) =>
           prev.map((it, idx) =>
             idx === i
-              ? { ...it, status: "failed", error: msg, result: failure, batchDir: batch.output_dir }
+              ? {
+                  ...it,
+                  status: "failed",
+                  error: msg,
+                  result: failure,
+                  batchDir: batch.output_dir,
+                }
               : it,
           ),
         );
@@ -818,7 +857,10 @@ export function App() {
   function handleSelectQueueItem(item: QueueItem) {
     if (item.result) {
       if (item.batchDir) {
-        setBatchDirectory({ name: item.batchDir.replace(/\/$/, "").split(/[\\/]/).pop() || "", output_dir: item.batchDir });
+        setBatchDirectory({
+          name: item.batchDir.replace(/\/$/, "").split(/[\\/]/).pop() || "",
+          output_dir: item.batchDir,
+        });
         setExportGroup(item.batchDir);
         setIsBatchMode(true);
       }
@@ -840,7 +882,9 @@ export function App() {
   }
   const hasMapData = Boolean(mapData);
   const hasResults = Boolean(lastResult || (isBatchMode && queue.length > 0));
-  const outputDirectory = isBatchMode ? batchDirectory?.output_dir : singleOutputDirectory;
+  const outputDirectory = isBatchMode
+    ? batchDirectory?.output_dir
+    : singleOutputDirectory;
   function clearSimulation() {
     setMapData(null);
     setUserPath([]);
@@ -867,11 +911,17 @@ export function App() {
   }
   function handleSelectStep(step: "config" | "route_canvas" | "results") {
     if (isSolvingISP || isGeneratingMap) return;
-    if (step === "config" && workflowMode === "run" && executionRecords.length > 0) {
+    if (
+      step === "config" &&
+      workflowMode === "run" &&
+      executionRecords.length > 0
+    ) {
       setConfirmation({
-        title: "Return to Configuration",
-        description: "The current results and routes will be lost. Return to configuration?",
-        confirmLabel: "Return to Configuration",
+        title: t("Return to Configuration"),
+        description: t(
+          "The current results and routes will be lost. Return to configuration?",
+        ),
+        confirmLabel: t("Return to Configuration"),
         onConfirm: () => {
           clearSimulation();
           setRunQueue([]);
@@ -898,7 +948,7 @@ export function App() {
   }
   if (showAdmin) {
     return (
-      <>
+      <LanguageProvider language="en">
         <QuestionnaireAdmin
           currentStep={currentStep}
           hasMapData={hasMapData}
@@ -913,7 +963,7 @@ export function App() {
           isOpen={isAboutOpen}
           onClose={() => setIsAboutOpen(false)}
         />
-      </>
+      </LanguageProvider>
     );
   }
   return (
@@ -937,6 +987,7 @@ export function App() {
               type="button"
               className="alert-close"
               onClick={() => setErrorMessage(null)}
+              aria-label={t("Dismiss error message")}
             >
               &times;
             </button>
@@ -949,25 +1000,31 @@ export function App() {
               type="button"
               className="alert-close"
               onClick={() => setSuccessMessage(null)}
-              aria-label="Dismiss success message"
+              aria-label={t("Dismiss success message")}
             >
               &times;
             </button>
           </div>
         )}
-        {currentStep === "results" && outputDirectory && !resultsNoticeDismissed && (
-          <div className="queue-banner" role="status">
-            <span className="alert-text">Results saved to /results/{directoryName(outputDirectory)}/</span>
-            <button
-              type="button"
-              className="alert-close"
-              onClick={() => setResultsNoticeDismissed(true)}
-              aria-label="Dismiss results location"
-            >
-              &times;
-            </button>
-          </div>
-        )}
+        {currentStep === "results" &&
+          outputDirectory &&
+          !resultsNoticeDismissed && (
+            <div className="queue-banner" role="status">
+              <span className="alert-text">
+                {t("Results saved to {path}", {
+                  path: `/results/${directoryName(outputDirectory)}/`,
+                })}
+              </span>
+              <button
+                type="button"
+                className="alert-close"
+                onClick={() => setResultsNoticeDismissed(true)}
+                aria-label={t("Dismiss results location")}
+              >
+                &times;
+              </button>
+            </div>
+          )}
 
         {currentStep === "config" && (
           <div key="step-config" className="step-container config-step">
@@ -980,10 +1037,11 @@ export function App() {
                   return;
                 }
                 setConfirmation({
-                  title: "Generate New Maps",
-                  description:
+                  title: t("Generate New Maps"),
+                  description: t(
                     "Discard the current simulation and generate new maps?",
-                  confirmLabel: "Generate New Maps",
+                  ),
+                  confirmLabel: t("Generate New Maps"),
                   onConfirm: action,
                 });
               }}
@@ -1080,8 +1138,8 @@ export function App() {
               }}
               busyButtonText={
                 workflowMode === "create"
-                  ? "Saving Configuration..."
-                  : "Solving ISP..."
+                  ? t("Saving Configuration...")
+                  : t("Solving ISP...")
               }
               solveButtonText={
                 workflowMode === "create"
@@ -1089,16 +1147,21 @@ export function App() {
                     ? reviewIndices(queue).some(
                         (index) => index > batchReviewIndex,
                       )
-                      ? `Save Route & Next Map (${reviewPosition + 2}/${reviewSteps.length})`
-                      : "Save Batch Configurations"
-                    : "Save Configuration"
+                      ? t("Save Route & Next Map ({current}/{total})", {
+                          current: n(reviewPosition + 2),
+                          total: n(reviewSteps.length),
+                        })
+                      : t("Save Batch Configurations")
+                    : t("Save Configuration")
                   : isBatchMode
                     ? reviewIndices(queue).some(
                         (index) => index > batchReviewIndex,
                       )
-                      ? "Save Route & Next Map →"
-                      : `Solve Batch (${queue.length} Runs)`
-                    : "Solve ISP"
+                      ? t("Save Route & Next Map →")
+                      : t("Solve Batch ({count} Runs)", {
+                          count: n(queue.length),
+                        })
+                    : t("Solve ISP")
               }
               onPrevMap={
                 isBatchMode && batchReviewIndex > 0
@@ -1158,13 +1221,29 @@ export function App() {
                           <div className="batch-stepper-label">
                             <span className="batch-stepper-title">
                               {workflowMode === "create"
-                                ? `Configuration Route Setup, Map ${reviewPosition + 1} of ${reviewSteps.length}`
-                                : `Batch Route Setup - Map ${reviewPosition + 1} of ${reviewSteps.length}`}
+                                ? t(
+                                    "Configuration Route Setup, Map {current} of {total}",
+                                    {
+                                      current: n(reviewPosition + 1),
+                                      total: n(reviewSteps.length),
+                                    },
+                                  )
+                                : t(
+                                    "Batch Route Setup - Map {current} of {total}",
+                                    {
+                                      current: n(reviewPosition + 1),
+                                      total: n(reviewSteps.length),
+                                    },
+                                  )}
                             </span>
                             <span className="batch-stepper-sub">
                               {workflowMode === "create"
-                                ? "Define one route per map; Benchmark combinations share that route."
-                                : "Define custom routes for all maps in the batch before solving."}
+                                ? t(
+                                    "Define one route per map; Benchmark combinations share that route.",
+                                  )
+                                : t(
+                                    "Define custom routes for all maps in the batch before solving.",
+                                  )}
                             </span>
                           </div>
 
@@ -1201,13 +1280,35 @@ export function App() {
                                 >
                                   <span>
                                     {workflowMode === "create"
-                                      ? `Item ${idx + 1} (${item.config.MAP_H}x${item.config.MAP_W})`
-                                      : `Map ${reviewSteps.indexOf(idx) + 1} (${item.config.MAP_H}x${item.config.MAP_W})${item.groupKind === "benchmark" ? " · 17 scenarios" : item.groupKind === "comparison" ? " · 3 scenarios" : ""}`}
+                                      ? t("Item {item} ({height}x{width})", {
+                                          item: n(idx + 1),
+                                          height: n(item.config.MAP_H),
+                                          width: n(item.config.MAP_W),
+                                        })
+                                      : t(
+                                          "Map {map} ({height}x{width}){suffix}",
+                                          {
+                                            map: n(
+                                              reviewSteps.indexOf(idx) + 1,
+                                            ),
+                                            height: n(item.config.MAP_H),
+                                            width: n(item.config.MAP_W),
+                                            suffix:
+                                              item.groupKind === "benchmark"
+                                                ? t(" · 17 scenarios")
+                                                : item.groupKind ===
+                                                    "comparison"
+                                                  ? t(" · 3 scenarios")
+                                                  : "",
+                                          },
+                                        )}
                                   </span>
                                   <span
                                     className={`batch-step-status-pill ${isItemConnected ? "ready" : "pending"}`}
                                   >
-                                    {isItemConnected ? "Ready" : "Pending"}
+                                    {isItemConnected
+                                      ? t("Ready")
+                                      : t("Pending")}
                                   </span>
                                 </button>
                               );
@@ -1222,26 +1323,50 @@ export function App() {
                                 <div className="identical-maps-info">
                                   <span className="identical-maps-title">
                                     {areAllMatchingSynced
-                                      ? "Route Synchronized Across All Identical Maps"
-                                      : "Identical Map Geometry Detected"}
+                                      ? t(
+                                          "Route Synchronized Across All Identical Maps",
+                                        )
+                                      : t("Identical Map Geometry Detected")}
                                   </span>
                                   <span className="identical-maps-desc">
                                     {areAllMatchingSynced
-                                      ? `All ${matchingBatchIndices.length + 1} identical maps in this batch share this exact verified route (${userPath.length} steps).`
+                                      ? t(
+                                          "All {maps} identical maps in this batch share this exact verified route ({steps} steps).",
+                                          {
+                                            maps: n(
+                                              matchingBatchIndices.length + 1,
+                                            ),
+                                            steps: n(userPath.length),
+                                          },
+                                        )
                                       : matchingRunWithRoute &&
                                           !isSyncedWithSource
-                                        ? `Map #${matchingRunWithRoute.idx + 1} has a verified route (${matchingRunWithRoute.item.userPath?.length} steps). You can copy it with 1 click, or keep a custom route.`
-                                        : `Maps ${[
-                                            batchReviewIndex + 1,
-                                            ...matchingBatchIndices.map(
-                                              (m) => m.idx + 1,
-                                            ),
-                                          ]
-                                            .sort()
-                                            .map((n) => `#${n}`)
-                                            .join(
-                                              ", ",
-                                            )} share this exact terrain & obstacles. You can draw once and apply to all.`}
+                                        ? t(
+                                            "Map #{map} has a verified route ({steps} steps). You can copy it with 1 click, or keep a custom route.",
+                                            {
+                                              map: n(
+                                                matchingRunWithRoute.idx + 1,
+                                              ),
+                                              steps: n(
+                                                matchingRunWithRoute.item
+                                                  .userPath?.length ?? 0,
+                                              ),
+                                            },
+                                          )
+                                        : t(
+                                            "Maps {maps} share this exact terrain & obstacles. You can draw once and apply to all.",
+                                            {
+                                              maps: [
+                                                batchReviewIndex + 1,
+                                                ...matchingBatchIndices.map(
+                                                  (m) => m.idx + 1,
+                                                ),
+                                              ]
+                                                .sort()
+                                                .map((index) => `#${n(index)}`)
+                                                .join(", "),
+                                            },
+                                          )}
                                   </span>
                                 </div>
 
@@ -1263,10 +1388,13 @@ export function App() {
                                           matchingRunWithRoute.idx,
                                         )
                                       }
-                                      title={`Copy route from Map #${matchingRunWithRoute.idx + 1}`}
+                                      title={t("Copy route from Map #{map}", {
+                                        map: n(matchingRunWithRoute.idx + 1),
+                                      })}
                                     >
-                                      Copy Route from Map #
-                                      {matchingRunWithRoute.idx + 1}
+                                      {t("Copy Route from Map #{map}", {
+                                        map: n(matchingRunWithRoute.idx + 1),
+                                      })}
                                     </button>
                                   )}
 
@@ -1286,11 +1414,20 @@ export function App() {
                                     )
                                   }
                                   disabled={!isCurrentRouteComplete}
-                                  title="Apply current route to all matching runs"
+                                  title={t(
+                                    "Apply current route to all matching runs",
+                                  )}
                                 >
                                   {areAllMatchingSynced
-                                    ? "Re-apply to All Identical Maps"
-                                    : `Apply Route to All ${matchingBatchIndices.length + 1} Identical Maps`}
+                                    ? t("Re-apply to All Identical Maps")
+                                    : t(
+                                        "Apply Route to All {count} Identical Maps",
+                                        {
+                                          count: n(
+                                            matchingBatchIndices.length + 1,
+                                          ),
+                                        },
+                                      )}
                                 </button>
                               </div>
                             </div>
@@ -1307,7 +1444,9 @@ export function App() {
         {currentStep === "results" && (
           <div key="step-results" className="step-container results-step">
             <ResultsView
-              records={executionRecords.filter((record) => record.group === exportGroup).map((record) => record.result)}
+              records={executionRecords
+                .filter((record) => record.group === exportGroup)
+                .map((record) => record.result)}
               outputDirectory={outputDirectory}
               result={lastResult}
               mapData={
@@ -1371,7 +1510,9 @@ export function App() {
           >
             <div className="loading-spinner" aria-hidden="true" />
             <h3>
-              {isGeneratingMap ? "Generating Map..." : "Solving ISP Model..."}
+              {isGeneratingMap
+                ? t("Generating Map...")
+                : t("Solving ISP Model...")}
             </h3>
             {(() => {
               if (isGeneratingMap) return null;
@@ -1384,14 +1525,14 @@ export function App() {
                 activeConfig.DEFAULT_REDUCTION_METHOD,
               );
               const solverMode = activeConfig.USE_INCREMENTAL_SOLVER
-                ? "Iterative / Incremental MILP"
-                : "Standard Monolithic MILP";
+                ? t("Iterative / Incremental MILP")
+                : t("Standard Monolithic MILP");
               const astarScope =
                 activeConfig.USE_INCREMENTAL_SOLVER &&
                 activeConfig.DEFAULT_REDUCTION_METHOD !== "NONE"
                   ? activeConfig.INCREMENTAL_ASTAR_SCOPE === "SUBGRAPH"
-                    ? "Reduced Subgraph"
-                    : "Global Grid"
+                    ? t("Reduced Subgraph")
+                    : t("Global Grid")
                   : null;
               const h = activeConfig.MAP_H ?? 20;
               const w = activeConfig.MAP_W ?? 20;
@@ -1399,29 +1540,34 @@ export function App() {
               return (
                 <div className="loading-params-summary">
                   <span className="loading-param-chip">
-                    Reduction Method: {reduction}
+                    {t("Reduction Method:")} {t(reduction)}
                   </span>
                   <span className="loading-param-chip">
-                    Solver Mode: {solverMode}
+                    {t("Solver Mode:")} {solverMode}
                   </span>
                   {astarScope && (
                     <span className="loading-param-chip">
-                      A* Scope: {astarScope}
+                      {t("A* Scope:")} {astarScope}
                     </span>
                   )}
                   <span className="loading-param-chip">
-                    Grid Dimension: {h}×{w} (Seed: {seed})
+                    {t("Grid Dimension:")} {n(h)}×{n(w)} ({t("Seed:")} {n(seed)}
+                    )
                   </span>
                 </div>
               );
             })()}
             <p className="loading-overlay-desc">
               {isGeneratingMap
-                ? "Preparing terrain, elevation and routes. Larger maps may take longer."
-                : "Solving ISP formulation via Mixed-Integer Linear Programming (MILP). Because the inverse problem under discrete terrain attributes is NP-hard, solving large grids or runs without graph reduction explores a large combinatorial space and may take several minutes depending on hardware. Please wait..."}
+                ? t(
+                    "Preparing terrain, elevation and routes. Larger maps may take longer.",
+                  )
+                : t(
+                    "Solving ISP formulation via Mixed-Integer Linear Programming (MILP). Because the inverse problem under discrete terrain attributes is NP-hard, solving large grids or runs without graph reduction explores a large combinatorial space and may take several minutes depending on hardware. Please wait...",
+                  )}
             </p>
             <div className="loading-elapsed-timer">
-              Elapsed time: <strong>{elapsedTime}s</strong>
+              {t("Elapsed time:")} <strong>{n(elapsedTime)}s</strong>
             </div>
           </div>
         </div>

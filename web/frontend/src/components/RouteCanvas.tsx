@@ -14,6 +14,7 @@ import {
 import { useMapCanvasFit } from "../utils/useMapCanvasFit";
 import { hasCellOpening } from "../utils/terrainAccess";
 import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
+import { useI18n } from "../i18n";
 
 interface RouteCanvasProps {
   manualOnly?: boolean;
@@ -44,6 +45,7 @@ export function RouteCanvas({
   onPrevMap,
   batchStepper,
 }: RouteCanvasProps) {
+  const { t, n } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [wrapper, setWrapper] = useState<HTMLDivElement | null>(null);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
@@ -392,34 +394,45 @@ export function RouteCanvas({
 
   const hoveredInfo = hoveredCell ? (
     <span>
-      Cell{" "}
+      {t("Cell")}{" "}
       <strong>
-        [{hoveredCell[0]}, {hoveredCell[1]}]
+        [{n(hoveredCell[0])}, {n(hoveredCell[1])}]
       </strong>{" "}
       {isShiftDown && (
         <strong className="shift-indicator">
-          ({connectivity === 4 ? "Orthogonal Lock" : "45° / Orthogonal Lock"})
+          (
+          {connectivity === 4
+            ? t("Orthogonal Lock")
+            : t("45° / Orthogonal Lock")}
+          )
         </strong>
       )}{" "}
-      &bull; Terrain <strong>{hoveredTerrain}</strong> &bull; Elevation{" "}
+      &bull; {t("Terrain")} <strong>{t(hoveredTerrain)}</strong> &bull;{" "}
+      {t("Elevation")}{" "}
       <strong>
-        {elevation[hoveredCell[0]]?.[hoveredCell[1]]?.toFixed(1) ?? "-"}m
+        {elevation[hoveredCell[0]]?.[hoveredCell[1]] === undefined
+          ? "-"
+          : n(elevation[hoveredCell[0]][hoveredCell[1]], 1)}
+        m
       </strong>{" "}
-      &bull; Status{" "}
+      &bull; {t("Status")}{" "}
       {hoveredTerrainBlocked ? (
         <strong className="cell-status cell-status-impassable">
-          Impassable terrain
+          {t("Impassable terrain")}
         </strong>
       ) : (obstacle[hoveredCell[0]]?.[hoveredCell[1]] ?? 0) !== 0 ? (
-        <strong className="cell-status cell-status-obstacle">Obstacle</strong>
+        <strong className="cell-status cell-status-obstacle">
+          {t("Obstacle")}
+        </strong>
       ) : (
-        <strong className="cell-status cell-status-free">Free</strong>
+        <strong className="cell-status cell-status-free">{t("Free")}</strong>
       )}
     </span>
   ) : (
     <span>
-      Hover over grid or drag pointer to interact (hold Shift for
-      straight/diagonal lines)
+      {t(
+        "Hover over grid or drag pointer to interact (hold Shift for straight/diagonal lines)",
+      )}
     </span>
   );
 
@@ -428,9 +441,9 @@ export function RouteCanvas({
       {batchStepper}
       <div className="canvas-header-card">
         <div className="canvas-title-group">
-          <h2>Route Definition</h2>
+          <h2>{t("Route Definition")}</h2>
           <p className="subtitle">
-            Define alternative trajectory from Start (S) to Goal (G).
+            {t("Define alternative trajectory from Start (S) to Goal (G).")}
           </p>
         </div>
 
@@ -438,7 +451,7 @@ export function RouteCanvas({
           <div
             className="canvas-control-group"
             role="group"
-            aria-label="Route editing"
+            aria-label={t("Route editing")}
           >
             {!manualOnly && (
               <>
@@ -448,7 +461,7 @@ export function RouteCanvas({
                   onClick={handleAutoRoute}
                   disabled={isSolving}
                 >
-                  Automatic Route
+                  {t("Automatic Route")}
                 </button>
                 <button
                   type="button"
@@ -456,7 +469,7 @@ export function RouteCanvas({
                   onClick={handleConnectGoal}
                   disabled={isSolving || isConnectedToGoal}
                 >
-                  Connect to Goal
+                  {t("Connect to Goal")}
                 </button>
               </>
             )}
@@ -466,7 +479,7 @@ export function RouteCanvas({
               onClick={handleUndo}
               disabled={isSolving || undoDepth === 0}
             >
-              Undo Last Point
+              {t("Undo Last Point")}
             </button>
             <button
               type="button"
@@ -474,14 +487,14 @@ export function RouteCanvas({
               onClick={handleClear}
               disabled={isSolving}
             >
-              Clear
+              {t("Clear")}
             </button>
           </div>
 
           <div
             className="canvas-control-group canvas-view-group"
             role="group"
-            aria-label="Map display"
+            aria-label={t("Map display")}
           >
             <button
               type="button"
@@ -494,25 +507,29 @@ export function RouteCanvas({
               }
               title={
                 showOptimalRoute
-                  ? "Hide initial optimal path (p*)"
-                  : "Show initial optimal path (p*)"
+                  ? t("Hide initial optimal path (p*)")
+                  : t("Show initial optimal path (p*)")
               }
             >
-              {showOptimalRoute ? "Hide Optimal Route" : "Show Optimal Route"}
+              {showOptimalRoute
+                ? t("Hide Optimal Route")
+                : t("Show Optimal Route")}
             </button>
 
             <div className="zoom-controls-bar">
-              <span className="zoom-label">Zoom</span>
+              <span className="zoom-label">{t("Zoom")}</span>
               <button
                 type="button"
                 className="btn-zoom"
                 onClick={() => setZoomLevel((z) => Math.max(1.0, z / 2))}
                 disabled={zoomLevel <= 1.0}
-                title="Zoom out"
+                title={t("Zoom out")}
               >
                 &minus;
               </button>
-              <span className="zoom-value">{Math.round(zoomLevel * 100)}%</span>
+              <span className="zoom-value">
+                {n(Math.round(zoomLevel * 100))}%
+              </span>
               <button
                 type="button"
                 className="btn-zoom"
@@ -520,7 +537,7 @@ export function RouteCanvas({
                   setZoomLevel((z) => Math.min(maxZoomLevel, z * 2))
                 }
                 disabled={zoomLevel >= maxZoomLevel}
-                title="Zoom in"
+                title={t("Zoom in")}
               >
                 +
               </button>
@@ -529,9 +546,9 @@ export function RouteCanvas({
                 className="btn-zoom btn-zoom-fit"
                 onClick={() => setZoomLevel(1.0)}
                 disabled={zoomLevel === 1.0}
-                title="Fit map to view"
+                title={t("Fit map to view")}
               >
-                Fit
+                {t("Fit")}
               </button>
             </div>
           </div>
@@ -541,29 +558,31 @@ export function RouteCanvas({
       <div className="canvas-status-banner">
         <div className="status-badge-container">
           <span className="node-marker start-badge">
-            S: [{start[0]}, {start[1]}]
+            S: [{n(start[0])}, {n(start[1])}]
           </span>
           <span className="node-marker goal-badge">
-            G: [{goal[0]}, {goal[1]}]
+            G: [{n(goal[0])}, {n(goal[1])}]
           </span>
 
           {isShiftDown && (
             <span className="node-marker shift-badge">
-              Shift:{" "}
-              {connectivity === 4 ? "Orthogonal Snap" : "45° / Orthogonal Snap"}
+              {t("Shift:")}{" "}
+              {connectivity === 4
+                ? t("Orthogonal Snap")
+                : t("45° / Orthogonal Snap")}
             </span>
           )}
 
           {isConnectedToGoal ? (
             <span className="badge badge-success">
-              Route connected to Goal ({userPath.length} steps) &bull; Locked
-              (click Clear to redraw)
+              {t("Route connected to Goal")} ({n(userPath.length)} {t("steps")})
+              &bull; {t("Locked (click Clear to redraw)")}
             </span>
           ) : (
             <span className="badge badge-warning">
-              Pending route ({userPath.length} steps) &bull;{" "}
-              {manualOnly ? "Draw to Goal" : "Connect to Goal"} [{goal[0]},{" "}
-              {goal[1]}]
+              {t("Pending route")} ({n(userPath.length)} {t("steps")}) &bull;{" "}
+              {manualOnly ? t("Draw to Goal") : t("Connect to Goal")} [
+              {n(goal[0])}, {n(goal[1])}]
             </span>
           )}
         </div>
@@ -576,7 +595,7 @@ export function RouteCanvas({
               onClick={onPrevMap}
               disabled={isSolving}
             >
-              &larr; Prev Map
+              &larr; {t("Prev Map")}
             </button>
           )}
 
@@ -587,7 +606,7 @@ export function RouteCanvas({
               onClick={onCancel}
               disabled={isSolving}
             >
-              Back
+              {t("Back")}
             </button>
           )}
 
@@ -598,8 +617,8 @@ export function RouteCanvas({
             disabled={isSolving || !isConnectedToGoal || solveDisabled}
           >
             {isSolving
-              ? busyButtonText || "Solving ISP..."
-              : solveButtonText || "Solve ISP"}
+              ? busyButtonText || t("Solving ISP...")
+              : solveButtonText || t("Solve ISP")}
           </button>
         </div>
       </div>

@@ -8,9 +8,18 @@ import type {
   SystemConfig,
 } from "../types";
 import { ResultsExport } from "./ResultsExport";
-import { scientificOutcome, scientificOutcomeLabel } from "../utils/execution";
+import {
+  isFrontendFailure,
+  scientificOutcome,
+  scientificOutcomeLabel,
+} from "../utils/execution";
 import { SolverConfigBadges } from "./SolverConfigBadges";
-import { configuredValidationScope, directoryName, formatReductionMethod, formatValidationScope } from "../utils/formatters";
+import {
+  configuredValidationScope,
+  directoryName,
+  formatReductionMethod,
+  formatValidationScope,
+} from "../utils/formatters";
 import { useMapCanvasFit } from "../utils/useMapCanvasFit";
 import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
 import type { GridPoint } from "../utils/geometry";
@@ -18,6 +27,10 @@ import {
   hasCellOpening,
   interventionDescriptions,
 } from "../utils/terrainAccess";
+import { formatNumber, requestedLanguage, translate } from "../i18n";
+
+const t = (message: string, variables?: Record<string, string | number>) =>
+  translate(requestedLanguage(), message, variables);
 
 interface ResultsViewProps {
   result: LastResult | null;
@@ -43,8 +56,8 @@ function getArtifactFilename(artifactPath: string): string {
 
 function formatMetric(value: number | null | undefined, decimals = 0): string {
   return typeof value === "number" && Number.isFinite(value)
-    ? value.toLocaleString("en-US", { maximumFractionDigits: decimals })
-    : "Unavailable";
+    ? formatNumber(requestedLanguage(), value, decimals)
+    : t("Unavailable");
 }
 
 function formatDistance(
@@ -53,11 +66,11 @@ function formatDistance(
 ): string {
   const cellValue =
     cells == null || !Number.isFinite(cells)
-      ? "Unavailable"
-      : `${formatMetric(cells, 3)} cells`;
+      ? t("Unavailable")
+      : `${formatMetric(cells, 3)} ${t("cells")}`;
   const meterValue =
     meters == null || !Number.isFinite(meters)
-      ? "Unavailable"
+      ? t("Unavailable")
       : `${formatMetric(meters, 3)} m`;
   return `${cellValue} / ${meterValue}`;
 }
@@ -68,25 +81,25 @@ function formatRouteCost(
 ): string {
   if (typeof value === "number" && Number.isFinite(value))
     return `${formatMetric(value, 2)} s`;
-  if (state === "IMPASSABLE") return "Impassable";
-  if (state === "UNREACHABLE") return "No path";
-  return "Unavailable";
+  if (state === "IMPASSABLE") return t("Impassable");
+  if (state === "UNREACHABLE") return t("No path");
+  return t("Unavailable");
 }
 
 function formatValidation(status?: string): string {
-  if (status === "VALID") return "Validated";
-  if (status === "INVALID") return "Not validated";
-  if (status === "INCOMPLETE") return "Incomplete";
-  if (status === "NOT_RUN") return "Not performed";
-  return "Unknown";
+  if (status === "VALID") return t("Validated");
+  if (status === "INVALID") return t("Not validated");
+  if (status === "INCOMPLETE") return t("Incomplete");
+  if (status === "NOT_RUN") return t("Not performed");
+  return t("Unknown");
 }
 
 function getArtifactTitle(artifactPath: string): string {
   const filename = getArtifactFilename(artifactPath);
-  if (filename === "map.png") return "Base map";
+  if (filename === "map.png") return t("Base map");
 
   const title = filename.replace(/\.png$/, "").replaceAll("_", " ");
-  return title.charAt(0).toUpperCase() + title.slice(1);
+  return t(title.charAt(0).toUpperCase() + title.slice(1));
 }
 
 function ArtifactCard({
@@ -110,7 +123,7 @@ function ArtifactCard({
     <div
       className="artifact-item"
       onClick={() => onSelect(artifactPath)}
-      title="Click to enlarge"
+      title={t("Click to enlarge")}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -126,12 +139,12 @@ function ArtifactCard({
         {!isLoaded && !hasError && (
           <div className="artifact-placeholder-loading">
             <div className="spinner-tiny" />
-            <span>Rendering artifact...</span>
+            <span>{t("Rendering artifact...")}</span>
           </div>
         )}
         {hasError ? (
           <div className="artifact-placeholder-error">
-            <span>Artifact unavailable</span>
+            <span>{t("Artifact unavailable")}</span>
           </div>
         ) : (
           <img
@@ -358,12 +371,16 @@ export function ResultsView({
       ? currentModifications
       : null;
   const explanationText = currentResult
-    ? currentResult.explanation_text?.trim() ||
-      `No detailed explanation was returned for solver status ${currentResult.solver_status}.`
+    ? (isFrontendFailure(currentResult)
+        ? t(currentResult.explanation_text?.trim() ?? "")
+        : currentResult.explanation_text?.trim()) ||
+      t("No detailed explanation was returned for solver status {status}.", {
+        status: currentResult.solver_status,
+      })
     : null;
   const runtimeDisplay =
     typeof currentResult?.runtime_sec === "number"
-      ? `${currentResult.runtime_sec.toFixed(3)}s`
+      ? `${formatMetric(currentResult.runtime_sec, 3)}s`
       : "-";
 
   const origCostDisplay = formatRouteCost(
@@ -397,7 +414,11 @@ export function ResultsView({
   const isCellObstacleModified = Boolean(cellOpening?.original_obstacle);
   const isCellTerrainOpened = Boolean(cellOpening?.impassable_terrain);
   const interventionDetails = hoveredCell
-    ? interventionDescriptions(visibleModifications, hoveredCell)
+    ? interventionDescriptions(
+        visibleModifications,
+        hoveredCell,
+        requestedLanguage(),
+      )
     : [];
   const isStart = Boolean(
     hoveredCell &&
@@ -435,52 +456,62 @@ export function ResultsView({
   const hoveredInfo =
     hoveredCell && currentMapData ? (
       <span>
-        Cell [{hoveredCell[0]}, {hoveredCell[1]}] &bull; Terrain{" "}
+        {t("Cell")} [{formatMetric(hoveredCell[0])},{" "}
+        {formatMetric(hoveredCell[1])}] &bull; {t("Terrain")}{" "}
         <strong>
           {currentMapData.isp_model === "BRANDAO"
             ? hoveredObstacleBlocked || hoveredTerrainBlocked
-              ? "Blocked"
+              ? t("Blocked")
               : hoveredTerrain === "GRASS"
-                ? "Fast"
-                : "Slow"
-            : hoveredTerrain}
+                ? t("Fast")
+                : t("Slow")
+            : t(hoveredTerrain)}
         </strong>
         {isCellTerrainModified && (
           <strong
             className="mod-badge terrain"
             style={{ marginLeft: "0.35rem" }}
           >
-            ISP Modified
+            {t("ISP Modified")}
           </strong>
         )}{" "}
-        &bull; Elevation{" "}
+        &bull; {t("Elevation")}{" "}
         <strong>
-          {currentMapData.elevation[hoveredCell[0]]?.[hoveredCell[1]]?.toFixed(
-            1,
-          ) ?? "-"}
+          {currentMapData.elevation[hoveredCell[0]]?.[hoveredCell[1]] ===
+          undefined
+            ? "-"
+            : formatMetric(
+                currentMapData.elevation[hoveredCell[0]][hoveredCell[1]],
+                1,
+              )}
           m
         </strong>{" "}
-        &bull; Status{" "}
+        &bull; {t("Status")}{" "}
         {hoveredObstacleBlocked ? (
-          <strong className="cell-status cell-status-obstacle">Obstacle</strong>
+          <strong className="cell-status cell-status-obstacle">
+            {t("Obstacle")}
+          </strong>
         ) : hoveredTerrainBlocked ? (
           <strong className="cell-status cell-status-impassable">
-            Impassable terrain
+            {t("Impassable terrain")}
           </strong>
         ) : isCellTerrainOpened ? (
           <strong className="cell-status cell-status-free">
-            Traversable terrain at {cellOpening?.opened_speed_mps} m/s before
-            slope effects
+            {t("Traversable terrain at {speed} m/s before slope effects", {
+              speed: cellOpening
+                ? formatMetric(cellOpening.opened_speed_mps, 2)
+                : "-",
+            })}
           </strong>
         ) : (
-          <strong className="cell-status cell-status-free">Free</strong>
+          <strong className="cell-status cell-status-free">{t("Free")}</strong>
         )}
         {isCellObstacleModified && (
           <strong
             className="mod-badge obstacle"
             style={{ marginLeft: "0.35rem" }}
           >
-            Cleared
+            {t("Cleared")}
           </strong>
         )}
         {isCellTerrainOpened && (
@@ -488,7 +519,7 @@ export function ResultsView({
             className="mod-badge opened-terrain"
             style={{ marginLeft: "0.35rem" }}
           >
-            Cell made traversable
+            {t("Cell made traversable")}
           </strong>
         )}
         {interventionDetails.map((detail) => (
@@ -501,7 +532,7 @@ export function ResultsView({
             className="node-marker start-badge"
             style={{ marginLeft: "0.35rem" }}
           >
-            Start
+            {t("Start")}
           </strong>
         )}
         {isGoal && (
@@ -509,35 +540,41 @@ export function ResultsView({
             className="node-marker goal-badge"
             style={{ marginLeft: "0.35rem" }}
           >
-            Goal
+            {t("Goal")}
           </strong>
         )}
       </span>
     ) : (
-      <span>Hover over grid to inspect cell attributes and modifications</span>
+      <span>
+        {t("Hover over grid to inspect cell attributes and modifications")}
+      </span>
     );
 
   return (
     <section className="results-container">
-      <ResultsExport records={records} isSolving={isExecutionRunning} name={directoryName(outputDirectory)} />
+      <ResultsExport
+        records={records}
+        isSolving={isExecutionRunning}
+        name={directoryName(outputDirectory)}
+      />
       {isBatch && batchQueue && (
         <div className="batch-results-tabs-wrapper">
           <div
             className="batch-results-tabs"
             role="tablist"
-            aria-label="Batch Runs"
+            aria-label={t("Batch Runs")}
           >
             {batchQueue.map((item, idx) => {
               const isSelected = idx === currentBatchIdx;
               const outcome = getRunOutcome(item.status, item.result);
               const tabLabel =
                 outcome === "solving"
-                    ? "Solving"
-                    : outcome === "queued"
-                      ? "Queued"
-                      : item.result
-                        ? scientificOutcomeLabel(item.result)
-                        : "Inconclusive";
+                  ? t("Solving")
+                  : outcome === "queued"
+                    ? t("Queued")
+                    : item.result
+                      ? t(scientificOutcomeLabel(item.result))
+                      : t("Inconclusive");
               return (
                 <button
                   key={item.id}
@@ -548,15 +585,15 @@ export function ResultsView({
                   onClick={() => handleTabSelect(idx)}
                 >
                   <span className="batch-tab-title">
-                    #{idx + 1} ·{" "}
+                    #{formatMetric(idx + 1)} ·{" "}
                     {item.config.ISP_MODEL === "BRANDAO" ? "Brandao · " : ""}
                     {item.config.USE_INCREMENTAL_SOLVER
-                      ? "Incremental"
-                      : "Monolithic"}
+                      ? t("Incremental")
+                      : t("Monolithic")}
                     {item.config.ISP_MODEL !== "BRANDAO" &&
-                      ` · ${item.config.DEFAULT_REDUCTION_METHOD}`}
+                      ` · ${t(formatReductionMethod(item.config.DEFAULT_REDUCTION_METHOD))}`}
                     {item.config.USE_INCREMENTAL_SOLVER &&
-                      ` · ${formatValidationScope(item.result ? item.result.metrics?.effective_astar_scope : configuredValidationScope(item.config))}`}
+                      ` · ${t(formatValidationScope(item.result ? item.result.metrics?.effective_astar_scope : configuredValidationScope(item.config)))}`}
                   </span>
                   <span className={`batch-tab-badge status-${outcome}`}>
                     {tabLabel}
@@ -572,17 +609,20 @@ export function ResultsView({
         <div className="results-title-group">
           <h2>
             {isBatch
-              ? `Results & Metrics — Run ${currentBatchIdx + 1} of ${batchQueue!.length}`
-              : "Results & Metrics"}
+              ? t("Results & Metrics — Run {current} of {total}", {
+                  current: formatMetric(currentBatchIdx + 1),
+                  total: formatMetric(batchQueue!.length),
+                })
+              : t("Results & Metrics")}
           </h2>
           <span className={`status-pill large ${currentOutcome}`}>
             {currentOutcome === "solving"
-              ? "Solving"
+              ? t("Solving")
               : currentOutcome === "queued"
-                ? "Queued"
+                ? t("Queued")
                 : currentResult
-                  ? scientificOutcomeLabel(currentResult)
-                  : "Inconclusive"}
+                  ? t(scientificOutcomeLabel(currentResult))
+                  : t("Inconclusive")}
           </span>
         </div>
 
@@ -592,7 +632,7 @@ export function ResultsView({
             className="btn btn-secondary results-new-run-action"
             onClick={onNewRun}
           >
-            New Run
+            {t("New Run")}
           </button>
         )}
       </div>
@@ -601,13 +641,17 @@ export function ResultsView({
         <section className="results-map-card">
           <div className="results-map-header">
             <div>
-              <h3>Interactive Tactical Map</h3>
+              <h3>{t("Interactive Tactical Map")}</h3>
               <p className="subtitle">
                 {isBrandao
                   ? showOriginalMap
-                    ? "Original map and its initial optimal route."
-                    : "Prepared Brandao map: fast/slow costs 1:8, fixed obstacles and no slope effects."
-                  : "Alternative route and ISP interventions on the active map."}
+                    ? t("Original map and its initial optimal route.")
+                    : t(
+                        "Prepared Brandao map: fast/slow costs 1:8, fixed obstacles and no slope effects.",
+                      )
+                  : t(
+                      "Alternative route and ISP interventions on the active map.",
+                    )}
               </p>
             </div>
             <div className="results-map-controls">
@@ -621,33 +665,35 @@ export function ResultsView({
                     setHoveredCell(null);
                   }}
                 >
-                  {showOriginalMap ? "Show Brandao map" : "Show original map"}
+                  {showOriginalMap
+                    ? t("Show Brandao map")
+                    : t("Show original map")}
                 </button>
               )}
               {currentOutcome === "inconclusive" &&
                 currentResult?.metrics?.candidate_available && (
                   <span className="candidate-solution-badge candidate">
-                    CANDIDATE (GLOBAL VALIDATION NOT PASSED)
+                    {t("CANDIDATE (GLOBAL VALIDATION NOT PASSED)")}
                   </span>
                 )}
               {currentOutcome === "infeasible" && (
                 <span className="candidate-solution-badge infeasible">
-                  NO FEASIBLE INTERVENTION
+                  {t("NO FEASIBLE INTERVENTION")}
                 </span>
               )}
               <div className="zoom-controls-bar">
-                <span className="zoom-label">Zoom</span>
+                <span className="zoom-label">{t("Zoom")}</span>
                 <button
                   type="button"
                   className="btn-zoom"
                   onClick={() => setZoomLevel((z) => Math.max(1.0, z / 2))}
                   disabled={zoomLevel <= 1.0}
-                  title="Zoom out"
+                  title={t("Zoom out")}
                 >
                   &minus;
                 </button>
                 <span className="zoom-value">
-                  {Math.round(zoomLevel * 100)}%
+                  {formatMetric(Math.round(zoomLevel * 100))}%
                 </span>
                 <button
                   type="button"
@@ -656,7 +702,7 @@ export function ResultsView({
                     setZoomLevel((z) => Math.min(maxZoomLevel, z * 2))
                   }
                   disabled={zoomLevel >= maxZoomLevel}
-                  title="Zoom in"
+                  title={t("Zoom in")}
                 >
                   +
                 </button>
@@ -665,9 +711,9 @@ export function ResultsView({
                   className="btn-zoom btn-zoom-fit"
                   onClick={() => setZoomLevel(1.0)}
                   disabled={zoomLevel === 1.0}
-                  title="Fit map to view"
+                  title={t("Fit map to view")}
                 >
-                  Fit
+                  {t("Fit")}
                 </button>
               </div>
             </div>
@@ -678,20 +724,27 @@ export function ResultsView({
               className={`results-notice ${currentOutcome === "validated" ? "info" : "warning"}`}
             >
               {currentOutcome === "infeasible"
-                ? "No valid modifications could be calculated; the alternative route is shown."
+                ? t(
+                    "No valid modifications could be calculated; the alternative route is shown.",
+                  )
                 : currentOutcome === "validated"
-                  ? "The alternative route is validated; no changes are displayed."
-                  : "No semantic changes are displayed; see validation and candidate status."}
+                  ? t(
+                      "The alternative route is validated; no changes are displayed.",
+                    )
+                  : t(
+                      "No semantic changes are displayed; see validation and candidate status.",
+                    )}
             </p>
           )}
           {currentResult?.solver_status === "OPTIMAL_INACCURATE" &&
             currentResult.success && (
               <p className="results-notice info">
-                Global path validation passed, but OPTIMAL_INACCURATE does not
-                certify the minimum{" "}
+                {t(
+                  "Global path validation passed, but OPTIMAL_INACCURATE does not certify the minimum",
+                )}{" "}
                 {isBrandao
-                  ? "weighted intervention cost"
-                  : "intervention count"}
+                  ? t("weighted intervention cost")
+                  : t("intervention count")}
                 .
               </p>
             )}
@@ -734,38 +787,50 @@ export function ResultsView({
           <div className="batch-pending-spinner" />
           <h3>
             {isSolving
-              ? `Solving Run ${currentBatchIdx + 1} of ${batchQueue!.length}...`
-              : `Run ${currentBatchIdx + 1} Pending in Queue`}
+              ? t("Solving Run {current} of {total}...", {
+                  current: currentBatchIdx + 1,
+                  total: batchQueue!.length,
+                })
+              : t("Run {current} Pending in Queue", {
+                  current: currentBatchIdx + 1,
+                })}
           </h3>
           {isSolving && activeBatchItem?.config && (
             <div className="loading-params-summary">
               <span className="loading-param-chip">
-                Reduction:{" "}
-                {formatReductionMethod(
-                  activeBatchItem.config.DEFAULT_REDUCTION_METHOD,
+                {t("Reduction:")}{" "}
+                {t(
+                  formatReductionMethod(
+                    activeBatchItem.config.DEFAULT_REDUCTION_METHOD,
+                  ),
                 )}
               </span>
               <span className="loading-param-chip">
-                Solver:{" "}
+                {t("Solver:")}{" "}
                 {activeBatchItem.config.USE_INCREMENTAL_SOLVER
-                  ? `Incremental MILP · ${formatValidationScope(configuredValidationScope(activeBatchItem.config))}`
-                  : "Monolithic MILP"}
+                  ? `${t("Incremental MILP")} · ${t(formatValidationScope(configuredValidationScope(activeBatchItem.config)))}`
+                  : t("Monolithic MILP")}
               </span>
               <span className="loading-param-chip">
-                Grid: {activeBatchItem.config.MAP_H}×
-                {activeBatchItem.config.MAP_W} (Seed:{" "}
-                {activeBatchItem.config.MAP_DEFAULT_SEED})
+                {t("Grid:")} {formatMetric(activeBatchItem.config.MAP_H)}×
+                {formatMetric(activeBatchItem.config.MAP_W)} ({t("Seed:")}{" "}
+                {formatMetric(activeBatchItem.config.MAP_DEFAULT_SEED)})
               </span>
             </div>
           )}
           <p className="batch-pending-desc">
             {isSolving
-              ? "Solving ISP formulation via Mixed-Integer Linear Programming (MILP). Because the inverse problem under discrete terrain attributes is NP-hard, solving large grids or runs without graph reduction explores a large combinatorial space and may take several minutes depending on hardware. Please wait..."
-              : "This configuration is queued and will execute automatically after preceding runs complete. Select any completed run above to inspect its metrics and tactical artifacts."}
+              ? t(
+                  "Solving ISP formulation via Mixed-Integer Linear Programming (MILP). Because the inverse problem under discrete terrain attributes is NP-hard, solving large grids or runs without graph reduction explores a large combinatorial space and may take several minutes depending on hardware. Please wait...",
+                )
+              : t(
+                  "This configuration is queued and will execute automatically after preceding runs complete. Select any completed run above to inspect its metrics and tactical artifacts.",
+                )}
           </p>
           {isSolving && typeof elapsedTime === "number" && (
             <div className="batch-elapsed-timer">
-              Elapsed workflow time: <strong>{elapsedTime}s</strong>
+              {t("Elapsed workflow time:")}{" "}
+              <strong>{formatMetric(elapsedTime)}s</strong>
             </div>
           )}
         </div>
@@ -784,26 +849,30 @@ export function ResultsView({
         <>
           {isBrandao && (
             <p className="subtitle">
-              Metrics and costs refer to the prepared Brandao scenario.
+              {t("Metrics and costs refer to the prepared Brandao scenario.")}
             </p>
           )}
           <div className="metrics-grid">
             {currentConfig?.USE_INCREMENTAL_SOLVER && (
               <div className="metric-card">
-                <span className="metric-label">Incremental Search</span>
+                <span className="metric-label">{t("Incremental Search")}</span>
                 <span className="metric-value">
-                  {formatValidationScope(currentResult.metrics?.effective_astar_scope)}
+                  {t(
+                    formatValidationScope(
+                      currentResult.metrics?.effective_astar_scope,
+                    ),
+                  )}
                 </span>
               </div>
             )}
             <div className="metric-card">
-              <span className="metric-label">Execution Time</span>
+              <span className="metric-label">{t("Execution Time")}</span>
               <span className="metric-value">{runtimeDisplay}</span>
             </div>
 
             {currentConfig?.USE_INCREMENTAL_SOLVER && (
               <div className="metric-card">
-                <span className="metric-label">ISP Iterations</span>
+                <span className="metric-label">{t("ISP Iterations")}</span>
                 <span className="metric-value">
                   {formatMetric(currentResult.iterations)}
                 </span>
@@ -811,13 +880,15 @@ export function ResultsView({
             )}
 
             <div className="metric-card optimal-card">
-              <span className="metric-label">Initial Optimal Route Cost</span>
+              <span className="metric-label">
+                {t("Initial Optimal Route Cost")}
+              </span>
               <span className="metric-value">{origCostDisplay}</span>
             </div>
 
             <div className="metric-card alternative-card">
               <span className="metric-label">
-                Initial Alternative Route Cost
+                {t("Initial Alternative Route Cost")}
               </span>
               <span className="metric-value">
                 {formatRouteCost(
@@ -827,24 +898,26 @@ export function ResultsView({
               </span>
             </div>
             <div className="metric-card alternative-card">
-              <span className="metric-label">Final Alternative Route Cost</span>
+              <span className="metric-label">
+                {t("Final Alternative Route Cost")}
+              </span>
               <span className="metric-value">{altCostDisplay}</span>
             </div>
 
             <div className="metric-card">
-              <span className="metric-label">Graph Nodes</span>
+              <span className="metric-label">{t("Graph Nodes")}</span>
               <span className="metric-value">
                 {formatMetric(currentResult.graph_nodes)}
               </span>
             </div>
             <div className="metric-card">
-              <span className="metric-label">Directed Edges</span>
+              <span className="metric-label">{t("Directed Edges")}</span>
               <span className="metric-value">
                 {formatMetric(currentResult.graph_edges)}
               </span>
             </div>
             <div className="metric-card">
-              <span className="metric-label">Optimal Route Length</span>
+              <span className="metric-label">{t("Optimal Route Length")}</span>
               <span className="metric-value">
                 {formatDistance(
                   currentResult.path_metrics?.optimal_length_cells,
@@ -853,7 +926,9 @@ export function ResultsView({
               </span>
             </div>
             <div className="metric-card">
-              <span className="metric-label">Alternative Route Length</span>
+              <span className="metric-label">
+                {t("Alternative Route Length")}
+              </span>
               <span className="metric-value">
                 {formatDistance(
                   currentResult.path_metrics?.alternative_length_cells,
@@ -862,7 +937,9 @@ export function ResultsView({
               </span>
             </div>
             <div className="metric-card">
-              <span className="metric-label">Discrete Hausdorff Distance</span>
+              <span className="metric-label">
+                {t("Discrete Hausdorff Distance")}
+              </span>
               <span className="metric-value">
                 {formatDistance(
                   currentResult.path_metrics?.hausdorff_cells,
@@ -872,24 +949,26 @@ export function ResultsView({
             </div>
 
             <div className="metric-card">
-              <span className="metric-label">Global Route Validation</span>
+              <span className="metric-label">
+                {t("Global Route Validation")}
+              </span>
               <span className="metric-value">
                 {formatValidation(currentResult.metrics?.validation_status)}
               </span>
             </div>
             <div className="metric-card">
-              <span className="metric-label">ISP Interventions</span>
+              <span className="metric-label">{t("ISP Interventions")}</span>
               <span className="metric-value">
                 {formatMetric(currentResult.metrics?.interventions?.total)}
               </span>
               {currentConfig?.ISP_MODEL === "BRANDAO" &&
                 currentResult.metrics?.candidate_available && (
                   <span className="metric-label">
-                    Slow → fast:{" "}
+                    {t("Slow → fast:")}{" "}
                     {formatMetric(
                       currentResult.metrics.interventions?.slow_to_fast,
                     )}{" "}
-                    · Fast → slow:{" "}
+                    · {t("Fast → slow:")}{" "}
                     {formatMetric(
                       currentResult.metrics.interventions?.fast_to_slow,
                     )}
@@ -898,7 +977,9 @@ export function ResultsView({
             </div>
             {currentConfig?.ISP_MODEL === "BRANDAO" && (
               <div className="metric-card">
-                <span className="metric-label">Weighted Intervention Cost</span>
+                <span className="metric-label">
+                  {t("Weighted Intervention Cost")}
+                </span>
                 <span className="metric-value">
                   {formatMetric(
                     currentResult.metrics?.interventions?.objective_cost,
@@ -908,14 +989,16 @@ export function ResultsView({
             )}
             {currentConfig?.ISP_MODEL === "BRANDAO" && (
               <div className="metric-card">
-                <span className="metric-label">Preparation Conversions</span>
+                <span className="metric-label">
+                  {t("Preparation Conversions")}
+                </span>
                 <span className="metric-value">
                   {formatMetric(
                     currentResult.metrics?.preparation?.converted_blocked_cells,
                   )}
                 </span>
                 <span className="metric-label">
-                  Excluded from ISP interventions
+                  {t("Excluded from ISP interventions")}
                 </span>
               </div>
             )}
@@ -925,20 +1008,24 @@ export function ResultsView({
 
       {(currentResult?.execution_error || activeBatchItem?.error) && (
         <p className="results-notice warning" role="alert">
-          {currentResult?.execution_error || activeBatchItem?.error}
+          {currentResult?.execution_error
+            ? isFrontendFailure(currentResult)
+              ? t(currentResult.execution_error)
+              : currentResult.execution_error
+            : activeBatchItem?.error}
         </p>
       )}
 
       {currentResult && explanationText && (
         <div className="report-card result-explanation-card">
           <div className="report-card-header">
-            <h3>Solver Explanation</h3>
+            <h3>{t("Solver Explanation")}</h3>
             <button
               type="button"
               className="btn btn-ghost btn-sm"
               onClick={() => handleCopy(explanationText, "explanation")}
             >
-              {copiedKey === "explanation" ? "Copied" : "Copy"}
+              {copiedKey === "explanation" ? t("Copied") : t("Copy")}
             </button>
           </div>
           <pre className="code-report">{explanationText}</pre>
@@ -948,7 +1035,7 @@ export function ResultsView({
       {currentResult?.cost_baseline_text && (
         <div className="report-card">
           <div className="report-card-header">
-            <h3>Alternative Route Cost Baselines</h3>
+            <h3>{t("Alternative Route Cost Baselines")}</h3>
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -957,7 +1044,7 @@ export function ResultsView({
                 handleCopy(currentResult.cost_baseline_text, "baseline")
               }
             >
-              {copiedKey === "baseline" ? "Copied" : "Copy"}
+              {copiedKey === "baseline" ? t("Copied") : t("Copy")}
             </button>
           </div>
           <pre className="code-report">{currentResult.cost_baseline_text}</pre>
@@ -966,7 +1053,7 @@ export function ResultsView({
 
       {tacticalArtifacts.length > 0 && (
         <div className="artifacts-card">
-          <h3>Generated Tactical Artifacts</h3>
+          <h3>{t("Generated Tactical Artifacts")}</h3>
           <div className="artifacts-grid">
             {tacticalArtifacts.map((artifactPath) => (
               <ArtifactCard
@@ -997,7 +1084,7 @@ export function ResultsView({
                 type="button"
                 className="btn-modal-close"
                 onClick={() => setSelectedImage(null)}
-                aria-label="Close dialog"
+                aria-label={t("Close dialog")}
               >
                 &times;
               </button>

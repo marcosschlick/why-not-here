@@ -1,6 +1,11 @@
 import { useState } from "react";
 import type { SystemConfig } from "../types";
-import { configuredValidationScope, formatReductionMethod, formatValidationScope } from "../utils/formatters";
+import {
+  configuredValidationScope,
+  formatReductionMethod,
+  formatValidationScope,
+} from "../utils/formatters";
+import { useI18n } from "../i18n";
 
 interface SolverConfigBadgesProps {
   config?: SystemConfig | null;
@@ -15,6 +20,7 @@ function SolverMapPreview({
   onSelectMap,
 }: Required<Pick<SolverConfigBadgesProps, "mapImageUrl">> &
   Pick<SolverConfigBadgesProps, "cacheKey" | "onSelectMap">) {
+  const { t } = useI18n();
   const [isLoaded, setIsLoaded] = useState(false);
   const fullUrl = mapImageUrl.includes("?")
     ? `${mapImageUrl}&t=${cacheKey}`
@@ -25,12 +31,12 @@ function SolverMapPreview({
       type="button"
       className="solver-map-preview"
       onClick={() => onSelectMap(mapImageUrl)}
-      aria-label="Open base map"
+      aria-label={t("Open base map")}
     >
-      <span className="solver-map-preview-label">Base map</span>
+      <span className="solver-map-preview-label">{t("Base map")}</span>
       <img
         src={fullUrl}
-        alt="Base map"
+        alt={t("Base map")}
         className={`solver-map-preview-image ${isLoaded ? "is-loaded" : ""}`}
         onLoad={() => setIsLoaded(true)}
       />
@@ -44,54 +50,62 @@ export function SolverConfigBadges({
   cacheKey,
   onSelectMap,
 }: SolverConfigBadgesProps) {
+  const { t, n } = useI18n();
   if (!config) return null;
 
-  const reductionLabel = formatReductionMethod(config.DEFAULT_REDUCTION_METHOD);
+  const reductionLabel = t(
+    formatReductionMethod(config.DEFAULT_REDUCTION_METHOD),
+  );
 
   const solverArchLabel = config.USE_INCREMENTAL_SOLVER
-    ? `Incremental MILP (${config.DEFAULT_SOLVER || "HiGHS"} · ${formatValidationScope(configuredValidationScope(config))})`
-    : `Monolithic MILP (${config.DEFAULT_SOLVER || "HiGHS"})`;
+    ? t("Incremental MILP ({solver} · {scope})", {
+        solver: config.DEFAULT_SOLVER || "HiGHS",
+        scope: t(formatValidationScope(configuredValidationScope(config))),
+      })
+    : t("Monolithic MILP ({solver})", {
+        solver: config.DEFAULT_SOLVER || "HiGHS",
+      });
 
-  const gridSpecs = `${config.MAP_H}×${config.MAP_W} (${config.CONNECTIVITY}-Connected)`;
+  const gridSpecs = t("{height}×{width} ({connectivity}-Connected)", {
+    height: n(config.MAP_H),
+    width: n(config.MAP_W),
+    connectivity: n(config.CONNECTIVITY),
+  });
 
   return (
     <section className={`solver-params-bar${mapImageUrl ? " has-map" : ""}`}>
       <div className="solver-params-details">
         <div className="solver-params-header">
-          <span className="solver-params-title">
-            Run Parameters
-          </span>
+          <span className="solver-params-title">{t("Run Parameters")}</span>
           <span className="solver-params-subtitle">
-            Active configuration for this run
+            {t("Active configuration for this run")}
           </span>
         </div>
 
         <div className="solver-params-grid">
           <div className="solver-param-chip">
-            <span className="param-chip-label">Scenario</span>
+            <span className="param-chip-label">{t("Scenario")}</span>
             <span className="param-chip-value">
               {config.ISP_MODEL === "BRANDAO"
-                ? "Brandao adaptation (1:8, no slope effects)"
-                : "Normal terrain and elevation"}
+                ? t("Brandao adaptation (1:8, no slope effects)")
+                : t("Normal terrain and elevation")}
             </span>
           </div>
           <div className="solver-param-chip">
-            <span className="param-chip-label">
-              Time Budget
-            </span>
+            <span className="param-chip-label">{t("Time Budget")}</span>
             <span className="param-chip-value">
-              {config.ISP_TIME_BUDGET_SEC ?? 1800} s
+              {n(config.ISP_TIME_BUDGET_SEC ?? 1800, 3)} s
             </span>
           </div>
           <div className="solver-param-chip">
-            <span className="param-chip-label">Graph Reduction</span>
+            <span className="param-chip-label">{t("Graph Reduction")}</span>
             <span className="param-chip-value highlight-azure">
               {reductionLabel}
             </span>
           </div>
 
           <div className="solver-param-chip">
-            <span className="param-chip-label">Solver</span>
+            <span className="param-chip-label">{t("Solver")}</span>
             <span
               className={`param-chip-value ${
                 config.USE_INCREMENTAL_SOLVER
@@ -104,14 +118,14 @@ export function SolverConfigBadges({
           </div>
 
           <div className="solver-param-chip">
-            <span className="param-chip-label">Grid</span>
+            <span className="param-chip-label">{t("Grid")}</span>
             <span className="param-chip-value">{gridSpecs}</span>
           </div>
 
           <div className="solver-param-chip">
-            <span className="param-chip-label">Seed</span>
+            <span className="param-chip-label">{t("Seed")}</span>
             <span className="param-chip-value">
-              #{config.MAP_DEFAULT_SEED ?? 42}
+              #{n(config.MAP_DEFAULT_SEED ?? 42)}
             </span>
           </div>
         </div>

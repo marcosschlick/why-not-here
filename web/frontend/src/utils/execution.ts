@@ -4,6 +4,9 @@ import type {
   MapData,
   SystemConfig,
 } from "../types";
+import { FrontendError } from "../i18n";
+
+const frontendFailures = new WeakSet<LastResult>();
 
 export function requestFailure(
   error: unknown,
@@ -14,7 +17,7 @@ export function requestFailure(
 ): LastResult {
   const message =
     error instanceof Error ? error.message : "Execution request failed.";
-  return {
+  const result: LastResult = {
     execution_status: "failed",
     execution_error: message,
     success: false,
@@ -31,7 +34,9 @@ export function requestFailure(
           : map.isp_model_version,
       strategy: config.USE_INCREMENTAL_SOLVER ? "INCREMENTAL" : "MONOLITHIC",
       reduction: config.DEFAULT_REDUCTION_METHOD,
-      requested_astar_scope: config.USE_INCREMENTAL_SOLVER ? config.INCREMENTAL_ASTAR_SCOPE : null,
+      requested_astar_scope: config.USE_INCREMENTAL_SOLVER
+        ? config.INCREMENTAL_ASTAR_SCOPE
+        : null,
       effective_astar_scope: null,
       stop_reason: "REQUEST_ERROR",
       validation_status: "UNKNOWN",
@@ -49,6 +54,14 @@ export function requestFailure(
       error: message,
     },
   };
+  if (error instanceof FrontendError || !(error instanceof Error)) {
+    frontendFailures.add(result);
+  }
+  return result;
+}
+
+export function isFrontendFailure(result: LastResult): boolean {
+  return frontendFailures.has(result);
 }
 
 export function executionStatus(result: LastResult): "completed" | "failed" {

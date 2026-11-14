@@ -1,6 +1,8 @@
 import type { QueueItem } from "../types";
 import { scientificOutcomeLabel } from "../utils/execution";
 import { groupQueue } from "../utils/experiments";
+import { formatReductionMethod } from "../utils/formatters";
+import { useI18n } from "../i18n";
 interface QueuePanelProps {
   queue: QueueItem[];
   workflowMode: "run" | "create";
@@ -25,13 +27,18 @@ export function QueuePanel({
   onStartQueue,
   onSelectItem,
 }: QueuePanelProps) {
+  const { t, n } = useI18n();
   if (queue.length === 0) {
     return (
       <div className="queue-empty-card">
         <p className="queue-empty-text">
           {workflowMode === "create"
-            ? "The configuration queue is empty. Configure the parameters above and add configurations to the batch."
-            : "The execution queue is empty. Configure the parameters above and click + Add to Queue to enqueue batch configurations."}
+            ? t(
+                "The configuration queue is empty. Configure the parameters above and add configurations to the batch.",
+              )
+            : t(
+                "The execution queue is empty. Configure the parameters above and click + Add to Queue to enqueue batch configurations.",
+              )}
         </p>
       </div>
     );
@@ -41,9 +48,7 @@ export function QueuePanel({
     group.includes(queue[currentIndex]),
   );
   const completedCount = queue.filter(
-    (item) =>
-      item.status === "completed" ||
-      item.status === "failed",
+    (item) => item.status === "completed" || item.status === "failed",
   ).length;
   const progressPercent = Math.round((completedCount / queue.length) * 100);
   return (
@@ -52,14 +57,14 @@ export function QueuePanel({
         <div>
           <h3>
             {workflowMode === "create"
-              ? "Configuration Queue"
-              : "Batch Execution Queue"}{" "}
-            ({groups.length} {groups.length === 1 ? "item" : "items"})
+              ? t("Configuration Queue")
+              : t("Batch Execution Queue")}{" "}
+            ({n(groups.length)} {groups.length === 1 ? t("item") : t("items")})
           </h3>
           <p className="subtitle">
             {workflowMode === "create"
-              ? "Review each route, then save the configuration files."
-              : "Sequential pipeline execution across parameterized runs."}
+              ? t("Review each route, then save the configuration files.")
+              : t("Sequential pipeline execution across parameterized runs.")}
           </p>
         </div>
 
@@ -70,7 +75,7 @@ export function QueuePanel({
             onClick={onClearQueue}
             disabled={isProcessing}
           >
-            Clear Queue
+            {t("Clear Queue")}
           </button>
 
           <button
@@ -81,11 +86,23 @@ export function QueuePanel({
           >
             {isProcessing
               ? workflowMode === "create"
-                ? `Preparing Routes (${currentGroupIndex + 1}/${groups.length})...`
-                : `Running Queue (${currentGroupIndex + 1}/${groups.length})...`
+                ? t("Preparing Routes ({current}/{total})...", {
+                    current: n(currentGroupIndex + 1),
+                    total: n(groups.length),
+                  })
+                : t("Running Queue ({current}/{total})...", {
+                    current: n(currentGroupIndex + 1),
+                    total: n(groups.length),
+                  })
               : workflowMode === "create"
-                ? `Review Routes (${groups.length} ${groups.length === 1 ? "item" : "items"})`
-                : `Run Queue (${groups.length} ${groups.length === 1 ? "item" : "items"})`}
+                ? t("Review Routes ({count} {kind})", {
+                    count: n(groups.length),
+                    kind: groups.length === 1 ? t("item") : t("items"),
+                  })
+                : t("Run Queue ({count} {kind})", {
+                    count: n(groups.length),
+                    kind: groups.length === 1 ? t("item") : t("items"),
+                  })}
           </button>
         </div>
       </div>
@@ -106,10 +123,10 @@ export function QueuePanel({
               <span className="switch-knob" />
             </span>
             <span className="toggle-label">
-              Interactive Verification:{" "}
+              {t("Interactive Verification:")}{" "}
               {interactiveMode
-                ? "Enabled (pause per run to inspect/modify route)"
-                : "Disabled (automatic execution)"}
+                ? t("Enabled (pause per run to inspect/modify route)")
+                : t("Disabled (automatic execution)")}
             </span>
           </button>
         </div>
@@ -119,10 +136,19 @@ export function QueuePanel({
         <div className="queue-progress-bar-container">
           <div className="queue-progress-info">
             <span>
-              Processing Item {currentGroupIndex + 1} of {groups.length} (
-              {completedCount} of {queue.length} runs finished)
+              {t(
+                "Processing Item {current} of {total} ({completed} of {runs} runs finished)",
+                {
+                  current: n(currentGroupIndex + 1),
+                  total: n(groups.length),
+                  completed: n(completedCount),
+                  runs: n(queue.length),
+                },
+              )}
             </span>
-            <span>{progressPercent}% Completed</span>
+            <span>
+              {n(progressPercent)}% {t("Completed")}
+            </span>
           </div>
           <div
             className="progress-track"
@@ -163,12 +189,12 @@ export function QueuePanel({
                   ? "awaiting_route"
                   : "pending"));
           const statusLabels: Record<string, string> = {
-            pending: "Pending",
-            generating_map: "Generating map...",
-            awaiting_route: "Awaiting route",
-            solving: "Solving ISP...",
-            completed: "Completed",
-            failed: "Failed",
+            pending: t("Pending"),
+            generating_map: t("Generating map..."),
+            awaiting_route: t("Awaiting route"),
+            solving: t("Solving ISP..."),
+            completed: t("Completed"),
+            failed: t("Failed"),
           };
           return (
             <div
@@ -177,7 +203,7 @@ export function QueuePanel({
               onClick={() => onSelectItem && onSelectItem(item)}
             >
               <div className="queue-item-header">
-                <span className="queue-item-index">#{index + 1}</span>
+                <span className="queue-item-index">#{n(index + 1)}</span>
                 <span className={`status-pill ${status}`}>
                   {statusLabels[status] || status}
                 </span>
@@ -185,49 +211,59 @@ export function QueuePanel({
 
               <div className="queue-item-params">
                 <span className="param-tag">
-                  {item.config.MAP_H}x{item.config.MAP_W}
+                  {n(item.config.MAP_H)}x{n(item.config.MAP_W)}
                 </span>
                 <span className="param-tag">
-                  {item.config.CONNECTIVITY}-Connected
+                  {n(item.config.CONNECTIVITY)}-{t("Connected")}
                 </span>
                 <span className="param-tag">
-                  Seed: #{item.config.MAP_DEFAULT_SEED}
+                  {t("Seed:")} #{n(item.config.MAP_DEFAULT_SEED)}
                 </span>
                 {isGroup ? (
                   <span className="param-tag">
-                    {isBenchmark ? "Benchmark" : "Scenario comparison"} ·{" "}
-                    {group.length}{" "}
+                    {isBenchmark ? "Benchmark" : t("Scenario comparison")} ·{" "}
+                    {n(group.length)}{" "}
                     {workflowMode === "create"
-                      ? "configurations"
-                      : "executions"}
+                      ? t("configurations")
+                      : t("executions")}
                   </span>
                 ) : (
                   <>
                     <span className="param-tag">
-                      Reduction: {item.config.DEFAULT_REDUCTION_METHOD}
+                      {t("Reduction:")}{" "}
+                      {t(
+                        formatReductionMethod(
+                          item.config.DEFAULT_REDUCTION_METHOD,
+                        ),
+                      )}
                     </span>
                     <span className="param-tag">
                       {item.config.USE_INCREMENTAL_SOLVER
-                        ? "Incremental"
-                        : "Monolithic"}
+                        ? t("Incremental")
+                        : t("Monolithic")}
                     </span>
                   </>
                 )}
                 {!isGroup && item.outputDir && (
-                  <span className="param-tag">Dir: {item.outputDir}</span>
+                  <span className="param-tag">
+                    {t("Dir:")} {item.outputDir}
+                  </span>
                 )}
               </div>
 
               {!isGroup && item.result && (
                 <div className="queue-item-result-snippet">
                   <span>
-                    Result:{" "}
-                    <strong>{scientificOutcomeLabel(item.result)}</strong>{" "}
-                    &bull; Time:{" "}
+                    {t("Result:")}{" "}
+                    <strong>{t(scientificOutcomeLabel(item.result))}</strong>{" "}
+                    &bull; {t("Time:")}{" "}
                     {item.result.runtime_sec == null
-                      ? "Unavailable"
-                      : `${item.result.runtime_sec}s`}{" "}
-                    &bull; Iter: {item.result.iterations ?? "Unavailable"}
+                      ? t("Unavailable")
+                      : `${n(item.result.runtime_sec, 3)}s`}{" "}
+                    &bull; {t("Iter:")}{" "}
+                    {item.result.iterations == null
+                      ? t("Unavailable")
+                      : n(item.result.iterations)}
                   </span>
                 </div>
               )}
@@ -242,13 +278,13 @@ export function QueuePanel({
                   }}
                   title={
                     item.benchmarkGroup
-                      ? "Remove every scenario in this group"
-                      : "Remove configuration from queue"
+                      ? t("Remove every scenario in this group")
+                      : t("Remove configuration from queue")
                   }
                   aria-label={
                     item.benchmarkGroup
-                      ? "Remove scenario group"
-                      : "Remove item"
+                      ? t("Remove scenario group")
+                      : t("Remove item")
                   }
                 >
                   &times;

@@ -1,4 +1,7 @@
+import { useI18n } from "../i18n";
+
 export function Brand() {
+  const { t } = useI18n();
   return (
     <div className="topbar-brand">
       <h1 className="brand-logo-frame">
@@ -12,8 +15,9 @@ export function Brand() {
       </h1>
       <div className="brand-text">
         <span className="brand-tagline">
-          Contrastive explanations for autonomous path planning via Inverse
-          Shortest Path (ISP) on 2D grids
+          {t(
+            "Contrastive explanations for autonomous path planning via Inverse Shortest Path (ISP) on 2D grids",
+          )}
         </span>
       </div>
     </div>

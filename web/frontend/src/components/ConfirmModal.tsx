@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { ReactNode } from "react";
+import { useI18n } from "../i18n";
 
 export interface ConfirmModalProps {
   title: string;
@@ -22,6 +23,7 @@ export function ConfirmModal({
   onClose,
   onConfirm,
 }: ConfirmModalProps) {
+  const { t } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
@@ -95,7 +97,7 @@ export function ConfirmModal({
             type="button"
             className="btn-modal-close"
             onClick={onClose}
-            aria-label="Close dialog"
+            aria-label={t("Close dialog")}
             disabled={busy}
           >
             &times;
@@ -111,7 +113,7 @@ export function ConfirmModal({
             onClick={onClose}
             disabled={busy}
           >
-            {cancelLabel}
+            {t(cancelLabel)}
           </button>
           <button
             type="button"

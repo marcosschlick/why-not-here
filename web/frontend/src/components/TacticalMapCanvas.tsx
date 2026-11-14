@@ -13,6 +13,7 @@ import type {
   SemanticModificationsData,
 } from "../types";
 import type { GridPoint } from "../utils/geometry";
+import { useI18n } from "../i18n";
 
 interface TacticalMapCanvasProps {
   mapData: MapData;
@@ -220,8 +221,14 @@ function drawSpeedArrow(
   if (from[0] === to[0] && from[1] === to[1]) return;
   ctx.save();
   ctx.translate(
-    ((center?.x ?? (from[1] + to[1]) / 2) + 0.5 + (hasSlope ? Math.cos(angle) * 0.25 : 0)) * cellSize,
-    ((center?.y ?? (from[0] + to[0]) / 2) + 0.5 + (hasSlope ? Math.sin(angle) * 0.25 : 0)) * cellSize,
+    ((center?.x ?? (from[1] + to[1]) / 2) +
+      0.5 +
+      (hasSlope ? Math.cos(angle) * 0.25 : 0)) *
+      cellSize,
+    ((center?.y ?? (from[0] + to[0]) / 2) +
+      0.5 +
+      (hasSlope ? Math.sin(angle) * 0.25 : 0)) *
+      cellSize,
   );
   ctx.rotate(angle);
   ctx.beginPath();
@@ -544,6 +551,7 @@ export function TacticalMapCanvas({
   onPointerLeave,
   onRendered,
 }: TacticalMapCanvasProps) {
+  const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
@@ -691,8 +699,14 @@ export function TacticalMapCanvas({
       }
     }
 
-    const fastNodes = modifications?.terrain_assignments.filter(([, target]) => target === "GRASS").map(([node]) => node) ?? [];
-    const slowNodes = modifications?.terrain_assignments.filter(([, target]) => target === "FOREST").map(([node]) => node) ?? [];
+    const fastNodes =
+      modifications?.terrain_assignments
+        .filter(([, target]) => target === "GRASS")
+        .map(([node]) => node) ?? [];
+    const slowNodes =
+      modifications?.terrain_assignments
+        .filter(([, target]) => target === "FOREST")
+        .map(([node]) => node) ?? [];
     const openingNodes =
       modifications?.cell_openings.map(({ cell }) => cell) ?? [];
     const userPathCells = new Set(
@@ -733,12 +747,23 @@ export function TacticalMapCanvas({
     );
 
     for (const nodes of [fastNodes, slowNodes]) {
-      drawModificationCells(ctx, nodes, MODIFICATION_TERRAIN_RGB, effectiveCellSize);
+      drawModificationCells(
+        ctx,
+        nodes,
+        MODIFICATION_TERRAIN_RGB,
+        effectiveCellSize,
+      );
     }
     for (const [row, col] of slowNodes) {
       ctx.beginPath();
-      ctx.moveTo((col + 0.32) * effectiveCellSize, (row + 0.5) * effectiveCellSize);
-      ctx.lineTo((col + 0.68) * effectiveCellSize, (row + 0.5) * effectiveCellSize);
+      ctx.moveTo(
+        (col + 0.32) * effectiveCellSize,
+        (row + 0.5) * effectiveCellSize,
+      );
+      ctx.lineTo(
+        (col + 0.68) * effectiveCellSize,
+        (row + 0.5) * effectiveCellSize,
+      );
       ctx.lineCap = "round";
       ctx.strokeStyle = rgba(MODIFICATION_EDGE_RGB);
       ctx.lineWidth = 0.17 * effectiveCellSize;
@@ -774,16 +799,39 @@ export function TacticalMapCanvas({
       for (const {
         edge: [from, to],
       } of records) {
-        const index = userPath.findIndex((point, i) => i + 1 < userPath.length &&
-          point[0] === from[0] && point[1] === from[1] &&
-          userPath[i + 1][0] === to[0] && userPath[i + 1][1] === to[1]);
-        const center = index < 0 ? undefined : {
-          x: (routePoints[index].x + routePoints[index + 1].x) / 2,
-          y: (routePoints[index].y + routePoints[index + 1].y) / 2,
-        };
-        const hasSlope = modifications?.slope_adjustments.some(({ edge }) =>
-          edge[0][0] === from[0] && edge[0][1] === from[1] && edge[1][0] === to[0] && edge[1][1] === to[1]) ?? false;
-        drawSpeedArrow(ctx, from, to, effectiveCellSize, color, double, center, hasSlope);
+        const index = userPath.findIndex(
+          (point, i) =>
+            i + 1 < userPath.length &&
+            point[0] === from[0] &&
+            point[1] === from[1] &&
+            userPath[i + 1][0] === to[0] &&
+            userPath[i + 1][1] === to[1],
+        );
+        const center =
+          index < 0
+            ? undefined
+            : {
+                x: (routePoints[index].x + routePoints[index + 1].x) / 2,
+                y: (routePoints[index].y + routePoints[index + 1].y) / 2,
+              };
+        const hasSlope =
+          modifications?.slope_adjustments.some(
+            ({ edge }) =>
+              edge[0][0] === from[0] &&
+              edge[0][1] === from[1] &&
+              edge[1][0] === to[0] &&
+              edge[1][1] === to[1],
+          ) ?? false;
+        drawSpeedArrow(
+          ctx,
+          from,
+          to,
+          effectiveCellSize,
+          color,
+          double,
+          center,
+          hasSlope,
+        );
       }
     }
 
@@ -951,7 +999,7 @@ export function TacticalMapCanvas({
         }}
         data-offset-x={viewport.x}
         data-offset-y={viewport.y}
-        aria-label="Tactical map"
+        aria-label={t("Tactical map")}
         role={interactive ? undefined : "img"}
         onPointerDown={interactive ? onPointerDown : undefined}
         onPointerMove={onPointerMove}
@@ -968,7 +1016,7 @@ export function TacticalMapLegend({
   modifications,
   showOptimalPath,
   showAlternativePath = true,
-  alternativePathLabel = "p′ · Alternative",
+  alternativePathLabel,
 }: {
   mapData: MapData;
   modifications?: SemanticModificationsData | null;
@@ -976,8 +1024,16 @@ export function TacticalMapLegend({
   showAlternativePath?: boolean;
   alternativePathLabel?: string;
 }) {
-  const fastCount = modifications?.terrain_assignments.filter(([, target]) => target === "GRASS").length ?? 0;
-  const slowCount = modifications?.terrain_assignments.filter(([, target]) => target === "FOREST").length ?? 0;
+  const { language, t, n } = useI18n();
+  const routeLabel = alternativePathLabel ?? t("p′ · Alternative");
+  const fastCount =
+    modifications?.terrain_assignments.filter(
+      ([, target]) => target === "GRASS",
+    ).length ?? 0;
+  const slowCount =
+    modifications?.terrain_assignments.filter(
+      ([, target]) => target === "FOREST",
+    ).length ?? 0;
   const terrainCount = fastCount + slowCount;
   const openingCount = modifications?.cell_opening ?? 0;
   const slopeCount = modifications?.slope ?? 0;
@@ -992,43 +1048,43 @@ export function TacticalMapLegend({
     0;
 
   return (
-    <div className="canvas-legend" aria-label="Map legend">
+    <div className="canvas-legend" aria-label={t("Map legend")}>
       {(showOptimalPath || showAlternativePath) && (
         <div className="legend-group">
-          <span className="legend-group-label">Routes</span>
+          <span className="legend-group-label">{t("Routes")}</span>
           {showOptimalPath && (
             <span className="legend-item">
               <span className="legend-color legend-optimal-route" />
-              p* · Optimal
+              {t("p* · Optimal")}
             </span>
           )}
           {showAlternativePath && (
             <span className="legend-item">
               <span className="legend-color legend-route" />
-              {alternativePathLabel}
+              {routeLabel}
             </span>
           )}
           {showOptimalPath && showAlternativePath && (
             <span className="legend-item">
               <span className="legend-color legend-shared-route" />
-              Shared section
+              {t("Shared section")}
             </span>
           )}
         </div>
       )}
       <div className="legend-group">
-        <span className="legend-group-label">Endpoints</span>
+        <span className="legend-group-label">{t("Endpoints")}</span>
         <span className="legend-item">
           <span className="legend-color legend-start" />
-          Start
+          {t("Start")}
         </span>
         <span className="legend-item">
           <span className="legend-color legend-goal" />
-          Goal
+          {t("Goal")}
         </span>
       </div>
       <div className="legend-group">
-        <span className="legend-group-label">Terrain</span>
+        <span className="legend-group-label">{t("Terrain")}</span>
         {Object.entries(mapData.speeds ?? {})
           .filter(
             ([name]) =>
@@ -1045,14 +1101,16 @@ export function TacticalMapLegend({
                 }}
               />
               {mapData.isp_model === "BRANDAO" && name === "GRASS"
-                ? "Fast"
+                ? t("Fast")
                 : mapData.isp_model === "BRANDAO" && name === "FOREST"
-                  ? "Slow"
-                  : name.toLowerCase().replaceAll("_", " ")}{" "}
+                  ? t("Slow")
+                  : t(name, {}) === name
+                    ? name.toLowerCase().replaceAll("_", " ")
+                    : t(name)}{" "}
               (
-              {Number(speed).toLocaleString("en-US", {
+              {new Intl.NumberFormat(language, {
                 maximumSignificantDigits: 6,
-              })}{" "}
+              }).format(Number(speed))}{" "}
               m/s)
             </span>
           ))}
@@ -1069,28 +1127,28 @@ export function TacticalMapLegend({
                 : undefined
             }
           />
-          {mapData.isp_model === "BRANDAO" ? "Blocked" : "Obstacle"}
+          {mapData.isp_model === "BRANDAO" ? t("Blocked") : t("Obstacle")}
         </span>
       </div>
       {hasChanges && (
         <div className="legend-group">
-          <span className="legend-group-label">Changes</span>
+          <span className="legend-group-label">{t("Changes")}</span>
           {fastCount > 0 && (
             <span className="legend-item">
               <span className="legend-color legend-change-cell legend-change-terrain" />
-              Slow to fast ({fastCount})
+              {t("Slow to fast")} ({n(fastCount)})
             </span>
           )}
           {slowCount > 0 && (
             <span className="legend-item">
               <span className="legend-color legend-change-cell legend-change-terrain legend-terrain-slow" />
-              Fast to slow ({slowCount})
+              {t("Fast to slow")} ({n(slowCount)})
             </span>
           )}
           {openingCount > 0 && (
             <span className="legend-item">
               <span className="legend-color legend-change-cell legend-change-cell-opening" />
-              Cells made traversable ({openingCount})
+              {t("Cells made traversable")} ({n(openingCount)})
             </span>
           )}
           {slopeCount > 0 && (
@@ -1110,19 +1168,19 @@ export function TacticalMapLegend({
                   d="M3 7h14M10 3v8M14 4l3 3-3 3"
                 />
               </svg>
-              Directed slopes adjusted ({slopeCount})
+              {t("Directed slopes adjusted")} ({n(slopeCount)})
             </span>
           )}
           {[
             {
               count: environmentalCount,
-              label: "Environmental speed limit removed",
+              label: t("Environmental speed limit removed"),
               color: "var(--map-change-environmental-speed)",
               path: "M2 7h15M11 3l6 4-6 4",
             },
             {
               count: capabilityCount,
-              label: "Hypothetical robot capability",
+              label: t("Hypothetical robot capability"),
               color: "var(--map-change-robot-capability)",
               path: "M2 7h15M11 3l6 4-6 4M6 3l6 4-6 4",
             },
@@ -1139,7 +1197,7 @@ export function TacticalMapLegend({
                   <path className="legend-speed-outline" d={path} />
                   <path className="legend-speed-color" d={path} />
                 </svg>
-                {label} ({count} directed edges)
+                {label} ({n(count)} {t("directed edges")})
               </span>
             ))}
         </div>

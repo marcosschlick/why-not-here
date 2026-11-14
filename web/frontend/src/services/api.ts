@@ -9,17 +9,31 @@ import type {
   SolveResponse,
   SystemConfig,
 } from "../types";
+import { FrontendError } from "../i18n";
+
+function responseError(body: unknown, fallback: string): Error {
+  if (
+    body !== null &&
+    typeof body === "object" &&
+    "detail" in body &&
+    typeof body.detail === "string"
+  ) {
+    return new Error(body.detail);
+  }
+  return new FrontendError(fallback);
+}
 
 export async function fetchMapProfiles(): Promise<MapProfile[]> {
   const response = await fetch("/api/map-profiles");
-  if (!response.ok) throw new Error("Failed to load automatic map profiles.");
+  if (!response.ok)
+    throw new FrontendError("Failed to load automatic map profiles.");
   return response.json();
 }
 
 export async function fetchConfig(): Promise<SystemConfig> {
   const response = await fetch("/api/config");
   if (!response.ok) {
-    throw new Error(`Failed to fetch configuration: ${response.statusText}`);
+    throw new FrontendError("Failed to fetch configuration.");
   }
   return response.json();
 }
@@ -37,18 +51,19 @@ export async function generateMap(
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
-    throw new Error(
-      errorData?.detail || `Failed to generate map: ${response.statusText}`,
-    );
+    throw responseError(errorData, "Failed to generate map.");
   }
   return response.json();
 }
 
-export async function createBatch(): Promise<{ name: string; output_dir: string }> {
+export async function createBatch(): Promise<{
+  name: string;
+  output_dir: string;
+}> {
   const response = await fetch("/api/batches", { method: "POST" });
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
-    throw new Error(errorData?.detail || "Failed to create batch directory.");
+    throw responseError(errorData, "Failed to create batch directory.");
   }
   return response.json();
 }
@@ -79,10 +94,7 @@ export async function solveISP(
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
-    throw new Error(
-      errorData?.detail ||
-        `Failed to execute ISP solver: ${response.statusText}`,
-    );
+    throw responseError(errorData, "Failed to execute ISP solver.");
   }
   return response.json();
 }
@@ -138,10 +150,7 @@ export async function saveConfigurations(
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
-    throw new Error(
-      errorData?.detail ||
-        `Failed to save configuration: ${response.statusText}`,
-    );
+    throw responseError(errorData, "Failed to save configuration.");
   }
   return response.json();
 }
@@ -159,10 +168,7 @@ export async function importConfig(
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
-    throw new Error(
-      errorData?.detail ||
-        `Failed to import configuration: ${response.statusText}`,
-    );
+    throw responseError(errorData, "Failed to import configuration.");
   }
   return response.json();
 }
@@ -181,7 +187,8 @@ export async function exportScenarioResults(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, records: compact }),
   });
-  if (!response.ok) throw new Error("Failed to export scenario results.");
+  if (!response.ok)
+    throw new FrontendError("Failed to export scenario results.");
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   link.href = url;
@@ -208,9 +215,7 @@ export async function planScenarioConfigurations(
   });
   if (!response.ok) {
     const error = await response.json().catch(() => null);
-    throw new Error(
-      error?.detail || "Failed to prepare scenario configurations.",
-    );
+    throw responseError(error, "Failed to prepare scenario configurations.");
   }
   return (await response.json()).configurations;
 }
