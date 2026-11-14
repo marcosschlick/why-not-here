@@ -44,6 +44,18 @@ def available_path(directory: Path, name: str, suffix: str = "") -> Path:
         index += 1
 
 
+def reserve_batch_directory(parent: Path) -> Path:
+    parent.mkdir(parents=True, exist_ok=True)
+    name = f"batch-{datetime.now():%Y%m%d-%H%M%S}"
+    while True:
+        target = available_path(parent, name)
+        try:
+            target.mkdir()
+            return target
+        except FileExistsError:
+            continue
+
+
 def reserve_output_directory(
     height: int,
     width: int,
@@ -52,8 +64,11 @@ def reserve_output_directory(
     incremental: bool = False,
     reduction: str = "NONE",
     isp_model: str = "NORMAL",
+    batch_directory: Path | None = None,
 ) -> Path:
-    directory = get_project_path("results")
+    directory = (
+        batch_directory if batch_directory is not None else get_project_path("results")
+    )
     directory.mkdir(parents=True, exist_ok=True)
     name = experiment_name(
         height,

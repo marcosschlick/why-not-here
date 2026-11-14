@@ -10,7 +10,7 @@ import type {
 import { ResultsExport } from "./ResultsExport";
 import { scientificOutcome, scientificOutcomeLabel } from "../utils/execution";
 import { SolverConfigBadges } from "./SolverConfigBadges";
-import { formatReductionMethod } from "../utils/formatters";
+import { configuredValidationScope, directoryName, formatReductionMethod, formatValidationScope } from "../utils/formatters";
 import { useMapCanvasFit } from "../utils/useMapCanvasFit";
 import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
 import type { GridPoint } from "../utils/geometry";
@@ -34,6 +34,7 @@ interface ResultsViewProps {
   isSolving: boolean;
   config?: SystemConfig | null;
   mapImageUrl?: string;
+  outputDirectory?: string | null;
 }
 
 function getArtifactFilename(artifactPath: string): string {
@@ -161,6 +162,7 @@ export function ResultsView({
   isSolving: isExecutionRunning,
   config,
   mapImageUrl,
+  outputDirectory,
 }: ResultsViewProps) {
   const [internalBatchIndex, setInternalBatchIndex] = useState<number>(0);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -517,7 +519,8 @@ export function ResultsView({
 
   return (
     <section className="results-container">
-      <ResultsExport records={records} isSolving={isExecutionRunning} />
+      <ResultsExport records={records} isSolving={isExecutionRunning} name={directoryName(outputDirectory)} />
+      {outputDirectory && <p className="subtitle">Results saved to {outputDirectory}</p>}
       {isBatch && batchQueue && (
         <div className="batch-results-tabs-wrapper">
           <div
@@ -556,7 +559,7 @@ export function ResultsView({
                     {item.config.ISP_MODEL !== "BRANDAO" &&
                       ` · ${item.config.DEFAULT_REDUCTION_METHOD}`}
                     {item.config.USE_INCREMENTAL_SOLVER &&
-                      ` · requested ${item.config.INCREMENTAL_ASTAR_SCOPE}, ${item.result ? `effective ${item.result.metrics?.effective_astar_scope ?? "unknown"}` : `expected ${item.config.DEFAULT_REDUCTION_METHOD === "NONE" ? "GLOBAL" : item.config.INCREMENTAL_ASTAR_SCOPE}`}`}
+                      ` · ${formatValidationScope(item.result ? item.result.metrics?.effective_astar_scope : configuredValidationScope(item.config))}`}
                   </span>
                   <span className={`batch-tab-badge status-${outcome}`}>
                     {tabLabel}
@@ -748,7 +751,7 @@ export function ResultsView({
               <span className="loading-param-chip">
                 Solver:{" "}
                 {activeBatchItem.config.USE_INCREMENTAL_SOLVER
-                  ? `Incremental MILP (requested ${activeBatchItem.config.INCREMENTAL_ASTAR_SCOPE}, expected ${activeBatchItem.config.DEFAULT_REDUCTION_METHOD === "NONE" ? "GLOBAL" : activeBatchItem.config.INCREMENTAL_ASTAR_SCOPE})`
+                  ? `Incremental MILP · ${formatValidationScope(configuredValidationScope(activeBatchItem.config))}`
                   : "Monolithic MILP"}
               </span>
               <span className="loading-param-chip">
@@ -790,9 +793,9 @@ export function ResultsView({
           <div className="metrics-grid">
             {currentConfig?.USE_INCREMENTAL_SOLVER && (
               <div className="metric-card">
-                <span className="metric-label">A* Scope: Requested / Effective</span>
+                <span className="metric-label">Incremental Search</span>
                 <span className="metric-value">
-                  {currentResult.metrics?.requested_astar_scope ?? "Unknown"} / {currentResult.metrics?.effective_astar_scope ?? "Unknown"}
+                  {formatValidationScope(currentResult.metrics?.effective_astar_scope)}
                 </span>
               </div>
             )}

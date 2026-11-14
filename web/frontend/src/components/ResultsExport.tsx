@@ -5,9 +5,11 @@ import { exportScenarioResults } from "../services/api";
 export function ResultsExport({
   records,
   isSolving,
+  name,
 }: {
   records: LastResult[];
   isSolving: boolean;
+  name: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -15,7 +17,7 @@ export function ResultsExport({
     setBusy(true);
     setError("");
     try {
-      await exportScenarioResults(records);
+      await exportScenarioResults(records, name);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Export failed.");
     } finally {

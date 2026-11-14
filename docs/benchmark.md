@@ -263,6 +263,10 @@ Unsupported systems return null measurements. No additional dependency is used.
 
 ## Records, artifacts and CSV
 
+Batch executions share a timestamped `results/batch-*` directory; individual
+executions keep their own directory directly under `results/`. Batch configuration
+files likewise share a timestamped `configurations/batch-*` directory.
+
 New execution directories retain the original `map/map.json`, prepared and
 candidate grids under `results/`, PNGs, `log.txt` and `scenario.json`.
 `scenario.json` contains machine-readable outcomes even without candidate images;
@@ -281,12 +285,13 @@ solver tolerances and available package/runtime versions. Hashes include map
 provenance and do not depend on output-directory names.
 
 The Web results view exports recorded terminal attempts via local
-`POST /api/benchmarks/export` with `{records}`. It formats supplied session
-records without scanning stored results. HTTP failures are exported as request
+`POST /api/benchmarks/export` with `{name, records}`. It formats the current
+execution or batch records without scanning stored results; the CSV download uses
+the corresponding experiment or batch directory name. HTTP failures are exported as request
 errors with unknown solver/validation state; a failed request does not prove that
-the server stopped. Session export also works while later scenarios are running.
+the server stopped. Export is available after the active execution or batch finishes.
 
-`scenarios.csv` contains one row per execution or additional attempt and a fixed
+The named CSV contains one row per execution or additional attempt and a fixed
 set of columns. It includes run and map identities, model, strategy, reduction,
 grid and solver settings, requested and effective incremental A* scope, outcome
 and certification, timing, iteration and

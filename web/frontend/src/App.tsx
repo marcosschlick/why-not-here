@@ -18,6 +18,7 @@ import { formatReductionMethod } from "./utils/formatters";
 import { Topbar } from "./components/Topbar";
 import { QuestionnaireAdmin } from "./components/QuestionnaireAdmin";
 import {
+  createBatch,
   fetchConfig,
   generateMap,
   importConfig,
@@ -73,7 +74,10 @@ export function App() {
   );
   const [workflowMode, setWorkflowMode] = useState<"run" | "create">("run");
   const [benchmark, setBenchmark] = useState(false);
-  const [executionRecords, setExecutionRecords] = useState<LastResult[]>([]);
+  const [executionRecords, setExecutionRecords] = useState<{ group: string; result: LastResult }[]>([]);
+  const [exportGroup, setExportGroup] = useState("");
+  const [batchDirectory, setBatchDirectory] = useState<{ name: string; output_dir: string } | null>(null);
+  const [singleOutputDirectory, setSingleOutputDirectory] = useState<string | null>(null);
   const executionOrder = useRef(0);
   const attempts = useRef(new Map<string, number>());
   function nextExecution(
@@ -300,6 +304,7 @@ export function App() {
     setElapsedTime(0);
     setIsSolvingISP(true);
     setErrorMessage(null);
+    setSingleOutputDirectory(null);
     const attempt = (attempts.current.get("single") ?? 0) + 1;
     attempts.current.set("single", attempt);
     const execution: ExecutionMetadata = {
@@ -308,6 +313,7 @@ export function App() {
       attempt_index: attempt,
       execution_order: ++executionOrder.current,
     };
+    setExportGroup(execution.run_id);
     try {
       const response = await solveISP(
         userPath,
@@ -329,7 +335,8 @@ export function App() {
         optimal_path:
           response.result.original_optimal_path || mapData.optimal_path,
       });
-      setExecutionRecords((previous) => [...previous, response.result]);
+      setExecutionRecords((previous) => [...previous, { group: execution.run_id, result: response.result }]);
+      setSingleOutputDirectory(response.output_dir);
       setLastResult(response.result);
       setArtifacts(response.artifacts);
       setCacheKey(Date.now());
@@ -342,7 +349,7 @@ export function App() {
         userPath,
         execution,
       );
-      setExecutionRecords((previous) => [...previous, failed]);
+      setExecutionRecords((previous) => [...previous, { group: execution.run_id, result: failed }]);
       setLastResult(failed);
       setCurrentStep("results");
       setErrorMessage(
@@ -418,6 +425,7 @@ export function App() {
     const firstIndex = items.length ? 0 : -1;
     if (firstIndex < 0) return;
     setIsBatchMode(true);
+    setBatchDirectory(null);
     setBatchReviewIndex(firstIndex);
     setElapsedTime(0);
     setIsGeneratingMap(true);
@@ -564,6 +572,7 @@ export function App() {
         }),
       );
       const result = await saveConfigurations({
+        batch: true,
         configurations,
       });
       setQueue((previous) =>
@@ -574,7 +583,7 @@ export function App() {
         })),
       );
       setSuccessMessage(
-        `Saved ${result.saved_files.length} configurations to configurations/`,
+        `Saved ${result.saved_files.length} configurations to ${result.saved_files[0].replace(/[\\/][^\\/]+$/, "")}/`,
       );
       setIsBatchMode(false);
       setCurrentStep("config");
@@ -705,6 +714,19 @@ export function App() {
     setElapsedTime(0);
     setIsSolvingISP(true);
     setErrorMessage(null);
+    let batch = batchDirectory;
+    try {
+      if (!batch) {
+        batch = await createBatch();
+        setBatchDirectory(batch);
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to create batch directory.");
+      setIsSolvingISP(false);
+      return;
+    }
+    setExportGroup(batch.output_dir);
+    setSuccessMessage(`Batch results will be saved to ${batch.output_dir}/`);
     setCurrentStep("results");
     setActiveBatchResultIndex(0);
     for (let i = 0; i < finalQueue.length; i++) {
@@ -733,20 +755,21 @@ export function App() {
           item.mapData.start,
           item.mapData.goal,
           item.mapData.grid,
-          item.naming,
+          { ...item.naming, batch_name: batch.name },
           {
             ...execution,
             map_generation_sec:
               item.mapData.generation?.runtime_sec ?? undefined,
           },
         );
-        setExecutionRecords((previous) => [...previous, response.result]);
+        setExecutionRecords((previous) => [...previous, { group: batch.output_dir, result: response.result }]);
         setQueue((prev) =>
           prev.map((it, idx) =>
             idx === i
               ? {
                   ...it,
                   outputDir: response.output_dir,
+                  batchDir: batch.output_dir,
                   mapData: it.mapData
                     ? {
                         ...it.mapData,
@@ -781,20 +804,26 @@ export function App() {
               execution,
             )
           : undefined;
-        if (failure) setExecutionRecords((previous) => [...previous, failure]);
+        if (failure) setExecutionRecords((previous) => [...previous, { group: batch.output_dir, result: failure }]);
         setQueue((prev) =>
           prev.map((it, idx) =>
             idx === i
-              ? { ...it, status: "failed", error: msg, result: failure }
+              ? { ...it, status: "failed", error: msg, result: failure, batchDir: batch.output_dir }
               : it,
           ),
         );
       }
     }
     setIsSolvingISP(false);
+    setSuccessMessage(`Batch results saved to ${batch.output_dir}/`);
   }
   function handleSelectQueueItem(item: QueueItem) {
     if (item.result) {
+      if (item.batchDir) {
+        setBatchDirectory({ name: item.batchDir.replace(/\/$/, "").split(/[\\/]/).pop() || "", output_dir: item.batchDir });
+        setExportGroup(item.batchDir);
+        setIsBatchMode(true);
+      }
       const idx = queue.findIndex((q) => q.id === item.id);
       if (idx >= 0) {
         setActiveBatchResultIndex(idx);
@@ -1224,7 +1253,8 @@ export function App() {
         {currentStep === "results" && (
           <div key="step-results" className="step-container results-step">
             <ResultsView
-              records={executionRecords}
+              records={executionRecords.filter((record) => record.group === exportGroup).map((record) => record.result)}
+              outputDirectory={isBatchMode ? batchDirectory?.output_dir : singleOutputDirectory}
               result={lastResult}
               mapData={
                 isBatchMode ? queue[activeBatchResultIndex]?.mapData : mapData

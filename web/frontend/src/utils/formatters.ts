@@ -14,3 +14,17 @@ export function formatReductionMethod(method?: string): string {
       return method || "None (Full Graph)";
   }
 }
+
+export function formatValidationScope(scope?: string | null): string {
+  if (scope === "GLOBAL") return "Global A*";
+  if (scope === "SUBGRAPH") return "Subgraph A*";
+  return "A* scope unavailable";
+}
+
+export function configuredValidationScope(config: { DEFAULT_REDUCTION_METHOD: string; INCREMENTAL_ASTAR_SCOPE?: string }): string {
+  return config.DEFAULT_REDUCTION_METHOD === "NONE" ? "GLOBAL" : (config.INCREMENTAL_ASTAR_SCOPE ?? "GLOBAL");
+}
+
+export function directoryName(path?: string | null): string {
+  return path?.replace(/\/$/, "").split(/[\\/]/).pop() || "scenario";
+}

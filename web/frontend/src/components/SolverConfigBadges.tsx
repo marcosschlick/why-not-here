@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { SystemConfig } from "../types";
-import { formatReductionMethod } from "../utils/formatters";
+import { configuredValidationScope, formatReductionMethod, formatValidationScope } from "../utils/formatters";
 
 interface SolverConfigBadgesProps {
   config?: SystemConfig | null;
@@ -49,7 +49,7 @@ export function SolverConfigBadges({
   const reductionLabel = formatReductionMethod(config.DEFAULT_REDUCTION_METHOD);
 
   const solverArchLabel = config.USE_INCREMENTAL_SOLVER
-    ? `Incremental MILP (${config.DEFAULT_SOLVER || "HiGHS"}; requested ${config.INCREMENTAL_ASTAR_SCOPE}, expected ${config.DEFAULT_REDUCTION_METHOD === "NONE" ? "GLOBAL" : config.INCREMENTAL_ASTAR_SCOPE})`
+    ? `Incremental MILP (${config.DEFAULT_SOLVER || "HiGHS"} · ${formatValidationScope(configuredValidationScope(config))})`
     : `Monolithic MILP (${config.DEFAULT_SOLVER || "HiGHS"})`;
 
   const gridSpecs = `${config.MAP_H}×${config.MAP_W} (${config.CONNECTIVITY}-Connected)`;

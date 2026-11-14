@@ -12,8 +12,12 @@ from src.pipeline.experiment_config import (
 from src.pipeline.generate_map import generate_map, persist_map
 from src.pipeline.reporting import serialize_result
 from src.pipeline.run_isp import run_isp
-from src.pipeline.storage import reserve_output_directory, set_output_directory
-from src.pipeline.utils import create_alternative_path, prepare_endpoints
+from src.pipeline.storage import (
+    reserve_batch_directory,
+    reserve_output_directory,
+    set_output_directory,
+)
+from src.pipeline.utils import create_alternative_path, get_project_path, prepare_endpoints
 
 from .artifacts import collect_artifacts
 
@@ -44,8 +48,11 @@ class PipelineRunner:
             raise RuntimeError("Pipeline execution already in progress.")
         parameters = {**get_experiment_configurations(), "ISP_MODEL": "NORMAL"}
         output_dirs: list[Path] = []
+        batch_directory = None
         try:
             scenarios = expand_scenario_configurations(parameters)
+            if runs * len(scenarios) > 1:
+                batch_directory = reserve_batch_directory(get_project_path("results"))
             for index in range(1, runs + 1):
                 for scenario in scenarios:
                     output_dirs.append(
@@ -57,11 +64,14 @@ class PipelineRunner:
                             incremental=scenario["USE_INCREMENTAL_SOLVER"],
                             reduction=scenario["DEFAULT_REDUCTION_METHOD"],
                             isp_model=scenario["ISP_MODEL"],
+                            batch_directory=batch_directory,
                         )
                     )
         except (ValueError, OSError):
             for directory in output_dirs:
                 directory.rmdir()
+            if batch_directory is not None:
+                batch_directory.rmdir()
             self.execution_lock.release()
             raise
         with self.lock:

@@ -15,6 +15,7 @@ from src.pipeline.run_isp import run_isp
 from src.pipeline.storage import (
     available_path,
     experiment_name,
+    reserve_batch_directory,
     reserve_output_directory,
     set_output_directory,
 )
@@ -428,7 +429,9 @@ def build_experiment_config(
     return export_dict
 
 
-def save_experiment_configurations(configurations: list[dict[str, Any]]) -> list[str]:
+def save_experiment_configurations(
+    configurations: list[dict[str, Any]], batch: bool = False
+) -> list[str]:
     if not configurations:
         raise ValueError("At least one configuration is required.")
     destination = get_project_path("configurations")
@@ -459,6 +462,9 @@ def save_experiment_configurations(configurations: list[dict[str, Any]]) -> list
             export_data["execution"]["benchmark_member"] = True
         prepared.append((name, json.dumps(export_data, indent=2) + "\n"))
 
+    batch_directory = reserve_batch_directory(destination) if batch else None
+    if batch_directory is not None:
+        destination = batch_directory
     created_paths = []
     try:
         for name, content in prepared:
@@ -475,6 +481,8 @@ def save_experiment_configurations(configurations: list[dict[str, Any]]) -> list
     except OSError:
         for target in created_paths:
             target.unlink(missing_ok=True)
+        if batch_directory is not None:
+            batch_directory.rmdir()
         raise
     return [str(target) for target in created_paths]
 
@@ -647,6 +655,13 @@ def execute_experiment(
     execution = dict(config_data.get("execution") or {})
     execution.setdefault("benchmark_group_id", str(uuid4()))
     results = []
+    batch_directory = (
+        reserve_batch_directory(get_project_path("results"))
+        if len(scenarios) > 1
+        else None
+    )
+    if verbose and batch_directory is not None:
+        print(f"Batch results: {batch_directory}")
     for index, scenario in enumerate(scenarios, start=1):
         apply_experiment_config(scenario, start=start, goal=goal)
         output = reserve_output_directory(
@@ -656,6 +671,7 @@ def execute_experiment(
             incremental=scenario["USE_INCREMENTAL_SOLVER"],
             reduction=scenario["DEFAULT_REDUCTION_METHOD"],
             isp_model=scenario["ISP_MODEL"],
+            batch_directory=batch_directory,
         )
         set_output_directory(output)
         persist_map(generated, start=start, goal=goal)

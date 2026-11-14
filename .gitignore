@@ -4,6 +4,6 @@ docs/*.pdf
 maps/
 output/
 results/
+configurations/
 .ruff_cache
 .env
-

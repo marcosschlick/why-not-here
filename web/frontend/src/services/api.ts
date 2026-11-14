@@ -44,6 +44,15 @@ export async function generateMap(
   return response.json();
 }
 
+export async function createBatch(): Promise<{ name: string; output_dir: string }> {
+  const response = await fetch("/api/batches", { method: "POST" });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.detail || "Failed to create batch directory.");
+  }
+  return response.json();
+}
+
 export async function solveISP(
   userPath: [number, number][] | null,
   config?: Partial<SystemConfig>,
@@ -160,6 +169,7 @@ export async function importConfig(
 
 export async function exportScenarioResults(
   records: LastResult[],
+  name: string,
 ): Promise<void> {
   const compact = records.map(({ prepared_grid, modified_grid, ...record }) => {
     void prepared_grid;
@@ -169,13 +179,13 @@ export async function exportScenarioResults(
   const response = await fetch("/api/benchmarks/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ records: compact }),
+    body: JSON.stringify({ name, records: compact }),
   });
   if (!response.ok) throw new Error("Failed to export scenario results.");
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   link.href = url;
-  link.download = "scenarios.csv";
+  link.download = `${name}.csv`;
   document.body.appendChild(link);
   link.click();
   link.remove();

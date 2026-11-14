@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/benchmarks")
 class ResultsExport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    name: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.-]+$")
     records: list[dict[str, Any]] = Field(min_length=1)
 
 
@@ -249,7 +250,7 @@ def export_results(payload: ResultsExport):
         render_csv(rows, FIELDS, missing="NA"),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": 'attachment; filename="scenarios.csv"',
+            "Content-Disposition": f'attachment; filename="{payload.name}.csv"',
             "Cache-Control": "no-store",
         },
     )

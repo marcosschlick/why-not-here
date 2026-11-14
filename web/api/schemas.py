@@ -11,6 +11,9 @@ class NamingMetadata(BaseModel):
     map_index: int | None = Field(default=None, ge=1)
     benchmark: bool = False
     benchmark_member: bool = False
+    batch_name: str | None = Field(
+        default=None, pattern=r"^batch-[0-9]{8}-[0-9]{6}(?:-[0-9]+)?$", max_length=40
+    )
     benchmark_group_id: str | None = Field(default=None, max_length=128)
 
 
@@ -156,6 +159,7 @@ class SaveConfigItem(BaseModel):
 class SaveConfigurationsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    batch: bool = False
     configurations: list[SaveConfigItem] = Field(min_length=1)
 
 

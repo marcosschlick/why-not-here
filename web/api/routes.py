@@ -28,6 +28,7 @@ from src.pipeline.reporting import serialize_result
 from src.pipeline.run_isp import grid_response, run_isp
 from src.pipeline.storage import (
     get_output_directory,
+    reserve_batch_directory,
     reserve_output_directory,
     set_output_directory,
 )
@@ -185,6 +186,7 @@ def save_configurations_endpoint(
     try:
         saved_files = save_experiment_configurations(
             configurations=configurations,
+            batch=payload.batch,
         )
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -354,6 +356,13 @@ def generate_map_data(payload: GenerateMapRequest) -> dict[str, Any]:
         ) from exc
 
 
+@router.post("/batches")
+@exclusive_pipeline
+def create_batch_endpoint() -> dict[str, str]:
+    directory = reserve_batch_directory(get_project_path("results"))
+    return {"name": directory.name, "output_dir": str(directory)}
+
+
 @router.post("/isp/solve")
 @exclusive_pipeline
 def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
@@ -401,6 +410,15 @@ def solve_isp_data(payload: SolveISPRequest) -> dict[str, Any]:
             if payload.naming
             else {}
         )
+        batch_directory = None
+        if payload.naming and payload.naming.batch_name:
+            results_directory = get_project_path("results").resolve()
+            batch_directory = (results_directory / payload.naming.batch_name).resolve()
+            if (
+                batch_directory.parent != results_directory
+                or not batch_directory.is_dir()
+            ):
+                raise ValueError("Batch directory does not exist.")
         output_dir = reserve_output_directory(
             grid.h,
             grid.w,
@@ -408,6 +426,7 @@ def solve_isp_data(payload: SolveISPRequest) -> dict[str, Any]:
             incremental=config.USE_INCREMENTAL_SOLVER,
             reduction=config.DEFAULT_REDUCTION_METHOD,
             isp_model=config.ISP_MODEL,
+            batch_directory=batch_directory,
         )
         set_output_directory(output_dir)
         persist_map(grid, start=start, goal=goal)

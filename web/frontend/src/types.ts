@@ -192,6 +192,7 @@ export interface NamingMetadata {
   map_index?: number;
   benchmark?: boolean;
   benchmark_member?: boolean;
+  batch_name?: string;
   benchmark_group_id?: string;
 }
 
@@ -200,6 +201,7 @@ export interface QueueItem {
   config: SystemConfig;
   savedFile?: string;
   outputDir?: string;
+  batchDir?: string;
   naming?: NamingMetadata;
   benchmarkGroup?: string;
   groupKind?: "benchmark" | "comparison";
@@ -230,6 +232,7 @@ export interface SaveConfigurationItem extends ExportConfigPayload {
 }
 
 export interface SaveConfigurationsPayload {
+  batch?: boolean;
   configurations: SaveConfigurationItem[];
 }
 
