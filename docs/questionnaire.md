@@ -90,8 +90,10 @@ silently drops or converts existing tables.
 
 ## Participation overview
 
-Draft questionnaires retain the title, description, study protocol and scenario
-editor. Active and closed questionnaires show a read-only title and description,
+Draft questionnaires show scenario preparation, study protocol, and review and
+activation in order. Title and description can be changed under **Edit details**;
+scenario selection and participation keys are available in expandable sections.
+Active and closed questionnaires show a read-only title and description,
 participation counts. Draft and active questionnaires include key management;
 closed questionnaires omit it entirely. Active studies also retain participant
 access and closure controls. Editing remains prohibited after activation.

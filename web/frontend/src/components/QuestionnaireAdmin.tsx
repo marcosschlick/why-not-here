@@ -899,22 +899,16 @@ export function QuestionnaireAdmin({
                           : "NEW QUESTIONNAIRE"}
                       </span>
                       <h2>
-                        {editable
-                          ? selected
-                            ? "Questionnaire details"
-                            : "Start a questionnaire"
-                          : selected?.title}
+                        {selected ? selected.title : "Start a questionnaire"}
                       </h2>
-                      {editable ? (
-                        <p className="qa-muted">
-                          Give your study a clear title and description.
-                        </p>
-                      ) : selected?.description ? (
+                      {!selected ? (
+                        <p className="qa-muted">Give your study a clear title and description.</p>
+                      ) : !editable && selected?.description ? (
                         <p className="qa-muted">{selected.description}</p>
                       ) : null}
                     </div>
                     <div className="qa-actions qa-overview-actions">
-                      {selected && (
+                      {selected && (!editable || preview) && (
                         <button
                           type="button"
                           disabled={
@@ -958,15 +952,6 @@ export function QuestionnaireAdmin({
                       key={`${selected.id}:${selected.status}`}
                       questionnaireId={selected.id}
                     />
-                  )}
-                  {selected?.status === "draft" && (
-                    <button
-                      type="button"
-                      disabled={panelBusy || !protocolComplete}
-                      onClick={handleActivateQuestionnaire}
-                    >
-                      Activate questionnaire
-                    </button>
                   )}
                   {selected?.status === "active" && (
                     <section
@@ -1024,14 +1009,9 @@ export function QuestionnaireAdmin({
                       Close questionnaire
                     </button>
                   )}
-                  {selected && selected.status !== "closed" && (
-                    <ParticipationKeysPanel
-                      key={selected.id}
-                      questionnaireId={selected.id}
-                      disabled={panelBusy}
-                    />
-                  )}
                   {editable && !preview && (
+                    <details className="qa-edit-details" open={!selected || detailsDirty || undefined}>
+                      <summary>{selected ? "Edit details" : "Questionnaire details"}</summary>
                     <form onSubmit={saveDraft} className="qa-form">
                       <label>
                         Title
@@ -1057,6 +1037,7 @@ export function QuestionnaireAdmin({
                         {selected ? "Save details" : "Create draft"}
                       </button>
                     </form>
+                    </details>
                   )}
                 </section>
                 {selected && preview && (
@@ -1092,112 +1073,6 @@ export function QuestionnaireAdmin({
                 )}
                 {selected && !preview && (
                   <>
-                    {editable && (
-                      <section className="qa-panel" aria-busy={panelBusy}>
-                        <h2>Study protocol</h2>
-                        <p className="qa-muted">
-                          Select six different saved scenarios. The system
-                          creates a random order for each participant: three
-                          scenarios with explanations, 14 adapted evaluation
-                          items, then three unseen predictions. All six
-                          scenarios must support explanations.
-                        </p>
-                        <form
-                          onSubmit={saveProtocol}
-                          className="qa-form qa-protocol-form"
-                        >
-                          <fieldset
-                            className="qa-fieldset"
-                            disabled={panelBusy}
-                          >
-                            <legend>Scenario pool</legend>
-                            <div className="qa-fields">
-                              {[0, 1, 2, 3, 4, 5].map((index) => (
-                                <label key={index}>
-                                  Scenario {index + 1}
-                                  <select
-                                    required
-                                    value={protocol.scenario_ids[index] || ""}
-                                    onChange={(event) =>
-                                      setProtocol((current) => {
-                                        const ids = [...current.scenario_ids];
-                                        ids[index] = Number(event.target.value);
-                                        return { scenario_ids: ids };
-                                      })
-                                    }
-                                  >
-                                    <option value="">
-                                      Select a saved scenario
-                                    </option>
-                                    {scenarios.map((scenario) => (
-                                      <option
-                                        key={scenario.id}
-                                        value={scenario.id}
-                                        disabled={
-                                          scenario.id !==
-                                            protocol.scenario_ids[index] &&
-                                          protocol.scenario_ids.includes(
-                                            scenario.id,
-                                          )
-                                        }
-                                      >
-                                        {scenario.title}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                              ))}
-                            </div>
-                          </fieldset>
-                          <button type="submit" disabled={panelBusy}>
-                            Save protocol
-                          </button>
-                        </form>
-                        <p className="qa-muted" role="status">
-                          {protocolComplete
-                            ? "Protocol saved: 6 randomized scenarios and 14 adapted evaluation items."
-                            : "Save all six scenarios to enable preview and activation."}
-                        </p>
-                        {protocolDirty && (
-                          <p className="qa-notice">
-                            Save the scenario selection before previewing or
-                            activating the questionnaire.
-                          </p>
-                        )}
-                        {protocolComplete && (
-                          <details className="qa-instrument-details">
-                            <summary>
-                              View the 14 adapted evaluation items
-                            </summary>
-                            <p>
-                              Adapted route explanation questionnaire, selected
-                              from ESS, SCS and xHIS. Responses range from 1
-                              (Strongly disagree) to 5 (Strongly agree). This
-                              custom instrument has not been validated.
-                            </p>
-                            <ol>
-                              {selected.questions
-                                .filter(
-                                  (question) => question.type === "likert",
-                                )
-                                .map((question) => (
-                                  <li key={question.id}>
-                                    <strong>
-                                      {question.configuration.source_scale}{" "}
-                                      {
-                                        question.configuration
-                                          .source_item_number
-                                      }
-                                    </strong>{" "}
-                                    · {question.configuration.topic}:{" "}
-                                    {question.prompt}
-                                  </li>
-                                ))}
-                            </ol>
-                          </details>
-                        )}
-                      </section>
-                    )}
                     {(editable || view === "scenarios") && (
                       <section
                         className="qa-panel"
@@ -1206,12 +1081,10 @@ export function QuestionnaireAdmin({
                         <div className="qa-heading">
                           <div>
                             {editable && (
-                              <span className="qa-overline">
-                                02 / SCENARIOS
-                              </span>
+                              <span className="qa-overline">STEP 1</span>
                             )}
                             <h2>
-                              Saved scenarios{" "}
+                              Scenarios{" "}
                               <span className="qa-count">
                                 {scenarios.length}
                               </span>
@@ -1358,6 +1231,140 @@ export function QuestionnaireAdmin({
                           </div>
                         )}
                       </section>
+                    )}
+                    {editable && (
+                      <section className="qa-panel" aria-busy={panelBusy}>
+                        <div className="qa-setup-heading"><h2>2. Study protocol</h2><span className="qa-setup-status">{protocolComplete && !protocolDirty ? "Ready" : "Action needed"}</span></div>
+                        <p className="qa-muted">
+                          Select six different saved scenarios. The system
+                          creates a random order for each participant: three
+                          scenarios with explanations, 14 adapted evaluation
+                          items, then three unseen predictions. All six
+                          scenarios must support explanations.
+                        </p>
+                        <details className="qa-protocol-details" open={protocolDirty || undefined}>
+                          <summary>Review or change scenario selection</summary>
+                        <form
+                          onSubmit={saveProtocol}
+                          className="qa-form qa-protocol-form"
+                        >
+                          <fieldset
+                            className="qa-fieldset"
+                            disabled={panelBusy}
+                          >
+                            <legend>Scenario pool</legend>
+                            <div className="qa-fields">
+                              {[0, 1, 2, 3, 4, 5].map((index) => (
+                                <label key={index}>
+                                  Scenario {index + 1}
+                                  <select
+                                    required
+                                    value={protocol.scenario_ids[index] || ""}
+                                    onChange={(event) =>
+                                      setProtocol((current) => {
+                                        const ids = [...current.scenario_ids];
+                                        ids[index] = Number(event.target.value);
+                                        return { scenario_ids: ids };
+                                      })
+                                    }
+                                  >
+                                    <option value="">
+                                      Select a saved scenario
+                                    </option>
+                                    {scenarios.map((scenario) => (
+                                      <option
+                                        key={scenario.id}
+                                        value={scenario.id}
+                                        disabled={
+                                          scenario.id !==
+                                            protocol.scenario_ids[index] &&
+                                          protocol.scenario_ids.includes(
+                                            scenario.id,
+                                          )
+                                        }
+                                      >
+                                        {scenario.title}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              ))}
+                            </div>
+                          </fieldset>
+                          <button type="submit" disabled={panelBusy}>
+                            Save protocol
+                          </button>
+                        </form>
+                        </details>
+                        <p className="qa-muted" role="status">
+                          {protocolComplete
+                            ? "Protocol saved: 6 randomized scenarios and 14 adapted evaluation items."
+                            : "Save all six scenarios to enable preview and activation."}
+                        </p>
+                        {protocolComplete && (
+                          <p className="qa-muted">
+                            {selected.protocol.scenario_ids
+                              .map((id) => scenarios.find((scenario) => scenario.id === id)?.title ?? `Scenario ${id}`)
+                              .join(" · ")}
+                          </p>
+                        )}
+                        {protocolDirty && (
+                          <p className="qa-notice">
+                            Save the scenario selection before previewing or
+                            activating the questionnaire.
+                          </p>
+                        )}
+                        {protocolComplete && (
+                          <details className="qa-instrument-details">
+                            <summary>
+                              View the 14 adapted evaluation items
+                            </summary>
+                            <p>
+                              Adapted route explanation questionnaire, selected
+                              from ESS, SCS and xHIS. Responses range from 1
+                              (Strongly disagree) to 5 (Strongly agree). This
+                              custom instrument has not been validated.
+                            </p>
+                            <ol>
+                              {selected.questions
+                                .filter(
+                                  (question) => question.type === "likert",
+                                )
+                                .map((question) => (
+                                  <li key={question.id}>
+                                    <strong>
+                                      {question.configuration.source_scale}{" "}
+                                      {
+                                        question.configuration
+                                          .source_item_number
+                                      }
+                                    </strong>{" "}
+                                    · {question.configuration.topic}:{" "}
+                                    {question.prompt}
+                                  </li>
+                                ))}
+                            </ol>
+                          </details>
+                        )}
+                      </section>
+                    )}
+                    {editable && (
+                      <section className="qa-panel qa-review-panel">
+                        <div className="qa-setup-heading"><h2>3. Review and activate</h2><span className="qa-setup-status">{protocolComplete && !hasUnsavedChanges ? "Ready" : "Not ready"}</span></div>
+                        <p className="qa-muted" role="status">
+                          {!protocolComplete ? "Prepare six scenarios and save the study protocol to enable preview and activation." : hasUnsavedChanges ? "Save your changes before previewing or activating the questionnaire." : "Preview the study before activation. Activation locks editing."}
+                        </p>
+                        <div className="qa-actions">
+                          <button type="button" className="qa-secondary" disabled={panelBusy || hasUnsavedChanges || !protocolComplete} onClick={() => setView("preview")}>Preview questionnaire</button>
+                          <button type="button" disabled={panelBusy || hasUnsavedChanges || !protocolComplete} onClick={handleActivateQuestionnaire}>Activate questionnaire</button>
+                        </div>
+                      </section>
+                    )}
+                    {selected.status !== "closed" && (
+                      <details className="qa-panel qa-access-details">
+                        <summary>Participation keys</summary>
+                        <ParticipationKeysPanel key={selected.id} questionnaireId={selected.id} disabled={panelBusy} />
+                      </details>
                     )}
                     <section className="qa-panel qa-danger-panel">
                       <div className="qa-heading">

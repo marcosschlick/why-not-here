@@ -602,6 +602,51 @@
   gap: 1.25rem;
   justify-items: stretch;
 }
+.qa-edit-details,
+.qa-protocol-details,
+.qa-access-details {
+  min-width: 0;
+}
+.qa-edit-details summary,
+.qa-protocol-details summary,
+.qa-access-details > summary {
+  width: fit-content;
+  color: var(--text-structural);
+  font-weight: 700;
+  cursor: pointer;
+}
+.qa-edit-details summary:focus-visible,
+.qa-protocol-details summary:focus-visible,
+.qa-access-details > summary:focus-visible {
+  outline: 3px solid var(--yale-blue);
+  outline-offset: 3px;
+}
+.qa-edit-details .qa-form,
+.qa-protocol-details .qa-form {
+  margin-top: 1rem;
+}
+.qa-setup-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.qa-setup-heading h2 {
+  margin: 0;
+}
+.qa-setup-status {
+  color: var(--text-structural);
+  background: var(--surface-info);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-round);
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.qa-review-panel .qa-actions {
+  flex-wrap: wrap;
+}
 .qa-details-panel > button {
   justify-self: start;
 }
