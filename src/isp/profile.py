@@ -4,7 +4,7 @@ from ..config import IMPASSABLE_TERRAINS
 from ..grid import Grid
 from .budget import check_deadline
 
-BRANDAO_PROFILE_VERSION = "brandao-grid-v1"
+BRANDAO_PROFILE_VERSION = "brandao-grid-v2"
 FAST_TERRAINS = frozenset(
     {
         "COMPACTED_SOIL",
@@ -32,7 +32,7 @@ def prepare_scenario_grid(
         raise ValueError("Unknown ISP model.")
     converted = []
     reasons = {"physical_obstacle": 0, "impassable_terrain": 0}
-    desired = set(path)
+    interior = set(path[1:-1])
     for row in range(grid.h):
         check_deadline()
         for col in range(grid.w):
@@ -43,7 +43,7 @@ def prepare_scenario_grid(
                 original.terrain in IMPASSABLE_TERRAINS
                 and node not in grid.terrain_overrides
             )
-            if node in desired and (original.obstacle or blocked_terrain):
+            if node in interior and (original.obstacle or blocked_terrain):
                 cell.terrain = "FOREST"
                 cell.obstacle = 0
                 converted.append(node)

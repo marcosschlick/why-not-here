@@ -11,6 +11,10 @@ from .modifier import apply_semantic_modifications
 from .types import SemanticModifications
 
 
+def terrain_change_weight(grid: Grid, node, path_interior: set) -> int:
+    return 10 if grid.isp_model == "BRANDAO" and node not in path_interior else 1
+
+
 def edge_is_possible(grid: Grid, edge, path_nodes, path_edges) -> bool:
     u, v = edge
     for node in edge:
@@ -37,6 +41,7 @@ class ISPSemantics:
         terrain_decision_nodes: set[tuple[int, int]] | None = None,
     ) -> None:
         path_nodes = set(candidate_path)
+        endpoints = {candidate_path[0], candidate_path[-1]} if candidate_path else set()
         path_edges = set(pairwise(candidate_path))
         node_count = (
             len(active_nodes | path_nodes)
@@ -94,7 +99,7 @@ class ISPSemantics:
         self.terrain_class_to_idx = {
             terrain: i for i, terrain in enumerate(self.terrain_classes)
         }
-        for u in sorted(terrain_domain):
+        for u in sorted(terrain_domain - endpoints):
             if (
                 not grid.get_cell(u).is_blocked
                 and grid.get_cell(u).terrain in self.terrain_class_to_idx
@@ -106,7 +111,7 @@ class ISPSemantics:
         self.obstacle_nodes: list[tuple[int, int]] = []
         self.obstacle_to_idx: dict[tuple[int, int], int] = {}
         if not brandao:
-            for u in unique_path_nodes:
+            for u in (node for node in unique_path_nodes if node not in endpoints):
                 if grid.get_cell(u).obstacle != 0:
                     idx = len(self.obstacle_nodes)
                     self.obstacle_nodes.append(u)
@@ -115,7 +120,7 @@ class ISPSemantics:
         self.opened_terrain_nodes: list[tuple[int, int]] = []
         self.opened_terrain_to_idx: dict[tuple[int, int], int] = {}
         if not brandao:
-            for u in unique_path_nodes:
+            for u in (node for node in unique_path_nodes if node not in endpoints):
                 if (
                     grid.get_cell(u).terrain in IMPASSABLE_TERRAINS
                     and u not in grid.terrain_overrides

@@ -691,7 +691,11 @@ export function ResultsView({
             currentResult.success && (
               <p className="results-notice info">
                 Global path validation passed, but OPTIMAL_INACCURATE does not
-                certify minimum intervention cardinality.
+                certify the minimum{" "}
+                {isBrandao
+                  ? "weighted intervention cost"
+                  : "intervention count"}
+                .
               </p>
             )}
 
@@ -891,6 +895,16 @@ export function ResultsView({
                   </span>
                 )}
             </div>
+            {currentConfig?.ISP_MODEL === "BRANDAO" && (
+              <div className="metric-card">
+                <span className="metric-label">Weighted Intervention Cost</span>
+                <span className="metric-value">
+                  {formatMetric(
+                    currentResult.metrics?.interventions?.objective_cost,
+                  )}
+                </span>
+              </div>
+            )}
             {currentConfig?.ISP_MODEL === "BRANDAO" && (
               <div className="metric-card">
                 <span className="metric-label">Preparation Conversions</span>

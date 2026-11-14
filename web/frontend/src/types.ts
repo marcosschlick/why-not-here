@@ -222,7 +222,8 @@ export interface ScenarioMetrics {
   reduction?: string;
   stop_reason?: string;
   validation_status?: string;
-  cardinality_certified?: boolean;
+  objective_certified?: boolean;
+  objective_kind?: "WEIGHTED_INTERVENTION_COST" | "INTERVENTION_COUNT";
   certificate_scope?: string | null;
   certificate_reason?: string;
   deadline_outcome?: string;

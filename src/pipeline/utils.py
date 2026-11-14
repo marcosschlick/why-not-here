@@ -7,6 +7,10 @@ from src.map.validation import largest_traversable_component, traversable_compon
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
+class BlockedEndpointError(ValueError):
+    pass
+
+
 def get_project_path(rel_path: str | Path) -> Path:
     p = Path(rel_path).expanduser()
     if p.is_absolute():
@@ -86,13 +90,10 @@ def prepare_endpoints(
             continue
         if not (0 <= node[0] < grid.h and 0 <= node[1] < grid.w):
             raise ValueError(f"Endpoint {node} falls outside the grid.")
-        cell = grid.get_cell(node)
-        if (
-            cell.terrain in config.IMPASSABLE_TERRAINS
-            and node not in grid.terrain_overrides
-        ) or grid._get_effective_speed(node) <= 0.0:
-            raise ValueError(f"Endpoint {node} is on impassable terrain.")
-        cell.obstacle = 0
+        if not grid.is_cell_traversable(node):
+            raise BlockedEndpointError(
+                f"Endpoint {node} is blocked and cannot be modified."
+            )
 
     allowed_nodes = None
     if start is None or goal is None:
@@ -118,8 +119,6 @@ def prepare_endpoints(
         )
         goal = find_closest_traversable_cell(grid, raw_goal, allowed_nodes)
 
-    grid.get_cell(start).obstacle = 0
-    grid.get_cell(goal).obstacle = 0
     return start, goal
 
 

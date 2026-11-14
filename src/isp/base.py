@@ -69,7 +69,7 @@ class BaseISPSolver:
         self.statistics = {
             "requested_mip_gap": self.mip_gap,
             "primal_feasibility_tolerance": 1e-5,
-            "cardinality_bound_margin": 1e-6,
+            "objective_bound_margin": 1e-6,
             "edge_cost_check_tolerance_sec": 1e-5,
         }
         solver = self._select_solver()
@@ -199,13 +199,12 @@ class BaseISPSolver:
         return bool(usable), float(problem.value)
 
     def _read_native_statistics(self, raw: dict, inverse: list) -> None:
+        inverse_maps = (
+            item if isinstance(item, dict) else getattr(item, "inverse_data", {})
+            for item in reversed(inverse)
+        )
         offset = next(
-            (
-                item.get("offset")
-                for item in reversed(inverse)
-                if isinstance(item, dict) and "offset" in item
-            ),
-            None,
+            (item["offset"] for item in inverse_maps if "offset" in item), None
         )
         if offset is not None:
             offset = float(np.asarray(offset).item())

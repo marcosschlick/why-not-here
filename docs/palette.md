@@ -93,7 +93,7 @@ $shadow-grey: #282828;
 
 ### Terrain textures and obstacles
 
-The prepared Brandao map uses flat Bright Snow (`#F8F8F8`) for fast terrain,
+The prepared Brandao map uses map-specific green (`#5A9E68`) for fast terrain,
 Yale Blue (`#324B64`) for slow terrain, and Shadow Grey (`#282828`) for all
 blocked cells. These three classes replace terrain textures and relief shading
 in this view, including its generated tactical images. Route, intervention, and

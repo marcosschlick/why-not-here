@@ -17,6 +17,7 @@ def generate_explanation_text(
     fallback_reason: str | None = None,
     solver_status: str = "OPTIMAL",
     stop_reason: str | None = None,
+    objective_cost: int | None = None,
 ) -> str:
     if stop_reason == "COST_MODEL_MISMATCH":
         return (
@@ -66,11 +67,13 @@ def generate_explanation_text(
         )
         return (
             f"Brandao-inspired adaptation: {improved} slow-to-fast and {worsened} fast-to-slow cell changes, "
-            "including possible changes on competing routes. Each changed cell has unit intervention cost. "
+            f"including possible changes on competing routes; weighted intervention cost: {objective_cost}. "
+            "Each change costs 1 inside the desired path and 10 outside its interior. "
             f"Preparation conversions are excluded. {validation}"
         )
     subgraph_only = (
-        stop_reason == "SUBGRAPH_OPTIMAL_ONLY" or solver_status == "SUBGRAPH_OPTIMAL_ONLY"
+        stop_reason == "SUBGRAPH_OPTIMAL_ONLY"
+        or solver_status == "SUBGRAPH_OPTIMAL_ONLY"
     )
     uncertified_candidate = solver_status in {
         "TIMEOUT",

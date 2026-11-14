@@ -5,6 +5,7 @@ import numpy as np
 
 from ..grid import Grid
 from ..isp.base import BaseISPSolver
+from ..isp.precheck import validate_alternative_path
 from ..reduction import ReducedGraph, prepare_subgraph
 
 
@@ -20,6 +21,12 @@ class IncrementalISPSolver(BaseISPSolver):
     ):
         self.statistics = {}
         self.last_solver_status = None
+        valid, status, _ = validate_alternative_path(
+            grid, start, goal, alternative_path
+        )
+        if not valid:
+            self.last_solver_status = status
+            return False, None, float("inf")
         self.budget.check()
         with self.budget.phase("preparation_sec"):
             decision_nodes = set(alternative_path)

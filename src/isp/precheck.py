@@ -33,12 +33,13 @@ def validate_alternative_path(
             "The alternative path contains repeated nodes.",
         )
 
-    if len(alternative_path) == 1 and not grid.is_traversable(start, start):
-        return (
-            False,
-            "DISCONNECTED_GRAPH",
-            "Origin and destination coincide on an impassable cell; no valid path exists.",
-        )
+    for node in {start, goal}:
+        if not grid.is_cell_traversable(node):
+            return (
+                False,
+                "BLOCKED_ENDPOINT",
+                f"Endpoint {node} is blocked and cannot be modified.",
+            )
 
     for index in range(len(alternative_path) - 1):
         u, v = alternative_path[index], alternative_path[index + 1]

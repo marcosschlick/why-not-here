@@ -29,7 +29,7 @@ export function requestFailure(
       reduction: config.DEFAULT_REDUCTION_METHOD,
       stop_reason: "REQUEST_ERROR",
       validation_status: "UNKNOWN",
-      cardinality_certified: false,
+      objective_certified: false,
       certificate_reason:
         "The request failed; the server computation state is unknown.",
       reproduction: {
@@ -54,7 +54,11 @@ export function scientificOutcome(
 ): "validated" | "infeasible" | "inconclusive" | "stopped" | "error" {
   if (executionStatus(result) === "failed") return "error";
   if (result.metrics?.validation_status === "VALID") return "validated";
-  if (result.solver_status === "INFEASIBLE") return "infeasible";
+  if (
+    result.solver_status === "INFEASIBLE" ||
+    result.metrics?.stop_reason === "BLOCKED_ENDPOINT"
+  )
+    return "infeasible";
   if (
     [
       "TIME_BUDGET_EXHAUSTED",

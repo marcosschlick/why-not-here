@@ -45,7 +45,7 @@ Compare monolithic versus incremental within a matching prepared model first.
 The fixed execution order is recorded; cache, allocator, solver startup and
 order effects remain possible. No claim of randomized experimental control is made.
 
-## Brandao adaptation: `brandao-grid-v1`
+## Brandao adaptation: `brandao-grid-v2`
 
 The source map is copied. Fast original terrain types are `COMPACTED_SOIL`,
 `GRASSLAND`, `GRASS`, `UNPAVED_TRACK` and `DRY_VEGETATION` (nominal speeds
@@ -67,7 +67,7 @@ two densities. Elevation data remains available visually, but contributes no
 traversability restriction or cost penalty. Robot-speed capability interventions
 are disabled. Original fixed obstacles outside the desired path remain blocked.
 
-Physical obstacles and impassable terrain on the desired path are changed into
+Physical obstacles and impassable terrain on the interior of the desired path are changed into
 slow, obstacle-free cells before optimization. `converted_blocked_cells` counts
 the union once. `conversion_reasons` also counts each cause; its counts can
 therefore overlap. Slope alone never causes such a conversion. Previously open
@@ -76,7 +76,10 @@ These preparation actions are not charged to the ISP objective. The prepared
 A* is recomputed, rather than reusing the source map's optimal route.
 
 Both fast-to-slow and slow-to-fast changes are permitted, including changes on
-competitors. The objective is one unit per changed cell. A source cell converted
+competitors. A changed cell costs one unit inside the desired path and ten outside
+its interior. Start and goal cells are protected in both models and are not
+converted during preparation. A blocked endpoint makes the instance infeasible.
+A source cell converted
 to slow during preparation can subsequently be changed to fast by the ISP; that
 later change is charged. Changes and explanations belong to the prepared model,
 not to the original normal traversal model.
@@ -93,13 +96,14 @@ preparation conversions. It is an adaptation, not a reproduction of their map or
 experimental setup.
 
 The paper's one-hot L1 objective changes two entries per relabeled polygon;
-counting changed cells directly removes that constant factor. An explicit nonnegative change variable equals one minus the original-label binary for each eligible cell. Its sum keeps the native objective on the cardinality scale, without a cell-count-dependent additive constant affecting native relative-gap stopping. Some functions in
+counting changed cells directly removes that constant factor. An explicit nonnegative change variable equals one minus the original-label binary for each eligible cell. Its weighted sum keeps the cost per changed cell without a cell-count-dependent additive constant affecting native relative-gap stopping. Some functions in
 [`navmesh/`](../navmesh/README.md), including `optInvMILP` and
 `optPolyLabelsInPath`, additionally multiply label weights outside the interior
 of the desired path by ten. The reference also contains soft-constraint variants,
 multiple/diverse competitors, geometric convergence criteria, enumeration and
-iteration limits. These choices are not copied into this integration. Uniform
-cell weights follow the paper's stated assumption. Cost ties are accepted without
+iteration limits. This adaptation adopts the tenfold location weight from those
+reference functions; the paper states a uniform change cost. The other choices
+are not copied into this integration. Cost ties are accepted without
 requiring the A* result to have the same sequence of vertices as the desired path.
 
 ## Cost consistency and tolerance
@@ -150,18 +154,20 @@ Its local success can stop with `SUBGRAPH_OPTIMAL_ONLY` if full validation fails
 Diagonal moves between obstacles remain permitted according to the original
 endpoint-based traversal rule.
 
-### Cardinality certification
+### Objective certification
 
-Global route validation, native solver outcome and minimum-cardinality proof are
+Global route validation, native solver outcome and minimum-objective proof are
 separate fields. `success` means the candidate route passed full-grid validation;
-it does not assert minimum cardinality or completion within budget.
+it does not assert a minimum objective or completion within budget. The objective
+is the intervention count in the normal model and weighted intervention cost in
+Brandao; a Brandao certificate does not prove a minimum number of changed cells.
 
 A certificate requires `NONE`, a consistent integral candidate, agreement between
 the objective and extracted interventions, physical/model cost agreement, and a
 finite native MILP lower bound whose objective offset is known and whose primal
-objective agrees with the recovered CVXPY objective. A count `k` is certified
+objective agrees with the recovered CVXPY objective. An objective value `k` is certified
 only when the bound is no greater than `k + 1e-6` and greater than
-`k - 1 + 1e-6`. This uses integer cardinality, not a rounded relative gap. Zero
+`k - 1 + 1e-6`. This uses the integer objective, not a rounded relative gap. Zero
 interventions on a feasible one-point route also attain the known nonnegative
 lower bound. Numerical checks use the recorded solver feasibility and bound
 margins; this is a numerical optimization certificate in the declared domain.
@@ -172,12 +178,13 @@ Its master is therefore equivalent to allowing those variables and leaving them
 unused. Every full-problem solution satisfies the master cuts, so a valid native
 master bound is also a lower bound for the full declared problem. Global
 validation of the recovered labeling supplies the corresponding upper bound.
-Different optimal labelings can change different cells with equal cardinality.
+Different optimal labelings can change different cells or different numbers of
+cells with equal weighted cost.
 
 No certificate is inferred merely from `OPTIMAL`, a requested gap, successful
 validation, or a reduced graph. Reduced executions conservatively report no
 full-domain minimum certificate. Missing, inconsistent or inaccessible native
-statistics leave cardinality uncertified. Native timeout/interruption candidates
+statistics leave the objective uncertified. Native timeout/interruption candidates
 are usable only after integrality and constraint checks; their validation and
 proof fields remain independent of their stop reason.
 
@@ -297,7 +304,7 @@ claim infeasibility.
 | --- | --- |
 | [Brandao 2021 NISP](../refs/correlate_brandao2021_nisp.pdf) | Construction-inclusive timing, changed labels, iterations, competitors, formulation sizes and multiple equally short explanations |
 | [Eder 2024](../refs/correlate_eder2024.pdf) | Reduction sizes, directed edges, physical route lengths, Hausdorff distance and limits of reduced explanations |
-| [Burton and Toint 1992](../refs/isp_foundation_burton1992.pdf) | Inverse path consistency and distance from original costs; its continuous quadratic objective is not this cell-cardinality objective |
+| [Burton and Toint 1992](../refs/isp_foundation_burton1992.pdf) | Inverse path consistency and distance from original costs; its continuous quadratic objective differs from this discrete objective |
 | [Ahuja and Orlin 2001](../refs/isp_foundation_ahuja2001.pdf) | Inverse optimization, complementary slackness and the distinction between cost perturbation and discrete intervention objectives |
 | [Hart, Nilsson and Raphael 1968](../refs/a_star_hart1968.pdf) | A* search conditions and expanded-node measurements; the heuristic uses an admissible global speed bound |
 | [van Toll et al. 2016](../refs/a_star_vantoll2016.pdf) | Construction/performance measurements and memory caveats; mesh coverage metrics do not transfer directly to this fixed grid |
@@ -309,14 +316,8 @@ Hausdorff here is symmetric discrete Euclidean distance between route vertices,
 not continuous-curve Hausdorff or a cost-optimality test. Measurements alone do not
 establish subjective explanation quality, participant understanding or satisfaction.
 
-Implementation checks are limited to static analysis, compilation, import/schema
-inspection, frontend lint/build and CSV checks using synthetic records. No map
-generation, optimization, numerical comparison, exhaustive case enumeration or
-analysis of existing `exp/`/`results/` data is authorized for this task.
-
-With future authorization, validate matched monolithic/incremental runs on the
-same prepared scenarios, check all intervention combinations and reductions,
-compare objective counts with trustworthy bounds, inspect stopping behavior under
-short budgets, and measure repetition/order effects. Such checks can establish
+Matched monolithic/incremental runs on the same prepared scenarios, intervention
+combinations and reductions, objective values and trustworthy bounds, stopping
+behavior under short budgets, and repetition/order effects can be checked. Such checks can establish
 empirical agreement and expose implementation issues; they cannot require
 identical changed cells when multiple optimal solutions exist.

@@ -24,16 +24,26 @@ from .reporting import (
     runtime_versions,
     serialize_result,
 )
-from .utils import create_alternative_path, get_project_path, prepare_endpoints
+from .utils import (
+    BlockedEndpointError,
+    create_alternative_path,
+    get_project_path,
+    prepare_endpoints,
+)
 
 
 def format_artifact_status(result: ClosedLoopResult) -> str:
     if result.metrics.get("stop_reason") == "COST_MODEL_MISMATCH":
         return f"Execution error: modeled and applied costs differ; physical validation: {result.metrics.get('validation_status')}"
-    if result.metrics.get("cardinality_certified"):
-        return "Global path validated; minimum cardinality certified in the declared domain"
+    objective = (
+        "weighted intervention cost"
+        if result.metrics.get("model") == "BRANDAO"
+        else "intervention count"
+    )
+    if result.metrics.get("objective_certified"):
+        return f"Global path validated; minimum {objective} certified in the declared domain"
     if result.success:
-        return "Global path validated; minimum cardinality not certified"
+        return f"Global path validated; minimum {objective} not certified"
     return f"Candidate not globally validated ({result.metrics.get('stop_reason', result.solver_status)})"
 
 
@@ -110,10 +120,15 @@ def run_isp(
         result.metrics.update(
             stop_reason="TIME_BUDGET_EXHAUSTED"
             if isinstance(exc, ScenarioDeadlineExceeded)
+            else "BLOCKED_ENDPOINT"
+            if isinstance(exc, BlockedEndpointError)
             else "ERROR",
             validation_status="NOT_RUN",
-            cardinality_certified=False,
-            error=str(exc),
+            objective_certified=False,
+            objective_kind="WEIGHTED_INTERVENTION_COST"
+            if config.ISP_MODEL == "BRANDAO"
+            else "INTERVENTION_COUNT",
+            error=None if isinstance(exc, BlockedEndpointError) else str(exc),
         )
     finally:
         elapsed = budget.elapsed_sec
@@ -161,7 +176,7 @@ def run_isp(
                 "desired_path": p_user,
                 "tolerance_sec": config.INCREMENTAL_TOLERANCE,
                 "robot_speed_eligibility_ratio": config.ROBOT_SPEED_ELIGIBILITY_RATIO,
-                "formulation_version": "isp-grid-v2",
+                "formulation_version": "isp-grid-v3",
             }
         )
         if prepared is not None
@@ -195,7 +210,7 @@ def run_isp(
         "generation_attempt": source.generation_attempt,
         "generation_profile": source.generation_profile,
         "versions": runtime_versions(),
-        "formulation_version": "isp-grid-v2",
+        "formulation_version": "isp-grid-v3",
         "requested_mip_gap": config.MIP_GAP_TOLERANCE,
         "optimality_tolerance_sec": config.INCREMENTAL_TOLERANCE,
         "robot_speed_eligibility_ratio": config.ROBOT_SPEED_ELIGIBILITY_RATIO,
@@ -275,7 +290,7 @@ def run_isp(
     log = (
         f"Model: {metrics['model']} | Strategy: {metrics['strategy']} | Reduction: {metrics['reduction']}\n"
         f"Stop reason: {stop} | Solver: {result.solver_status}\n"
-        f"Validation: {metrics.get('validation_status')} | Cardinality certified: {metrics.get('cardinality_certified', False)}\n"
+        f"Validation: {metrics.get('validation_status')} | Objective: {metrics.get('objective_kind')} | Certified: {metrics.get('objective_certified', False)} | Intervention cost: {(metrics.get('interventions') or {}).get('objective_cost')}\n"
         f"Deadline: {metrics['deadline_outcome']} | Total ISP: {elapsed!r} s\n"
         f"{result.explanation_text}\n"
         f"Structured metrics: {report_path.name}\n"

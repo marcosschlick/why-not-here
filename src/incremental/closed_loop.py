@@ -5,7 +5,7 @@ from src import config
 from src.grid.grid import Grid
 from src.isp.budget import ScenarioBudget, ScenarioDeadlineExceeded, current_budget
 from src.isp.precheck import validate_alternative_path
-from src.isp.semantics import edge_is_possible
+from src.isp.semantics import edge_is_possible, terrain_change_weight
 from src.isp.solver import ISPSolver
 from src.isp.types import SemanticModifications
 from src.pipeline.path_metrics import measure_paths
@@ -18,7 +18,7 @@ from .step_solver import IncrementalISPSolver
 from .validator import ISPValidator
 
 
-def intervention_counts(modifications, grid: Grid) -> dict:
+def intervention_counts(modifications, grid: Grid, path) -> dict:
     if modifications is None:
         return {"total": None, "distinct_cells": None}
     terrain = len(modifications.terrain_nodes)
@@ -49,6 +49,15 @@ def intervention_counts(modifications, grid: Grid) -> dict:
         set(modifications.terrain_nodes)
         | set(modifications.obstacle_nodes)
         | set(modifications.opened_terrain_nodes)
+    )
+    interior = set(path[1:-1])
+    counts["objective_cost"] = (
+        counts["total"]
+        - terrain
+        + sum(
+            terrain_change_weight(grid, node, interior)
+            for node in modifications.terrain_nodes
+        )
     )
     return counts
 
@@ -107,7 +116,10 @@ class ClosedLoopISPSolver:
             tolerance_sec=self.tolerance,
             validation_status="NOT_RUN",
             stop_reason="NOT_RUN",
-            cardinality_certified=False,
+            objective_certified=False,
+            objective_kind="WEIGHTED_INTERVENTION_COST"
+            if full_grid.isp_model == "BRANDAO"
+            else "INTERVENTION_COUNT",
             certificate_scope=None,
             certificate_reason="No verified lower-bound/candidate pair is available.",
             original_alternative_cost=None,
@@ -195,7 +207,7 @@ class ClosedLoopISPSolver:
                         final_optimal_cost=0.0,
                         final_original_path_cost=0.0,
                         validation_gap_sec=0.0,
-                        cardinality_certified=True,
+                        objective_certified=True,
                         validation_finished_elapsed_sec=self.budget.elapsed_sec,
                         certificate_scope="FULL_GRID_DOMAIN",
                         certificate_reason="Zero changes attain the nonnegative objective lower bound.",
@@ -374,7 +386,9 @@ class ClosedLoopISPSolver:
                                 if limited
                                 else "GLOBAL_PATH_VALIDATED"
                             )
-                            counts = intervention_counts(candidate, full_grid)
+                            counts = intervention_counts(
+                                candidate, full_grid, alternative_path
+                            )
                             objective, bound = (
                                 solver.statistics.get("objective"),
                                 solver.statistics.get("lower_bound"),
@@ -384,19 +398,19 @@ class ClosedLoopISPSolver:
                                 and solver.statistics.get("bound_usable")
                                 and metrics.get("cost_expression_consistent")
                                 and objective is not None
-                                and abs(objective - counts["total"]) <= 1e-5
+                                and abs(objective - counts["objective_cost"]) <= 1e-5
                                 and bound is not None
-                                and bound <= counts["total"] + 1e-6
-                                and bound > counts["total"] - 1 + 1e-6
+                                and bound <= counts["objective_cost"] + 1e-6
+                                and bound > counts["objective_cost"] - 1 + 1e-6
                             )
                             metrics.update(
-                                cardinality_certified=verified,
+                                objective_certified=verified,
                                 certificate_scope="FULL_GRID_DOMAIN"
                                 if verified
                                 else None,
                                 certificate_reason="A valid master lower bound excludes every smaller integer objective in the declared domain."
                                 if verified
-                                else "Global path validation does not establish minimum intervention cardinality; a trustworthy matching bound and full-domain formulation are required.",
+                                else "Global path validation does not establish the minimum objective; a trustworthy matching bound and full-domain formulation are required.",
                             )
                             break
                         if limited or not self.incremental:
@@ -451,7 +465,9 @@ class ClosedLoopISPSolver:
             result.modifications = last_candidate
             result.competing_paths_count = len(competing)
             metrics["candidate_available"] = last_candidate is not None
-            metrics["interventions"] = intervention_counts(last_candidate, full_grid)
+            metrics["interventions"] = intervention_counts(
+                last_candidate, full_grid, alternative_path
+            )
             if last_candidate is None and "cost_states" in metrics:
                 metrics["cost_states"].update(
                     final_alternative="NOT_MEASURED",
@@ -472,11 +488,14 @@ class ClosedLoopISPSolver:
                     last_candidate,
                     full_grid,
                     stop_reason=metrics["stop_reason"],
-                    solver_status="PATH_VALIDATED" if result.success else "CANDIDATE_UNVALIDATED",
+                    solver_status="PATH_VALIDATED"
+                    if result.success
+                    else "CANDIDATE_UNVALIDATED",
+                    objective_cost=metrics["interventions"].get("objective_cost"),
                 )
-                if not metrics["cardinality_certified"]:
+                if not metrics["objective_certified"]:
                     result.explanation_text += (
-                        " Minimum intervention cardinality is not certified."
+                        " The minimum objective is not certified."
                     )
             if result.graph_nodes is not None:
                 metrics["node_reduction_ratio"] = (

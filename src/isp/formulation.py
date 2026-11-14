@@ -6,7 +6,7 @@ from ..config import BASE_TERRAIN
 from ..grid import Grid
 from .budget import check_deadline
 from .mccormick import linearize_binary_product, linearize_mccormick_terms
-from .semantics import ISPSemantics
+from .semantics import ISPSemantics, terrain_change_weight
 from .types import MIPFormulation
 
 
@@ -194,7 +194,12 @@ def build_base_formulation(
             extra_constraints.append(
                 changed_cells[index] + z_terrain[original_label] == 1.0
             )
-        obj_terms.append(cp.sum(changed_cells))
+        path_interior = set(alternative_path[1:-1])
+        weights = [
+            terrain_change_weight(grid, node, path_interior)
+            for node in isp.terrain_nodes
+        ]
+        obj_terms.append(cp.sum(cp.multiply(weights, changed_cells)))
 
     return MIPFormulation(
         isp=isp,
