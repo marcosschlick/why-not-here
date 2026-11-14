@@ -42,6 +42,7 @@ type Questionnaire = {
   title: string;
   description: string;
   status: "draft" | "active" | "closed";
+  created_at: string;
   questions: Question[];
   preparation_configuration: SystemConfig | null;
 };
@@ -483,6 +484,8 @@ export function QuestionnaireAdmin({
   onOpenAbout: () => void;
 }) {
   const [list, setList] = useState<Summary[]>([]);
+  const [statusFilter, setStatusFilter] = useState<"all" | Summary["status"]>("all");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "name_asc" | "name_desc">("newest");
   const [selected, setSelected] = useState<Questionnaire | null>(null);
   const publicLink =
     selected?.status === "active" ? publicParticipantLink() : null;
@@ -789,6 +792,14 @@ export function QuestionnaireAdmin({
   const editable = !selected || selected.status === "draft";
   const panelBusy = busy && !selecting;
   const protocolComplete = selected?.questions.length === 20;
+  const visibleQuestionnaires = list
+    .filter((item) => statusFilter === "all" || item.status === statusFilter)
+    .sort((a, b) => {
+      const comparison = sortOrder.startsWith("name")
+        ? a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+        : new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return (sortOrder === "newest" || sortOrder === "name_desc" ? -comparison : comparison) || a.id - b.id;
+    });
 
   return (
     <>
@@ -841,8 +852,32 @@ export function QuestionnaireAdmin({
                     <p className="qa-empty-desc">Use + New to create your first study.</p>
                   </div>
                 ) : (
+                  <>
+                  <div className="qa-list-controls">
+                    <label>
+                      Status
+                      <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+                        <option value="all">All</option>
+                        <option value="draft">Draft</option>
+                        <option value="active">Active</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    </label>
+                    <label>
+                      Sort by
+                      <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value as typeof sortOrder)}>
+                        <option value="newest">Newest first</option>
+                        <option value="oldest">Oldest first</option>
+                        <option value="name_asc">Name A to Z</option>
+                        <option value="name_desc">Name Z to A</option>
+                      </select>
+                    </label>
+                  </div>
+                  {visibleQuestionnaires.length === 0 ? (
+                    <p className="qa-list-no-results" role="status">No questionnaires match this status.</p>
+                  ) : (
                   <nav aria-label="Questionnaires" className="qa-nav-list">
-                    {list.map((item) => (
+                    {visibleQuestionnaires.map((item) => (
                       <button
                         className={`qa-list-item ${selected?.id === item.id ? "is-active" : ""}`}
                         key={item.id}
@@ -862,6 +897,8 @@ export function QuestionnaireAdmin({
                       </button>
                     ))}
                   </nav>
+                  )}
+                  </>
                 )}
               </div>
               </div>
