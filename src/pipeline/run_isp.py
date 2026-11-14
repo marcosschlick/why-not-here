@@ -175,7 +175,6 @@ def run_isp(
         "prepared_scenario_id": prepared_id,
         "scenario_id": content_id({"prepared": prepared_id, "parameters": parameters}),
         "benchmark_group_id": metadata.get("benchmark_group_id"),
-        "repetition_index": metadata.get("repetition_index", 1),
         "attempt_index": metadata.get("attempt_index", 1),
         "execution_order": metadata.get("execution_order", 1),
         "started_at": started_at,

@@ -439,11 +439,8 @@ def save_experiment_configurations(configurations: list[dict[str, Any]]) -> list
             params["USE_INCREMENTAL_SOLVER"],
             params["DEFAULT_REDUCTION_METHOD"],
             params["ISP_MODEL"],
-            (item.get("naming") or {}).get("repetition_index", 1),
         )
-        export_data["execution"] = {
-            "repetition_index": (item.get("naming") or {}).get("repetition_index", 1)
-        }
+        export_data["execution"] = {}
         group_id = (item.get("naming") or {}).get("benchmark_group_id")
         if group_id:
             export_data["execution"]["benchmark_group_id"] = group_id
@@ -495,13 +492,12 @@ def validate_experiment_config(
 
     execution = data.get("execution", {})
     if not isinstance(execution, dict) or set(execution) - {
-        "repetition_index",
         "benchmark_group_id",
         "execution_order",
         "attempt_index",
     }:
         raise ValueError("Invalid execution metadata.")
-    for key in ("repetition_index", "execution_order", "attempt_index"):
+    for key in ("execution_order", "attempt_index"):
         if key in execution and (type(execution[key]) is not int or execution[key] < 1):
             raise ValueError(f"{key} must be a positive integer.")
     if "benchmark_group_id" in execution and not isinstance(
@@ -637,7 +633,6 @@ def execute_experiment(
             incremental=scenario["USE_INCREMENTAL_SOLVER"],
             reduction=scenario["DEFAULT_REDUCTION_METHOD"],
             isp_model=scenario["ISP_MODEL"],
-            repetition_index=execution.get("repetition_index", 1),
         )
         set_output_directory(output)
         persist_map(generated, start=start, goal=goal)

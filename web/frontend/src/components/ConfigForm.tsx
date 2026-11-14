@@ -3,8 +3,6 @@ import { fetchMapProfiles } from "../services/api";
 import type { MapProfile, SystemConfig } from "../types";
 interface ConfigFormProps {
   benchmark: boolean;
-  repetitions: number;
-  onRepetitionsChange: (value: number) => void;
   onBenchmarkChange: (enabled: boolean) => void;
   onBeforeGenerate?: (action: () => void) => void;
   onDraftChange: (config: SystemConfig) => void;
@@ -28,8 +26,6 @@ interface ConfigFormProps {
 }
 export function ConfigForm({
   benchmark,
-  repetitions,
-  onRepetitionsChange,
   onBenchmarkChange,
   onBeforeGenerate,
   onDraftChange,
@@ -263,30 +259,6 @@ export function ConfigForm({
             </div>
           </div>
 
-          {benchmark && (
-            <div className="form-grid">
-              <div className="form-group">
-                <label htmlFor="benchmarkRepetitions">
-                  <span>Repetitions per Prepared Scenario</span>
-                  <span className="form-group-hint">
-                    Same map and route · {12 * repetitions} executions
-                  </span>
-                </label>
-                <input
-                  id="benchmarkRepetitions"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={repetitions}
-                  onChange={(event) =>
-                    onRepetitionsChange(
-                      Math.max(1, Math.floor(Number(event.target.value) || 1)),
-                    )
-                  }
-                />
-              </div>
-            </div>
-          )}
           <div className="config-strategy-grid">
             <div className="strategy-column">
               <div className="form-group">
@@ -370,7 +342,7 @@ export function ConfigForm({
                 <label htmlFor="benchmarkToggle">
                   <span>Benchmark</span>
                   <span className="form-group-hint">
-                    12 scenarios per map and repetition
+                    12 scenarios per map
                   </span>
                 </label>
                 <div className="toggle-container">
@@ -398,7 +370,7 @@ export function ConfigForm({
                   className="benchmark-description"
                 >
                   {workflowMode === "create"
-                    ? "Saves ten normal configurations per repetition; execution adds both Brandao scenarios."
+                    ? "Saves ten normal configurations per map; execution adds both Brandao scenarios."
                     : "Runs ten normal combinations plus Brandao monolithic and incremental without reduction."}
                 </span>
               </div>

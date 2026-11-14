@@ -164,7 +164,6 @@ export interface NamingMetadata {
   map_index?: number;
   benchmark?: boolean;
   benchmark_group_id?: string;
-  repetition_index?: number;
 }
 
 export interface QueueItem {
@@ -175,7 +174,6 @@ export interface QueueItem {
   naming?: NamingMetadata;
   benchmarkGroup?: string;
   groupKind?: "benchmark" | "comparison";
-  repetitionIndex?: number;
   status:
     | "pending"
     | "generating_map"
@@ -213,7 +211,6 @@ export interface ImportConfigResponse extends MapData {
 export interface ExecutionMetadata {
   run_id: string;
   benchmark_group_id?: string;
-  repetition_index: number;
   attempt_index: number;
   execution_order: number;
   map_generation_sec?: number;

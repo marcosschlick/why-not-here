@@ -71,7 +71,7 @@ artifacts; execution persists the displayed map in a fresh folder. Import JSON
 using the browser file picker. Old configurations and API calls containing
 removed name or destination options must be recreated in the current format.
 
-Enable **Benchmark** to run twelve scenarios per map and repetition: ten normal
+Enable **Benchmark** to run twelve scenarios per map: ten normal
 combinations (monolithic/incremental × `NONE`, `PATH_ONLY`, `SPARSIFIED`, `BBOX`,
 `FLOODFILL`) followed by Brandao monolithic and incremental, both without
 reduction. Outside the full benchmark, configuring normal incremental with
@@ -80,7 +80,7 @@ the same source map, endpoints and alternative route. Other individual settings
 run only their normal scenario. There is no manual traversal-model selector.
 
 Configuration files contain only normal scenarios. An individual configuration
-saves one file; a full benchmark saves ten normal files per repetition. Importing
+saves one file; a full benchmark saves ten normal files per map. Importing
 or executing a normal incremental/`NONE` file generates the trio automatically,
 including `python -B src/main.py run configuration.json`. Brandao remains an
 internal, separately recorded model with fast/slow 1:8 costs and no slope effects.

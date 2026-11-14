@@ -40,7 +40,6 @@ SUMMARY_FIELDS = (
     "identity_prepared_scenario_id",
     "identity_scenario_id",
     "identity_benchmark_group_id",
-    "identity_repetition_index",
     "identity_attempt_index",
     "identity_execution_order",
     "identity_started_at",
@@ -141,7 +140,6 @@ SUMMARY_FIELDS += (
 ITERATION_FIELDS = (
     "identity_run_id",
     "identity_scenario_id",
-    "identity_repetition_index",
     "identity_execution_order",
     "iteration",
 )

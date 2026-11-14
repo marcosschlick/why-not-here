@@ -73,21 +73,18 @@ export function App() {
   );
   const [workflowMode, setWorkflowMode] = useState<"run" | "create">("run");
   const [benchmark, setBenchmark] = useState(false);
-  const [benchmarkRepetitions, setBenchmarkRepetitions] = useState(1);
   const [executionRecords, setExecutionRecords] = useState<LastResult[]>([]);
   const executionOrder = useRef(0);
   const attempts = useRef(new Map<string, number>());
   function nextExecution(
     key: string,
     group?: string,
-    repetition = 1,
   ): ExecutionMetadata {
     const attempt = (attempts.current.get(key) ?? 0) + 1;
     attempts.current.set(key, attempt);
     return {
       run_id: crypto.randomUUID(),
       benchmark_group_id: group,
-      repetition_index: repetition,
       attempt_index: attempt,
       execution_order: ++executionOrder.current,
     };
@@ -177,7 +174,6 @@ export function App() {
         useBenchmark,
         undefined,
         undefined,
-        benchmarkRepetitions,
         workflowMode,
       );
       if (items.length > 1) {
@@ -214,13 +210,11 @@ export function App() {
       const items = await createExperimentItems(
         imported.config,
         {
-          repetition_index: imported.execution?.repetition_index ?? 1,
           benchmark_group_id: imported.execution?.benchmark_group_id,
         },
         useBenchmark,
         imported,
         imported.user_path,
-        benchmarkRepetitions,
         workflowMode,
       );
       if (items.length > 1) {
@@ -267,13 +261,11 @@ export function App() {
             imported.config,
             {
               ...(files.length > 1 ? { map_index: index + 1 } : {}),
-              repetition_index: imported.execution?.repetition_index ?? 1,
               benchmark_group_id: imported.execution?.benchmark_group_id,
             },
             useBenchmark,
             imported,
             imported.user_path,
-            benchmarkRepetitions,
             workflowMode,
           )),
         );
@@ -311,7 +303,6 @@ export function App() {
     const execution: ExecutionMetadata = {
       run_id: crypto.randomUUID(),
       benchmark_group_id: mapData.execution?.benchmark_group_id,
-      repetition_index: mapData.execution?.repetition_index ?? 1,
       attempt_index: attempt,
       execution_order: ++executionOrder.current,
     };
@@ -372,7 +363,6 @@ export function App() {
         useBenchmark,
         undefined,
         undefined,
-        benchmarkRepetitions,
         workflowMode,
       );
       setQueue((previous) => [...previous, ...items]);
@@ -729,7 +719,6 @@ export function App() {
       const execution = nextExecution(
         item.id,
         item.benchmarkGroup ?? item.naming?.benchmark_group_id,
-        item.repetitionIndex ?? 1,
       );
       try {
         const effectivePath = item.userPath || item.mapData?.auto_path || [];
@@ -908,8 +897,6 @@ export function App() {
           <div key="step-config" className="step-container config-step">
             <ConfigForm
               benchmark={benchmark}
-              repetitions={benchmarkRepetitions}
-              onRepetitionsChange={setBenchmarkRepetitions}
               onBenchmarkChange={setBenchmark}
               onBeforeGenerate={(action) => {
                 if (!mapData && queue.length === 0) {
@@ -1135,7 +1122,7 @@ export function App() {
                                   <span>
                                     {workflowMode === "create"
                                       ? `Item ${idx + 1} (${item.config.MAP_H}x${item.config.MAP_W})`
-                                      : `Map ${reviewSteps.indexOf(idx) + 1} (${item.config.MAP_H}x${item.config.MAP_W})${item.groupKind === "benchmark" ? " · 12 scenarios per repetition" : item.groupKind === "comparison" ? " · 3 scenarios" : ""}`}
+                                      : `Map ${reviewSteps.indexOf(idx) + 1} (${item.config.MAP_H}x${item.config.MAP_W})${item.groupKind === "benchmark" ? " · 12 scenarios" : item.groupKind === "comparison" ? " · 3 scenarios" : ""}`}
                                   </span>
                                   <span
                                     className={`batch-step-status-pill ${isItemConnected ? "ready" : "pending"}`}

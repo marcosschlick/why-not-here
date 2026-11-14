@@ -9,7 +9,6 @@ class NamingMetadata(BaseModel):
     map_index: int | None = Field(default=None, ge=1)
     benchmark: bool = False
     benchmark_group_id: str | None = Field(default=None, max_length=128)
-    repetition_index: int = Field(default=1, ge=1)
 
 
 class RunRequest(BaseModel):
@@ -58,7 +57,6 @@ class ExecutionMetadata(BaseModel):
 
     run_id: str = Field(min_length=1, max_length=128)
     benchmark_group_id: str | None = Field(default=None, max_length=128)
-    repetition_index: int = Field(default=1, ge=1)
     attempt_index: int = Field(default=1, ge=1)
     execution_order: int = Field(default=1, ge=1)
     map_generation_sec: float | None = Field(default=None, ge=0, allow_inf_nan=False)

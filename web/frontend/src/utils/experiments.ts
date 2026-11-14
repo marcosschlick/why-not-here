@@ -12,35 +12,25 @@ export async function createExperimentItems(
   benchmark: boolean,
   mapData?: MapData,
   userPath?: [number, number][],
-  repetitions = 1,
   purpose: "run" | "create" = "run",
 ): Promise<QueueItem[]> {
   const group = crypto.randomUUID();
   const variants = await planScenarioConfigurations(config, benchmark, purpose);
   const grouped = benchmark || variants.length > 1;
-  return Array.from({ length: benchmark ? repetitions : 1 }, (_, repetition) =>
-    variants.map<QueueItem>((parameters, index) => {
-      const repetitionIndex = benchmark
-        ? repetition + 1
-        : (naming.repetition_index ?? 1);
-      return {
-        id: `${group}-${repetition}-${index}`,
-        benchmarkGroup: grouped ? group : undefined,
-        groupKind: benchmark ? "benchmark" : grouped ? "comparison" : undefined,
-        repetitionIndex,
-        naming: {
-          ...naming,
-          benchmark: grouped,
-          benchmark_group_id: grouped ? group : naming.benchmark_group_id,
-          repetition_index: repetitionIndex,
-        },
-        config: parameters,
-        mapData: mapData ? { ...mapData, config: parameters } : undefined,
-        userPath,
-        status: mapData ? "awaiting_route" : "pending",
-      };
-    }),
-  ).flat();
+  return variants.map<QueueItem>((parameters, index) => ({
+    id: `${group}-${index}`,
+    benchmarkGroup: grouped ? group : undefined,
+    groupKind: benchmark ? "benchmark" : grouped ? "comparison" : undefined,
+    naming: {
+      ...naming,
+      benchmark: grouped,
+      benchmark_group_id: grouped ? group : naming.benchmark_group_id,
+    },
+    config: parameters,
+    mapData: mapData ? { ...mapData, config: parameters } : undefined,
+    userPath,
+    status: mapData ? "awaiting_route" : "pending",
+  }));
 }
 
 export function sameReviewGroup(item: QueueItem, current: QueueItem): boolean {

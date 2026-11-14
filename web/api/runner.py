@@ -123,7 +123,6 @@ class PipelineRunner:
                         user_path=path,
                         metadata={
                             "execution_order": order,
-                            "repetition_index": 1,
                             "benchmark_group_id": group_id,
                             "map_generation_sec": generation_sec,
                         },

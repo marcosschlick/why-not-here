@@ -543,8 +543,7 @@ export function ResultsView({
                     {item.config.USE_INCREMENTAL_SOLVER
                       ? "Incremental"
                       : "Monolithic"}{" "}
-                    · {item.config.DEFAULT_REDUCTION_METHOD} · Rep{" "}
-                    {item.repetitionIndex ?? 1}
+                    · {item.config.DEFAULT_REDUCTION_METHOD}
                   </span>
                   <span className={`batch-tab-badge status-${outcome}`}>
                     {tabLabel}

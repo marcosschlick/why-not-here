@@ -7,12 +7,11 @@ with reduction `NONE` automatically runs three scenarios in order: normal
 incremental, Brandao monolithic with `NONE`, and Brandao incremental with `NONE`.
 Other individual combinations run their single normal scenario.
 
-The full benchmark schedules twelve executions per map and repetition: ten normal
+The full benchmark schedules twelve executions per map: ten normal
 combinations (monolithic, then incremental; each with `NONE`, `PATH_ONLY`,
 `SPARSIFIED`, `BBOX`, `FLOODFILL`), followed by Brandao monolithic and incremental,
 both with `NONE`. The individual expansion is not applied again to benchmark
-members. Repetitions default to one and reuse the same original map, endpoints
-and reviewed desired route; they are not independent maps.
+members. Each scenario uses the same original map, endpoints and reviewed desired route.
 
 Scenario planning is shared by the Web workflow, background executor and CLI
 configuration execution. `POST /api/config/scenarios` receives `config`,
@@ -22,7 +21,7 @@ generating maps, solving or mutating global settings. The internal
 The UI has no manual model selector or additional strategy-comparison button.
 
 Only normal configurations are saved: one individual configuration, or ten per
-map/repetition for a full benchmark. Execution/import automatically expands a
+map for a full benchmark. Execution/import automatically expands a
 normal incremental/`NONE` configuration into the trio. Running the ten saved
 normal benchmark configurations produces twelve scenario executions. Brandao
 configuration files are not saved or imported as standalone scenarios; internal
@@ -35,7 +34,7 @@ returns a collection of separately recorded scenario results.
 The same original grid, endpoints and desired route feed both Brandao strategies.
 Preparation is performed separately, deterministically, and included in each
 budget; their `prepared_scenario_id` values must match for a fair comparison.
-Outputs are separate and identify model, strategy, reduction and repetition.
+Outputs are separate and identify model, strategy and reduction.
 Session history retains attempts when routes change, a queue is replaced or a
 request is retried, and remains in browser memory until the page is closed.
 
@@ -238,11 +237,11 @@ artifact failures are reported independently when the record can still be writte
 No historical result directory is migrated or rewritten.
 
 Identity records contain `run_id`, source-map content hash, prepared-scenario
-hash, effective scenario/configuration hash, benchmark group, repetition index,
+hash, effective scenario/configuration hash, benchmark group,
 attempt index, UTC timestamps and execution order. `execution_order_scope`
 distinguishes caller-session order from a standalone execution. Separate CLI
 processes do not establish an overall cross-process order. Saved configurations
-carry repetition/group execution metadata; execution still receives a fresh run ID.
+carry group execution metadata; execution still receives a fresh run ID.
 Reproduction includes configuration, desired path, endpoints, generation profile,
 requested/effective seeds, generation attempt, formulation/conversion versions,
 solver tolerances and available package/runtime versions. Hashes include map
@@ -254,10 +253,10 @@ records without scanning stored results. HTTP failures are exported as request
 errors with unknown solver/validation state; a failed request does not prove that
 the server stopped. Session export also works while later scenarios are running.
 
-- `scenarios.csv`: one row per scenario/repetition execution or additional attempt,
+- `scenarios.csv`: one row per scenario execution or additional attempt,
   with stable core columns plus sorted additional available fields.
 - `iterations.csv`: one row per attempted iteration, including incomplete attempts,
-  with run/repetition identifiers, stages, cuts, paths, sizes and solver diagnostics.
+  with run identifiers, stages, cuts, paths, sizes and solver diagnostics.
 
 Missing values use `NA`; structured JSON uses null. `cost_states` distinguishes
 impassable/unreachable costs from unmeasured costs. Configuration and routes are

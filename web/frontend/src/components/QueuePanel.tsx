@@ -249,7 +249,7 @@ export function QueuePanel({
                   }}
                   title={
                     item.benchmarkGroup
-                      ? "Remove every scenario and repetition in this group"
+                      ? "Remove every scenario in this group"
                       : "Remove configuration from queue"
                   }
                   aria-label={
