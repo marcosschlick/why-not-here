@@ -1,7 +1,7 @@
-import csv
-import io
 import json
 from collections.abc import Iterable
+
+from .csv_export import render_csv as render_safe_csv
 
 CSV_FIELDS = (
     "participation_code",
@@ -110,17 +110,4 @@ def export_rows(questionnaire_id: int, answers: Iterable[dict]):
 
 
 def render_csv(rows: Iterable[dict]) -> str:
-    output = io.StringIO(newline="")
-    writer = csv.DictWriter(output, fieldnames=CSV_FIELDS)
-    writer.writeheader()
-    for row in rows:
-        writer.writerow(
-            {
-                key: "'" + value
-                if isinstance(value, str)
-                and value.lstrip().startswith(("=", "+", "-", "@"))
-                else value
-                for key, value in row.items()
-            }
-        )
-    return "\ufeff" + output.getvalue()
+    return render_safe_csv(rows, CSV_FIELDS)
