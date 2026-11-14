@@ -292,6 +292,17 @@ export function ScenarioPreparation({
   const solveLabel = retryPending
     ? "Retry pending scenarios"
     : "Solve all pending scenarios";
+  function nextMap() {
+    if (!selected) return;
+    const invalid = selected.result ? null : routeError(selected);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    setError("");
+    if (active < candidates.length - 1) setActive(active + 1);
+    else void solve();
+  }
 
   return (
     <section className="qa-panel qa-preparation" aria-busy={busy}>
@@ -357,35 +368,9 @@ export function ScenarioPreparation({
               : "Generate six maps"}
         </button>
       )}
-      {candidates.length > 0 && (
-        <div
-          className="qa-actions"
-          role="group"
-          aria-label="Maps awaiting resolution"
-        >
-          {candidates.map((candidate, index) => (
-            <button
-              type="button"
-              key={candidate.map.config.MAP_DEFAULT_SEED}
-              className="qa-secondary"
-              aria-pressed={index === active}
-              disabled={busy}
-              onClick={() => setActive(index)}
-            >
-              Seed {candidate.map.config.MAP_DEFAULT_SEED} ·{" "}
-              {candidate.result
-                ? "Ready to save"
-                : routeError(candidate)
-                  ? "Draw route"
-                  : "Route ready"}
-            </button>
-          ))}
-        </div>
-      )}
       {selected && (
         <RouteCanvas
           manualOnly
-          solveDisabled={!allReady}
           key={selected.map.config.MAP_DEFAULT_SEED}
           mapData={selected.map}
           userPath={selected.path}
@@ -399,8 +384,40 @@ export function ScenarioPreparation({
             )
           }
           isSolving={busy || Boolean(selected.result)}
-          onSolve={() => void solve()}
-          solveButtonText={solveLabel}
+          onSolve={nextMap}
+          onPrevMap={active > 0 ? () => setActive(active - 1) : undefined}
+          solveButtonText={
+            active < candidates.length - 1 ? "Save Route & Next Map →" : solveLabel
+          }
+          batchStepper={
+            <div className="batch-stepper-bar">
+              <div className="batch-stepper-label">
+                <span className="batch-stepper-title">
+                  Batch Route Setup - Map {active + 1} of {candidates.length}
+                </span>
+              </div>
+              <div className="batch-steps-list">
+                {candidates.map((candidate, index) => {
+                  const ready = Boolean(candidate.result) || !routeError(candidate);
+                  return (
+                    <button
+                      type="button"
+                      key={candidate.map.config.MAP_DEFAULT_SEED}
+                      className={`batch-step-btn ${index === active ? "active" : ""}`}
+                      aria-pressed={index === active}
+                      disabled={busy}
+                      onClick={() => setActive(index)}
+                    >
+                      <span>Map {index + 1} · Seed {candidate.map.config.MAP_DEFAULT_SEED}</span>
+                      <span className={`batch-step-status-pill ${ready ? "ready" : "pending"}`}>
+                        {candidate.result ? "Ready to save" : ready ? "Ready" : "Pending"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          }
           busyButtonText={
             selected.result ? "Result awaiting save" : "Preparing scenarios…"
           }

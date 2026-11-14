@@ -355,7 +355,7 @@ export function ConfigForm({
                 </select>
                 <span id="incremental-scope-description" className="benchmark-description">
                   {incrementalAstarScope === "SUBGRAPH"
-                    ? "Searches for competing paths in the reduced subgraph and validates subgraph-optimal candidates on the full grid."
+                    ? "Searches the subgraph and validates optimal candidates on the full grid."
                     : "Searches for competing paths across the full grid."}
                 </span>
               </div>
