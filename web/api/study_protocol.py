@@ -10,8 +10,9 @@ from src import config
 from src.visual.appearance import resolve_map_appearance
 from web.api.rating_instrument import INSTRUMENT_TITLE, QUESTION_COUNT, RATING_ITEMS
 
-PROTOCOL_VERSION = "route-study-v3"
-StudyGroup = Literal["control", "experimental"]
+PROTOCOL_VERSION = "route-study-v4"
+StudyGroup = Literal["cost_based", "contrastive_text", "contrastive_visual"]
+STUDY_GROUPS = ("cost_based", "contrastive_text", "contrastive_visual")
 ScenarioId = Annotated[int, Field(strict=True, gt=0)]
 
 
@@ -135,6 +136,17 @@ def validate_route(value, data):
     return connectivity in (4, 8)
 
 
+def validate_scenario_configuration(configuration):
+    if (
+        configuration.get("USE_INCREMENTAL_SOLVER") is not False
+        or configuration.get("DEFAULT_REDUCTION_METHOD") != "NONE"
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Study scenarios require monolithic ISP without reduction",
+        )
+
+
 def validate_scenario(data):
     if (
         not valid_scenario_map(data)
@@ -177,6 +189,7 @@ def require_protocol(questions):
             )
         if question["scenario_id"] is not None:
             validate_scenario(question["data"])
+            validate_scenario_configuration(question["scenario_configuration"])
 
 
 def scenario_order(questions, submission_key):
@@ -268,10 +281,10 @@ def serialize_step(questions, index, submission_key, group, scenario_ids):
             "After reading the explanation, which characteristics explain the system’s route choice?"
         )
         step["justification"] = data[
-            "cost_baseline_text" if group == "control" else "explanation_text"
+            "cost_baseline_text" if group == "cost_based" else "explanation_text"
         ]
         step["scenario"]["route_order"] = order
-        if group == "experimental":
+        if group == "contrastive_visual":
             step["scenario"]["show_explanation_map"] = True
             step["scenario"]["modifications"] = data.get("modifications")
     return step

@@ -818,10 +818,10 @@
   display: block;
   height: 100%;
 }
-.qa-results-fill-control {
+.qa-results-fill-cost_based {
   background: var(--yale-blue);
 }
-.qa-results-fill-experimental {
+.qa-results-fill-contrastive_text {
   background: var(--azure-blue);
 }
 .qa-results-axis {
@@ -1027,4 +1027,15 @@
   .qa-key-generator label {
     flex-basis: 100%;
   }
+}
+
+.qa-results-fill-contrastive_visual {
+  background: var(--lobster-pink);
+}
+.qa-preparation > .qa-actions {
+  flex-wrap: wrap;
+  margin-block: 1rem;
+}
+.qa-preparation .qa-form {
+  max-width: 24rem;
 }

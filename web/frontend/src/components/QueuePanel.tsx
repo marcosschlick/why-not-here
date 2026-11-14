@@ -1,8 +1,6 @@
 import type { QueueItem } from "../types";
 import { groupQueue } from "../utils/experiments";
-
 interface QueuePanelProps {
-  scenarioMode?: boolean;
   queue: QueueItem[];
   workflowMode: "run" | "create";
   currentIndex: number;
@@ -14,9 +12,7 @@ interface QueuePanelProps {
   onStartQueue: () => void;
   onSelectItem?: (item: QueueItem) => void;
 }
-
 export function QueuePanel({
-  scenarioMode = false,
   queue,
   workflowMode,
   currentIndex,
@@ -32,16 +28,13 @@ export function QueuePanel({
     return (
       <div className="queue-empty-card">
         <p className="queue-empty-text">
-          {scenarioMode
-            ? "The scenario queue is empty. Add or import configurations above, then review routes and process the queue."
-            : workflowMode === "create"
-              ? "The configuration queue is empty. Configure the parameters above and add configurations to the batch."
-              : "The execution queue is empty. Configure the parameters above and click + Add to Queue to enqueue batch configurations."}
+          {workflowMode === "create"
+            ? "The configuration queue is empty. Configure the parameters above and add configurations to the batch."
+            : "The execution queue is empty. Configure the parameters above and click + Add to Queue to enqueue batch configurations."}
         </p>
       </div>
     );
   }
-
   const groups = groupQueue(queue);
   const currentGroupIndex = groups.findIndex((group) =>
     group.includes(queue[currentIndex]),
@@ -53,25 +46,20 @@ export function QueuePanel({
       item.status === "saved",
   ).length;
   const progressPercent = Math.round((completedCount / queue.length) * 100);
-
   return (
     <div className="queue-panel-container">
       <div className="queue-panel-header">
         <div>
           <h3>
-            {scenarioMode
-              ? "Scenario Queue"
-              : workflowMode === "create"
-                ? "Configuration Queue"
-                : "Batch Execution Queue"}{" "}
+            {workflowMode === "create"
+              ? "Configuration Queue"
+              : "Batch Execution Queue"}{" "}
             ({groups.length} {groups.length === 1 ? "item" : "items"})
           </h3>
           <p className="subtitle">
-            {scenarioMode
-              ? "Review each map and route, then solve and save successful scenarios to the questionnaire."
-              : workflowMode === "create"
-                ? "Review each route, then save the configuration files."
-                : "Sequential pipeline execution across parameterized runs."}
+            {workflowMode === "create"
+              ? "Review each route, then save the configuration files."
+              : "Sequential pipeline execution across parameterized runs."}
           </p>
         </div>
 
@@ -95,14 +83,14 @@ export function QueuePanel({
               ? workflowMode === "create"
                 ? `Preparing Routes (${currentGroupIndex + 1}/${groups.length})...`
                 : `Running Queue (${currentGroupIndex + 1}/${groups.length})...`
-              : workflowMode === "create" || scenarioMode
+              : workflowMode === "create"
                 ? `Review Routes (${groups.length} ${groups.length === 1 ? "item" : "items"})`
                 : `Run Queue (${groups.length} ${groups.length === 1 ? "item" : "items"})`}
           </button>
         </div>
       </div>
 
-      {workflowMode === "run" && !scenarioMode && (
+      {workflowMode === "run" && (
         <div className="queue-options-row">
           <button
             type="button"
@@ -184,7 +172,6 @@ export function QueuePanel({
             completed: "Completed",
             failed: "Failed",
           };
-
           return (
             <div
               key={item.id}
@@ -199,9 +186,6 @@ export function QueuePanel({
               </div>
 
               <div className="queue-item-params">
-                {scenarioMode && (
-                  <span className="param-tag">Name: {item.scenarioTitle}</span>
-                )}
                 <span className="param-tag">
                   {item.config.MAP_H}x{item.config.MAP_W}
                 </span>

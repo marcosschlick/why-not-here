@@ -15,6 +15,7 @@ import type {
   RouteFields,
   StepProgress,
 } from "../utils/useParticipationProgress";
+import type { StudyGroup } from "../utils/studyGroups";
 import { ScenarioMapView } from "./ScenarioMapView";
 import "./questionnaire-admin.css";
 
@@ -59,7 +60,7 @@ type Study = {
 };
 type Preview = {
   questionnaireId: number;
-  group: "control" | "experimental";
+  group: StudyGroup;
   submissionKey: string;
 };
 type Session = { id: string; started: boolean; token?: string };

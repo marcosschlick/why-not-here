@@ -252,6 +252,10 @@ def import_configuration_endpoint(payload: ImportConfigRequest) -> dict[str, Any
 @router.post("/map/generate")
 @exclusive_pipeline
 def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
+    return generate_map_data(payload)
+
+
+def generate_map_data(payload: GenerateMapRequest) -> dict[str, Any]:
     persist_artifacts = payload.persist_artifacts
     updates: dict[str, Any] = payload.model_dump(exclude_unset=True, exclude_none=True)
     updates.pop("persist_artifacts", None)
@@ -324,6 +328,10 @@ def generate_map_endpoint(payload: GenerateMapRequest) -> dict[str, Any]:
 @router.post("/isp/solve")
 @exclusive_pipeline
 def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
+    return solve_isp_data(payload)
+
+
+def solve_isp_data(payload: SolveISPRequest) -> dict[str, Any]:
     if runner.is_running():
         raise HTTPException(
             status_code=409, detail="Pipeline execution already in progress"

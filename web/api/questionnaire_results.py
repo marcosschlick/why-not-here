@@ -2,8 +2,7 @@ from dataclasses import dataclass, field
 from statistics import fmean, median
 
 from web.api.rating_instrument import RATING_ITEMS
-
-STUDY_GROUPS = ("control", "experimental")
+from web.api.study_protocol import STUDY_GROUPS
 
 
 @dataclass
@@ -28,8 +27,11 @@ def participation_counts(connection, questionnaire_id: int) -> dict:
         "SELECT count(*) AS total, "
         "count(*) FILTER (WHERE completed_at IS NOT NULL) AS completed, "
         "count(*) FILTER (WHERE completed_at IS NULL) AS in_progress, "
-        "count(*) FILTER (WHERE completed_at IS NOT NULL AND study_group = 'control') AS control, "
-        "count(*) FILTER (WHERE completed_at IS NOT NULL AND study_group = 'experimental') AS experimental "
+        + ", ".join(
+            f"count(*) FILTER (WHERE completed_at IS NOT NULL AND study_group = '{group}') AS {group}"
+            for group in STUDY_GROUPS
+        )
+        + " "
         "FROM participations WHERE questionnaire_id = %s",
         (questionnaire_id,),
     ).fetchone()

@@ -2,18 +2,69 @@
 
 ## Protocol and administration
 
-`route-study-v3` is a fixed research protocol for non-specialists in autonomous
-navigation, following the experimental design in `refs/tcc_01.pdf`.
+`route-study-v4` is a fixed research protocol for non-specialists in autonomous
+navigation, prepared for a possible future evaluation; its current three-condition design is defined here.
 It uses a pool of six distinct saved scenarios selected by the administrator.
 Every scenario belongs to the questionnaire and must contain a successful
-calculation, a valid map, two distinct routes and both group explanations.
+calculation, a valid map, two distinct routes and the cost justification and contrastive explanation.
 At participation start, the six scenarios are shuffled using a random attempt
 UUID and their order is stored in `participations.scenario_order`. The first
 three are used for assessments with explanations; the remaining three are used
 for predictions. The administrator does not assign scenarios to phases.
-Generate maps individually or add or import configurations into a queue, then
-review routes, calculate results and name saved scenarios using the existing
-simulation workflow. Automatic batch map generation is unavailable in this mode.
+Use **Prepare six scenarios**, choose only the grid size and generate six maps
+with the existing generator and its unchanged size profiles. The requested seeds
+are positive multiples of 42: 42, 84, 126, 168, 210, 252, then 294 and so on.
+One action prepares the maps sequentially because the pipeline permits only one
+operation at a time. Other generation and solver settings are captured when
+preparation starts and remain fixed; ISP is always monolithic with reduction
+`NONE`. The simulation's individual, import, queue and benchmark workflows remain
+available and unchanged in behavior.
+
+Draw all six alternative routes manually before solving the batch. No automatic
+alternative is prefilled. The existing drawing, undo, zoom and optimal-route
+reference controls remain available; route colors and symbols follow the palette.
+Every success is saved immediately with an editable generated title, original
+map, routes, requested/effective seeds, generation attempt, effective configuration,
+real solver output, explanations and interventions. Only a valid resolution
+response with `result.success: false` and a solver status discards a candidate
+and replaces it with a map using the next seed. Draw replacement routes and solve
+again until six successes exist. Successful candidates are never recalculated.
+A saving failure retains the solved result for an idempotent saving retry.
+
+Network errors, API unavailability, HTTP errors and invalid resolution responses
+pause the round without discarding the current map, manual route or remaining
+candidates. **Retry pending scenarios** resumes that queue and never repeats
+already saved successes. It also works when an earlier confirmed ISP failure has
+left fewer than six candidates; missing positions are generated after the resumed
+round completes. Drawings remain subject to the existing leave/reload warning.
+
+`POST /api/questionnaires/{id}/scenario-solve` is a local administrative endpoint
+accepting `map`, `user_path`, `start` and `goal`. It uses the saved preparation
+configuration and the map's reserved seed, forcing monolithic ISP with reduction
+`NONE` on the server. It returns the existing solver response envelope; the normal
+simulation continues to use `/api/isp/solve`.
+
+Questionnaire generation and resolution run under the existing exclusive pipeline
+lock. Their temporary configuration is restored on success or exception, including
+published module values, derived values, endpoints, the current output directory
+and the runner state. Restoration uses exact snapshots rather than recalculating
+size profiles. Saved questionnaire configurations and generated artifacts retain
+their own effective settings; later normal simulations retain their previous state.
+
+After six consecutive generation failures, preparation pauses with the last error.
+Continue to generate the missing positions or return to the questionnaire. The
+configuration and next seed are persistent, including when generation fails after
+seed reservation. Grid size is fixed once reserved; use another questionnaire to
+choose another size. Unresolved maps and drawings remain in browser memory only.
+Internal navigation warns before discarding them, and reload/close uses the
+browser's native warning. Returning fills missing positions with new seeds;
+completed scenarios remain stored. Closing the browser during an unresolved save
+can lose a local result, but any committed scenario remains in the database.
+
+Six successes automatically save the protocol selection. If that final save fails,
+retry **Save study protocol** without repeating generation or resolution. Preview
+and activation require six valid distinct scenarios. This preparation does not
+create participants, responses or aggregate study results.
 
 `PUT /api/questionnaires/{id}/protocol` accepts:
 
@@ -47,7 +98,7 @@ access and closure controls. Editing remains prohibited after activation.
 
 Use **View scenarios** to reveal the saved scenarios and maps without creation
 or rename controls. **Hide scenarios** returns to the overview. Participant
-preview remains available for both groups; opening preview and scenario views
+preview remains available for all three groups; opening preview and scenario views
 is mutually exclusive. Selecting another questionnaire returns to its overview.
 
 The participation panel shows **Completed**, **In progress** and **Total started**.
@@ -70,7 +121,7 @@ Active and closed questionnaires include an expandable **Study results** panel
 beside the existing participation controls. It starts collapsed and uses a
 single results request for both participation counts and response analyses.
 The general counts are not duplicated in another panel. Completed counts for
-Control and Experimental appear alongside the existing totals.
+all three conditions appear alongside the existing totals.
 
 **Refresh results** explicitly reloads the whole snapshot. There is no polling
 or refresh when expanding or collapsing the charts. Loading and initial request
@@ -88,7 +139,7 @@ logic with the results endpoint.
 The response contains only:
 
 - `participation`: `total`, `completed`, `in_progress`, and `completed_by_group`
-  with Control and Experimental counts.
+  with `cost_based`, `contrastive_text` and `contrastive_visual` counts.
 - `rating_items`: fourteen records with `item_id`, `prompt`, `source_scale`,
   `source_item_number`, `source`, `topic` and `groups`. Each group contains a
   five-element `distribution` of response counts for ratings 1 through 5,
@@ -137,6 +188,7 @@ An accuracy observation requires an integer `choice` of 0 or 1 and a stored
 `"optimal"`. Thus neither A nor B is assumed to be optimal. Missing or invalid
 route order is excluded without reconstructing it from the UUID.
 
+The panel labels one measure **Predictive accuracy / alignment with the system’s choice**. Both names refer to the same proportion, rather than separate metrics.
 The proportion is `correct / responses` over valid prediction choices within
 the group. For example, four matches among six valid predictions give 66.7%.
 `participants` counts completed participants contributing at least one valid
@@ -166,7 +218,7 @@ Only display formatting rounds values; the API retains unrounded aggregates.
 
 ### Interpretation and presentation
 
-The adapted questionnaire uses two segmented bars per item, a labeled 1–5 legend and visible
+The adapted questionnaire uses three segmented bars per item, a labeled 1–5 legend and visible
 counts and percentages. Prediction proportion, confidence and median time use
 simple group comparison bars with explicit values, units and denominators.
 Figures can receive keyboard focus and their data are available as text without
@@ -210,6 +262,53 @@ and loading failures are not shown as an empty inventory. Selecting another
 questionnaire resets the form, filter and feedback. Closed questionnaires neither
 show this section nor request its key list; existing key records remain stored.
 
+## Block assignment and participation codes
+
+New participations are randomized in blocks of three per questionnaire. Each block
+contains one assignment for each condition in a uniformly shuffled order. Its
+remaining assignments are persisted, and a new block is shuffled only when the
+previous one has been consumed. Questionnaire row locking serializes starts;
+block consumption, random code allocation and insertion commit in one transaction.
+Rejected starts roll back the assignment. Resume never consumes a block position
+or allocates another code. Incomplete attempts retain their assignment, so balance
+applies to started participations rather than completed submissions.
+
+Each participation receives a random unused string from `000` through `999`,
+unique within that questionnaire and stable for every export. The database checks
+three digits and uniqueness. The capacity is 1,000 started participations per
+questionnaire; exhausted codes produce a clear 409, while existing attempts can
+resume. At most 1,000 individual keys can be issued for the questionnaire, and a
+batch exceeding the remaining capacity is rejected without partial creation.
+
+## Completed-response CSV
+
+**Export completed responses (CSV)** downloads
+`GET /api/questionnaires/{id}/responses.csv` from the local administrative API.
+It is available for active or closed questionnaires, uses a consistent read-only
+snapshot and `Cache-Control: no-store`, and is absent from the public router.
+The UTF-8 file has a BOM, comma-separated fields and standard CSV quoting.
+No completed participations produces only a header, never example rows.
+
+Each completed participation contributes six scenario rows and fourteen Likert
+rows. Columns include its three-digit code, questionnaire and question identifiers,
+group, phase, step position, scenario identifier, scenario position across the six
+and position within its phase. `route_assessment` identifies the first three choices;
+`route_prediction` identifies the three predictions; `likert` identifies rating items.
+Scenario rows contain requested/effective seeds, the stored A/B ordering, route
+identities and coordinate paths as JSON, chosen route and identity, confidence,
+initial reason and the separate post-explanation reason. Likert rows contain item
+identifier, adapted wording, source scale/item and rating. Inapplicable fields are
+empty. All existing recorded durations, selection-change indicators, confirmation
+and explanation timestamps and participation start/completion timestamps are included.
+Durations use milliseconds and retain the existing visible-time definitions.
+
+Names, emails, individual keys, attempt UUIDs and internal participation IDs are
+excluded. Free-text answers are preserved and can contain information typed by the
+participant; removing identity columns does not anonymize arbitrary prose.
+Spreadsheet formula prefixes in text fields are escaped with a leading apostrophe.
+Import `participation_code` as text in spreadsheet software to retain leading zeros.
+Export and result viewing never allocate codes or change stored responses.
+
 ## Participant sequence
 
 There are twenty-three content steps and a final submission action:
@@ -223,8 +322,10 @@ There are twenty-three content steps and a final submission action:
    (0 for A, 1 for B). The route confirmation is an internal phase, not an
    additional content step.
 2. After each assessment, its explanation is shown on a separate step.
-   Control participants receive `cost_baseline_text`. Experimental participants
-   receive `explanation_text` and the contrastive map with semantic interventions.
+   `cost_based` receives `cost_baseline_text`. `contrastive_text` receives
+   `explanation_text`. `contrastive_visual` receives exactly the same
+   `explanation_text` plus the contrastive map with semantic interventions.
+   The textual conditions do not receive intervention data in the step payload.
    The explanation compares the saved optimal/alternative routes regardless of
    the participant's choice. On this same step, participants must answer:
    **After reading the explanation, which characteristics explain the system’s
@@ -389,7 +490,7 @@ The reference set informs the implementation as follows:
   After route confirmation, drafts cannot alter the choice or selection times.
 - `POST /api/participate/{token}/submit` accepts only `submission_key` and succeeds
   once all content steps are confirmed. Identical retries are idempotent.
-- `GET /api/questionnaires/{id}/preview?group=control&step=0&submission_key={uuid}`
+- `GET /api/questionnaires/{id}/preview?group=cost_based&step=0&submission_key={uuid}`
   uses the same step construction and serializer. Its order is reproducible for
   the preview UUID and shared between group previews. Preview creates no
   participations, drafts or answers and consumes no individual key.
@@ -467,10 +568,11 @@ checkpoint without counting the absence.
 
 ## Replacing the local schema
 
-The v3 schema requires a fresh set of questionnaire tables, including the
-`current_step` limit of 23 and the `route-study-v3` default. No migration or
+The v4 schema requires a fresh set of questionnaire tables, including preparation configuration and seed cursor, remaining block assignments,
+three group identifiers, stable export codes, the `current_step` limit of 23 and
+the `route-study-v4` default. Startup rejects an older schema before changing it. No migration or
 compatibility with the previous instrument is provided. Existing data is never
-automatically converted, deleted or relabeled as v3. The following replacement
+automatically converted, deleted or relabeled as v4. The following replacement
 procedure is manual and destructive; it is not run by this change.
 
 When replacing an older local installation, stop both backend services and explicitly remove

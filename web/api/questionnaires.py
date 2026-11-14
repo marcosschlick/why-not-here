@@ -7,6 +7,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from web.api.database import connect_database
+from web.api.questionnaire_export import export_rows, read_export_answers, render_csv
 from web.api.questionnaire_results import (
     aggregate_results,
     participation_counts,
@@ -24,6 +25,7 @@ from web.api.study_protocol import (
     serialize_step,
     study_steps,
     validate_scenario,
+    validate_scenario_configuration,
 )
 
 router = APIRouter(prefix="/api/questionnaires", tags=["questionnaires"])
@@ -38,7 +40,7 @@ class QuestionnaireInput(BaseModel):
 
 
 def get_questionnaire(connection, questionnaire_id: int, *, lock: bool = False):
-    query = "SELECT id, title, description, status, protocol_version, created_at, closed_at FROM questionnaires WHERE id = %s"
+    query = "SELECT id, title, description, status, protocol_version, created_at, closed_at, preparation_configuration, next_scenario_seed FROM questionnaires WHERE id = %s"
     if lock:
         query += " FOR UPDATE"
     questionnaire = connection.execute(query, (questionnaire_id,)).fetchone()
@@ -132,6 +134,31 @@ def read_questionnaire_results(questionnaire_id: int, response: Response):
         )
 
 
+@router.get("/{questionnaire_id}/responses.csv")
+def download_responses(questionnaire_id: int):
+    with connect_database() as connection:
+        connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        questionnaire = get_questionnaire(connection, questionnaire_id)
+        if questionnaire["status"] not in {"active", "closed"}:
+            raise HTTPException(
+                status_code=409,
+                detail="CSV export is available for active or closed questionnaires",
+            )
+        content = render_csv(
+            export_rows(
+                questionnaire_id, read_export_answers(connection, questionnaire_id)
+            )
+        )
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'attachment; filename="questionnaire-{questionnaire_id}-responses.csv"',
+        },
+    )
+
+
 @router.put("/{questionnaire_id}")
 def update_questionnaire(questionnaire_id: int, payload: QuestionnaireInput):
     with connect_database() as connection:
@@ -153,7 +180,7 @@ def save_protocol(questionnaire_id: int, payload: ProtocolInput):
     with connect_database() as connection:
         require_draft(connection, questionnaire_id)
         scenarios = connection.execute(
-            "SELECT id, data FROM scenarios WHERE questionnaire_id = %s AND id = ANY(%s)",
+            "SELECT id, data, configuration FROM scenarios WHERE questionnaire_id = %s AND id = ANY(%s)",
             (questionnaire_id, ids),
         ).fetchall()
         if len(scenarios) != 6:
@@ -162,6 +189,7 @@ def save_protocol(questionnaire_id: int, payload: ProtocolInput):
             )
         for scenario in scenarios:
             validate_scenario(scenario["data"])
+            validate_scenario_configuration(scenario["configuration"])
         existing = read_questions(connection, questionnaire_id)
         if protocol_selection(existing) != payload.model_dump():
             connection.execute(

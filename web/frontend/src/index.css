@@ -382,14 +382,6 @@ kbd,
   color: var(--text-danger);
   box-shadow: var(--shadow-xs);
 }
-.qa-form.scenario-save-form {
-  align-items: stretch;
-  justify-items: stretch;
-}
-.scenario-save-form .btn {
-  align-self: flex-start;
-  justify-self: start;
-}
 .queue-banner {
   background: var(--surface-info);
   border-color: color-mix(in srgb, var(--azure-blue) 38%, transparent);
@@ -2894,10 +2886,6 @@ kbd,
     animation: none !important;
     transition-duration: 1ms !important;
   }
-}
-
-.scenario-strategy-grid > .conditional-field-wrapper {
-  grid-column: 1 / -1;
 }
 
 .config-step .config-strategy-grid > .conditional-field-wrapper {

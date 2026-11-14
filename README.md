@@ -78,16 +78,21 @@ route. Each imported configuration is also expanded. Names identify solver and r
 results have separate directories, and removing a variant removes its group.
 Benchmark is unavailable for questionnaire scenarios.
 
-Use **Questionnaires** to create a draft and generate scenarios through the
-existing simulation, route and results screens. Generate maps individually or
-add or import configurations into a queue, then review routes and save scenarios.
-Automatic batch map generation is available outside questionnaire scenarios.
+Use **Questionnaires** to create a draft and select **Prepare six scenarios**.
+Choose only the grid size; the existing generator and size profiles are preserved.
+Generate six maps with seeds 42, 84, 126 and successive positive multiples of 42.
+Draw all six alternative routes manually, then run monolithic ISP without reduction.
+Successes are saved immediately; failures are replaced with the next seeds and
+require new manual routes. After six consecutive generation failures, continue
+explicitly or leave. Unresolved drawings are temporary and leaving warns before
+discarding them. Successful scenarios, configuration and the seed cursor persist.
+The normal simulation retains individual creation, configuration imports and queues.
 
-Select six different scenarios, all supporting both group explanations, then
-save the protocol. Each participation receives a stored random order: the first
-three scenarios are used with explanations and the remaining three for prediction.
-The application generates all questions automatically. Preview either
-group before activating the draft. The preview does not save answers. After
+Six successful scenarios automatically save the protocol. Each participation
+receives a stored random order: three scenarios with explanations followed by
+three unseen predictions, with fourteen adapted rating items between phases.
+Preview all three conditions before activating the draft. Preview does not save
+answers. After
 activation, use **Open questionnaire** under **Local participation** to open
 `/questionnaire` in a new tab, or **Copy link** to share its local address.
 The address has no token; each participant's individual key identifies the study.
@@ -100,14 +105,22 @@ participant preview. The participation panel shows completed, in-progress and
 total started participations and completed counts by group; use **Refresh results**
 to update them. **View results** expands descriptive item distributions, prediction
 matches, mean confidence and median decision time for completed participations.
-Only final submissions count as completed. Draft editing remains unchanged.
+Only final submissions count as completed. Predictive accuracy / alignment with
+the system’s choice is one measure: the proportion of valid predictions matching
+the optimal route. **Export completed responses (CSV)** exports completed answers
+with a stable random three-digit code (`000`–`999`) unique per questionnaire,
+without name, email or credentials. Import the code column as text to preserve
+leading zeros. Free-text answers can contain participant-entered information.
+The 1,000-code capacity also limits issued individual keys. Draft editing remains
+unchanged.
 
 The fixed protocol allows route changes until **Confirm route**, then collects
 confidence (0 to 100) and a written reason before each of three explanations.
 A separate required open response after each explanation asks which
-characteristics explain the system’s choice. The control group receives the cost
-justification; the experimental group receives the textual and visual contrastive
-explanation. Fourteen adapted items selected from ESS, SCS and xHIS follow, all using a
+characteristics explain the system’s choice. The three conditions receive a cost
+justification, contrastive text, or the same contrastive text with intervention
+visualization. Starts use randomized blocks of three, one assignment per condition.
+Resuming preserves the original assignment. Fourteen adapted items selected from ESS, SCS and xHIS follow, all using a
 five-point agreement scale, then three new route predictions
 with confidence (0 to 100), without costs, explanations or correctness feedback.
 
@@ -134,7 +147,7 @@ Answers remain stored in PostgreSQL, including unfinished participations.
 The custom instrument is not a full or validated administration of the source
 scales. See [the selected items and original sources](docs/questionarios-avaliacao.md).
 
-The `route-study-v3` questionnaire schema requires a fresh set of questionnaire
+The `route-study-v4` questionnaire schema requires a fresh set of questionnaire
 tables. There is no migration or
 compatibility with previous questionnaire schemas, and startup does not
 erase or convert existing data. See [Questionnaire protocol](docs/questionnaire.md)

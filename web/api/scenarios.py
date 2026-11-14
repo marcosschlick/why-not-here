@@ -5,17 +5,24 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.grid import Grid
+from src.map.profiles import resolve_map_profile
 from src.visual.appearance import resolve_map_appearance
+from web.api.config_manager import (
+    get_experiment_configurations,
+    isolated_pipeline_state,
+)
 from web.api.database import connect_database
 from web.api.questionnaires import (
     NonEmptyText,
     get_questionnaire,
     require_draft,
 )
+from web.api.routes import exclusive_pipeline, generate_map_data, solve_isp_data
+from web.api.schemas import GenerateMapRequest, SolveISPRequest
 from web.api.study_protocol import (
     resolve_scenario_terrain_colors,
-    valid_scenario_map,
-    validate_route,
+    validate_scenario,
+    validate_scenario_configuration,
 )
 
 router = APIRouter(prefix="/api/questionnaires", tags=["scenarios"])
@@ -27,6 +34,103 @@ class ScenarioInput(BaseModel):
     title: NonEmptyText
     configuration: dict[str, Any]
     data: dict[str, Any]
+
+
+class ScenarioMapInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    height: int = Field(strict=True, ge=4, le=8192)
+    width: int = Field(strict=True, ge=4, le=8192)
+
+
+@router.post("/{questionnaire_id}/scenario-maps")
+@exclusive_pipeline
+def generate_scenario_map(questionnaire_id: int, payload: ScenarioMapInput):
+    with connect_database() as connection:
+        questionnaire = require_draft(connection, questionnaire_id)
+        count = connection.execute(
+            "SELECT count(*) AS total FROM scenarios WHERE questionnaire_id = %s",
+            (questionnaire_id,),
+        ).fetchone()["total"]
+        if count >= 6:
+            raise HTTPException(
+                status_code=409, detail="All six scenarios are already saved"
+            )
+        configuration = questionnaire["preparation_configuration"]
+        if configuration is None:
+            configuration = {
+                **get_experiment_configurations(),
+                **resolve_map_profile(payload.height, payload.width),
+                "MAP_H": payload.height,
+                "MAP_W": payload.width,
+                "USE_INCREMENTAL_SOLVER": False,
+                "DEFAULT_REDUCTION_METHOD": "NONE",
+            }
+        elif (configuration["MAP_H"], configuration["MAP_W"]) != (
+            payload.height,
+            payload.width,
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Grid size is fixed for this preparation. Create another questionnaire to change it.",
+            )
+        seed = questionnaire["next_scenario_seed"]
+        configuration = {**configuration, "MAP_DEFAULT_SEED": seed}
+        connection.execute(
+            "UPDATE questionnaires SET preparation_configuration = %s, next_scenario_seed = %s WHERE id = %s",
+            (Jsonb(configuration), seed + 42, questionnaire_id),
+        )
+    with isolated_pipeline_state():
+        generated = generate_map_data(
+            GenerateMapRequest(**configuration, persist_artifacts=False)
+        )
+    if not generated["optimal_path"]:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Seed {seed} has no optimal route. Generate a replacement.",
+        )
+    return generated
+
+
+class ScenarioSolveInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    map: dict[str, Any]
+    user_path: list[tuple[int, int]] = Field(min_length=1)
+    start: tuple[int, int]
+    goal: tuple[int, int]
+
+
+@router.post("/{questionnaire_id}/scenario-solve")
+@exclusive_pipeline
+def solve_scenario(questionnaire_id: int, payload: ScenarioSolveInput):
+    with connect_database() as connection:
+        questionnaire = require_draft(connection, questionnaire_id)
+        configuration = questionnaire["preparation_configuration"]
+        seed = payload.map.get("base_seed")
+        if (
+            configuration is None
+            or type(seed) is not int
+            or seed <= 0
+            or seed % 42
+            or seed >= questionnaire["next_scenario_seed"]
+            or (payload.map.get("h"), payload.map.get("w"))
+            != (configuration["MAP_H"], configuration["MAP_W"])
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Use a generated map from this questionnaire preparation",
+            )
+        configuration = {
+            **configuration,
+            "MAP_DEFAULT_SEED": seed,
+            "USE_INCREMENTAL_SOLVER": False,
+            "DEFAULT_REDUCTION_METHOD": "NONE",
+        }
+    with isolated_pipeline_state():
+        return solve_isp_data(
+            SolveISPRequest(**payload.model_dump(), config=configuration)
+        )
 
 
 class ScenarioSummary(BaseModel):
@@ -79,31 +183,65 @@ def create_scenario(questionnaire_id: int, payload: ScenarioInput):
     data = payload.data
     try:
         Grid.from_dict(data["map"])
-        valid = (
-            valid_scenario_map(data)
-            and all(
-                validate_route(data[key], data)
-                for key in ("optimal_path", "alternative_path")
-            )
-            and data.get("success") is True
-            and all(
-                isinstance(data.get(key), str) and data[key].strip()
-                for key in ("solver_status", "explanation_text", "cost_baseline_text")
-            )
-        )
-    except (KeyError, TypeError, ValueError, IndexError):
-        valid = False
-    if not valid:
+    except (KeyError, TypeError, ValueError, IndexError) as error:
         raise HTTPException(
-            status_code=422, detail="Scenario data is invalid or incomplete"
-        )
+            status_code=422, detail="Scenario map is invalid or incomplete"
+        ) from error
+    validate_scenario(data)
+    validate_scenario_configuration(payload.configuration)
+    if (
+        not isinstance(data.get("solver_status"), str)
+        or not data["solver_status"].strip()
+    ):
+        raise HTTPException(status_code=422, detail="Scenario solver status is missing")
     with connect_database() as connection:
-        require_draft(connection, questionnaire_id)
+        questionnaire = require_draft(connection, questionnaire_id)
+        seed = payload.configuration.get("MAP_DEFAULT_SEED")
+        frozen = questionnaire["preparation_configuration"]
+        if (
+            type(seed) is not int
+            or seed <= 0
+            or seed % 42
+            or seed >= questionnaire["next_scenario_seed"]
+            or frozen is None
+            or payload.configuration != {**frozen, "MAP_DEFAULT_SEED": seed}
+            or data["map"].get("base_seed") != seed
+            or data.get("requested_seed") != seed
+            or (data["map"]["h"], data["map"]["w"])
+            != (frozen["MAP_H"], frozen["MAP_W"])
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Scenario must use a reserved seed and the preparation configuration",
+            )
+        existing = connection.execute(
+            "SELECT id, questionnaire_id, title, configuration, data FROM scenarios WHERE questionnaire_id = %s AND seed = %s",
+            (questionnaire_id, seed),
+        ).fetchone()
+        if existing is not None:
+            if (
+                existing["configuration"] != payload.configuration
+                or existing["data"] != data
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="This seed already has a different saved scenario",
+                )
+            return add_appearance(existing)
+        count = connection.execute(
+            "SELECT count(*) AS total FROM scenarios WHERE questionnaire_id = %s",
+            (questionnaire_id,),
+        ).fetchone()["total"]
+        if count >= 6:
+            raise HTTPException(
+                status_code=409, detail="All six scenarios are already saved"
+            )
         scenario = connection.execute(
-            "INSERT INTO scenarios (questionnaire_id, title, configuration, data) "
-            "VALUES (%s, %s, %s, %s) RETURNING id, questionnaire_id, title, configuration, data",
+            "INSERT INTO scenarios (questionnaire_id, seed, title, configuration, data) "
+            "VALUES (%s, %s, %s, %s, %s) RETURNING id, questionnaire_id, title, configuration, data",
             (
                 questionnaire_id,
+                seed,
                 payload.title,
                 Jsonb(payload.configuration),
                 Jsonb(data),

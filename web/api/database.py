@@ -26,11 +26,13 @@ def initialize_database() -> None:
             title TEXT NOT NULL,
             description TEXT,
             status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'closed')),
-            protocol_version TEXT NOT NULL DEFAULT 'route-study-v3',
+            protocol_version TEXT NOT NULL DEFAULT 'route-study-v4',
             created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
             closed_at TIMESTAMPTZ,
             access_token TEXT UNIQUE,
-            group_secret TEXT
+            allocation_remaining JSONB NOT NULL DEFAULT '[]',
+            preparation_configuration JSONB,
+            next_scenario_seed BIGINT NOT NULL DEFAULT 42 CHECK (next_scenario_seed > 0 AND next_scenario_seed % 42 = 0)
         )
         """,
         """
@@ -38,6 +40,8 @@ def initialize_database() -> None:
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             questionnaire_id BIGINT NOT NULL REFERENCES questionnaires(id),
             title TEXT NOT NULL,
+            seed BIGINT NOT NULL CHECK (seed > 0 AND seed % 42 = 0),
+            UNIQUE (questionnaire_id, seed),
             configuration JSONB NOT NULL,
             data JSONB NOT NULL
         )
@@ -74,7 +78,9 @@ def initialize_database() -> None:
                 REFERENCES participation_keys(questionnaire_id, key),
             UNIQUE (questionnaire_id, participant_email),
             UNIQUE (questionnaire_id, participation_key),
-            study_group TEXT NOT NULL CHECK (study_group IN ('control', 'experimental')),
+            study_group TEXT NOT NULL CHECK (study_group IN ('cost_based', 'contrastive_text', 'contrastive_visual')),
+            export_code TEXT NOT NULL CHECK (export_code ~ '^[0-9]{{3}}$'),
+            UNIQUE (questionnaire_id, export_code),
             scenario_order JSONB NOT NULL CHECK (jsonb_array_length(scenario_order) = 6),
             draft JSONB,
             draft_revision BIGINT NOT NULL DEFAULT 0 CHECK (draft_revision >= 0),
@@ -110,6 +116,16 @@ def initialize_database() -> None:
             connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtext('why-not-here-schema'))"
             )
+            existing = connection.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = current_schema() AND table_name = 'questionnaires'"
+            ).fetchall()
+            if existing and "allocation_remaining" not in {
+                row["column_name"] for row in existing
+            }:
+                raise RuntimeError(
+                    "Incompatible questionnaire schema. Prepare a route-study-v4 database; no data was changed. See docs/questionnaire.md."
+                )
             for statement in statements:
                 connection.execute(statement)
     except (KeyError, psycopg.Error) as error:

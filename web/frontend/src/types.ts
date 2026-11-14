@@ -165,8 +165,6 @@ export interface QueueItem {
   outputDir?: string;
   naming?: NamingMetadata;
   benchmarkGroup?: string;
-  scenarioTitle?: string;
-  scenarioId?: number;
   status:
     | "pending"
     | "generating_map"

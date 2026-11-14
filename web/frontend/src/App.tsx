@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import type { FormEvent } from "react";
 import { AboutModal } from "./components/AboutModal";
 import { ConfigForm } from "./components/ConfigForm";
 import { ConfirmModal } from "./components/ConfirmModal";
@@ -27,12 +26,10 @@ import {
 import type {
   LastResult,
   MapData,
-  NamingMetadata,
   QueueItem,
   SaveConfigurationItem,
   SystemConfig,
 } from "./types";
-
 function isSameMap(a?: SystemConfig | null, b?: SystemConfig | null): boolean {
   if (!a || !b) return false;
   const mapConfigKeys: (keyof SystemConfig)[] = [
@@ -58,7 +55,6 @@ function isSameMap(a?: SystemConfig | null, b?: SystemConfig | null): boolean {
     (key) => JSON.stringify(a[key] ?? null) === JSON.stringify(b[key] ?? null),
   );
 }
-
 function arePathsEqual(
   p1?: [number, number][],
   p2?: [number, number][],
@@ -67,32 +63,8 @@ function arePathsEqual(
   if (p1.length !== p2.length) return false;
   return p1.every(([r1, c1], i) => r1 === p2[i][0] && c1 === p2[i][1]);
 }
-
 export function App() {
   const [showAdmin, setShowAdmin] = useState(false);
-  const [scenarioQuestionnaire, setScenarioQuestionnaire] = useState<
-    number | null
-  >(null);
-  const [adminQuestionnaire, setAdminQuestionnaire] = useState<number | null>(
-    null,
-  );
-  const [scenarioTitle, setScenarioTitle] = useState("");
-  const [questionnaireTitle, setQuestionnaireTitle] = useState("");
-  const [savingScenario, setSavingScenario] = useState(false);
-  const [scenarioConfigDirty, setScenarioConfigDirty] = useState(false);
-  const [simulationSnapshot, setSimulationSnapshot] = useState<{
-    map: MapData | null;
-    path: [number, number][];
-    result: LastResult | null;
-    step: "config" | "route_canvas" | "results";
-    artifacts: string[];
-    workflow: "run" | "create";
-    mode: "individual" | "queue";
-    batch: boolean;
-    reviewIndex: number;
-    resultIndex: number;
-    config: SystemConfig | null;
-  } | null>(null);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<"individual" | "queue">(
     "individual",
@@ -102,7 +74,6 @@ export function App() {
   const [currentStep, setCurrentStep] = useState<
     "config" | "route_canvas" | "results"
   >("config");
-
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [userPath, setUserPath] = useState<[number, number][]>([]);
   const [batchRouteFeedback, setBatchRouteFeedback] = useState<string | null>(
@@ -111,31 +82,19 @@ export function App() {
   const [lastResult, setLastResult] = useState<LastResult | null>(null);
   const [artifacts, setArtifacts] = useState<string[]>([]);
   const [cacheKey, setCacheKey] = useState<number>(() => Date.now());
-
   const [isGeneratingMap, setIsGeneratingMap] = useState<boolean>(false);
   const [isSolvingISP, setIsSolvingISP] = useState<boolean>(false);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
   const [runQueue, setRunQueue] = useState<QueueItem[]>([]);
-  const [scenarioQueue, setScenarioQueue] = useState<QueueItem[]>([]);
   const [configurationQueue, setConfigurationQueue] = useState<QueueItem[]>([]);
-  const queue =
-    scenarioQuestionnaire !== null
-      ? scenarioQueue
-      : workflowMode === "create"
-        ? configurationQueue
-        : runQueue;
+  const queue = workflowMode === "create" ? configurationQueue : runQueue;
   function setQueue(
     update: QueueItem[] | ((previous: QueueItem[]) => QueueItem[]),
   ) {
     const updateQueue =
-      scenarioQuestionnaire !== null
-        ? setScenarioQueue
-        : workflowMode === "create"
-          ? setConfigurationQueue
-          : setRunQueue;
+      workflowMode === "create" ? setConfigurationQueue : setRunQueue;
     updateQueue(update);
   }
   const [isBatchMode, setIsBatchMode] = useState<boolean>(false);
@@ -151,178 +110,15 @@ export function App() {
     ConfirmModalProps,
     "title" | "description" | "confirmLabel" | "cancelLabel" | "onConfirm"
   > | null>(null);
-
   useEffect(() => {
-    if (!mapData && queue.length === 0 && !scenarioConfigDirty) return;
+    if (!mapData && queue.length === 0) return;
     function warnBeforeUnload(event: BeforeUnloadEvent) {
       event.preventDefault();
       event.returnValue = "";
     }
     window.addEventListener("beforeunload", warnBeforeUnload);
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
-  }, [mapData, queue.length, scenarioConfigDirty]);
-
-  function startScenario(id: number, title: string) {
-    setSimulationSnapshot({
-      map: mapData,
-      path: userPath,
-      result: lastResult,
-      step: currentStep,
-      artifacts,
-      workflow: workflowMode,
-      mode: activeTabMode,
-      batch: isBatchMode,
-      reviewIndex: batchReviewIndex,
-      resultIndex: activeBatchResultIndex,
-      config,
-    });
-    setScenarioQuestionnaire(id);
-    setQuestionnaireTitle(title);
-    setScenarioQueue([]);
-    setAdminQuestionnaire(id);
-    setScenarioTitle("");
-    setScenarioConfigDirty(false);
-    setMapData(null);
-    setUserPath([]);
-    setLastResult(null);
-    setArtifacts([]);
-    setWorkflowMode("run");
-    setActiveTabMode("individual");
-    setIsBatchMode(false);
-    setCurrentStep("config");
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    setShowAdmin(false);
-  }
-
-  function returnToAdmin() {
-    if (simulationSnapshot) {
-      setMapData(simulationSnapshot.map);
-      setUserPath(simulationSnapshot.path);
-      setLastResult(simulationSnapshot.result);
-      setCurrentStep(simulationSnapshot.step);
-      setArtifacts(simulationSnapshot.artifacts);
-      setWorkflowMode(simulationSnapshot.workflow);
-      setActiveTabMode(simulationSnapshot.mode);
-      setIsBatchMode(simulationSnapshot.batch);
-      setBatchReviewIndex(simulationSnapshot.reviewIndex);
-      setActiveBatchResultIndex(simulationSnapshot.resultIndex);
-      setConfig(simulationSnapshot.config);
-    }
-    setScenarioQuestionnaire(null);
-    setQuestionnaireTitle("");
-    setSimulationSnapshot(null);
-    setErrorMessage(null);
-    setShowAdmin(true);
-  }
-
-  async function saveScenario(event: FormEvent) {
-    event.preventDefault();
-    if (!scenarioQuestionnaire || savingScenario) return;
-    const items: QueueItem[] = isBatchMode
-      ? queue
-      : mapData && lastResult
-        ? [
-            {
-              id: "single",
-              config: mapData.config,
-              mapData,
-              userPath,
-              result: lastResult,
-              scenarioTitle,
-              status: "completed",
-            },
-          ]
-        : [];
-    const candidates = items.filter(
-      (item) => item.result?.success && !item.scenarioId,
-    );
-    if (!candidates.length) return;
-    if (candidates.some((item) => !item.scenarioTitle?.trim())) {
-      setErrorMessage(
-        "Enter a name for each successful scenario before saving.",
-      );
-      return;
-    }
-    setSavingScenario(true);
-    setErrorMessage(null);
-    let failed = false;
-    for (const item of candidates) {
-      const map = item.mapData;
-      const result = item.result;
-      if (!map || !result || !item.userPath) {
-        failed = true;
-        break;
-      }
-      const configuration: Record<string, unknown> = {
-        ...map.config,
-        TERRAIN_COLORS: map.terrain_colors,
-      };
-      try {
-        const response = await fetch(
-          `/api/questionnaires/${scenarioQuestionnaire}/scenarios`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              title: item.scenarioTitle!.trim(),
-              configuration,
-              data: {
-                ...result,
-                map: map.grid,
-                modified_map: result.modified_grid ?? null,
-                start: map.start,
-                goal: map.goal,
-                optimal_path: result.original_optimal_path,
-                alternative_path: item.userPath,
-                requested_seed: map.config.MAP_DEFAULT_SEED ?? null,
-              },
-            }),
-          },
-        );
-        if (!response.ok) {
-          const error = await response.json().catch(() => null);
-          throw new Error(
-            typeof error?.detail === "string"
-              ? error.detail
-              : "Failed to save scenario.",
-          );
-        }
-        const saved = await response.json();
-        if (isBatchMode)
-          setScenarioQueue((previous) =>
-            previous.map((entry) =>
-              entry.id === item.id
-                ? { ...entry, scenarioId: saved.id, status: "saved" }
-                : entry,
-            ),
-          );
-      } catch (error) {
-        setErrorMessage(
-          error instanceof Error ? error.message : "Failed to save scenario.",
-        );
-        failed = true;
-        break;
-      }
-    }
-    setSavingScenario(false);
-    if (
-      !failed &&
-      (!isBatchMode ||
-        items.every(
-          (item) =>
-            item.scenarioId ||
-            candidates.some((candidate) => candidate.id === item.id),
-        ))
-    ) {
-      returnToAdmin();
-    } else if (!failed) {
-      setSuccessMessage(
-        "Successful scenarios saved. Review or retry the remaining items.",
-      );
-    }
-  }
-
+  }, [mapData, queue.length]);
   useEffect(() => {
     if (!isSolvingISP && !isGeneratingMap) return;
     const timer = window.setInterval(() => {
@@ -330,7 +126,6 @@ export function App() {
     }, 1000);
     return () => window.clearInterval(timer);
   }, [isSolvingISP, isGeneratingMap]);
-
   useEffect(() => {
     async function loadInitial() {
       try {
@@ -346,36 +141,12 @@ export function App() {
     }
     loadInitial();
   }, []);
-
-  function prepareItems(
-    parameters: SystemConfig,
-    naming: NamingMetadata,
-    useBenchmark: boolean,
-    map?: MapData,
-    path?: [number, number][],
-  ): QueueItem[] {
-    const items = createExperimentItems(
-      parameters,
-      naming,
-      useBenchmark && scenarioQuestionnaire === null,
-      map,
-      path,
-    );
-    return items.map((item) => ({
-      ...item,
-      scenarioTitle:
-        scenarioQuestionnaire !== null
-          ? `Scenario ${queue.length + 1}`
-          : undefined,
-    }));
-  }
-
   async function handleGenerateMap(
     targetConfig: SystemConfig,
     useBenchmark: boolean,
   ) {
-    if (useBenchmark && scenarioQuestionnaire === null) {
-      const items = prepareItems(targetConfig, {}, true);
+    if (useBenchmark) {
+      const items = createExperimentItems(targetConfig, {}, true);
       setQueue(items);
       setActiveTabMode("queue");
       await handleStartBatchReview(items);
@@ -389,7 +160,6 @@ export function App() {
     try {
       const generated = await generateMap(targetConfig);
       setLastResult(null);
-      setScenarioConfigDirty(false);
       setMapData(generated);
       setUserPath(generated.auto_path || [generated.start]);
       setCurrentStep("route_canvas");
@@ -401,7 +171,6 @@ export function App() {
       setIsGeneratingMap(false);
     }
   }
-
   async function handleImportConfig(
     parsedJson: Record<string, unknown>,
     useBenchmark: boolean,
@@ -411,8 +180,8 @@ export function App() {
     setErrorMessage(null);
     try {
       const imported = await importConfig(parsedJson);
-      if (useBenchmark && scenarioQuestionnaire === null) {
-        const items = prepareItems(
+      if (useBenchmark) {
+        const items = createExperimentItems(
           imported.config,
           {},
           true,
@@ -425,7 +194,6 @@ export function App() {
       } else {
         setIsBatchMode(false);
         setLastResult(null);
-        setScenarioConfigDirty(false);
         setMapData(imported);
         setUserPath(imported.user_path);
         setConfig(imported.config);
@@ -441,9 +209,11 @@ export function App() {
       setIsGeneratingMap(false);
     }
   }
-
   async function handleImportBatchConfigs(
-    files: { name: string; data: Record<string, unknown> }[],
+    files: {
+      name: string;
+      data: Record<string, unknown>;
+    }[],
     useBenchmark: boolean,
   ) {
     setElapsedTime(0);
@@ -456,19 +226,13 @@ export function App() {
       try {
         const imported = await importConfig(file.data);
         items.push(
-          ...prepareItems(
+          ...createExperimentItems(
             imported.config,
             files.length > 1 ? { map_index: index + 1 } : {},
             useBenchmark,
             imported,
             imported.user_path,
-          ).map((item) => ({
-            ...item,
-            scenarioTitle:
-              scenarioQuestionnaire !== null
-                ? file.name.replace(/\.json$/i, "")
-                : undefined,
-          })),
+          ),
         );
       } catch (error) {
         errors.push(
@@ -477,13 +241,11 @@ export function App() {
       }
     }
     setQueue((previous) => [...previous, ...items]);
-    setScenarioConfigDirty(false);
     if (items.length)
       setSuccessMessage(`Imported ${items.length} items to the queue.`);
     if (errors.length) setErrorMessage(errors.join("; "));
     setIsGeneratingMap(false);
   }
-
   const handleSingleSolve = useCallback(async () => {
     if (!mapData) return;
     const routeError = validateDrawingRoute(
@@ -501,7 +263,6 @@ export function App() {
     setElapsedTime(0);
     setIsSolvingISP(true);
     setErrorMessage(null);
-
     try {
       const response = await solveISP(
         userPath,
@@ -530,20 +291,17 @@ export function App() {
       setIsSolvingISP(false);
     }
   }, [mapData, userPath]);
-
   function handleAddToQueue(newConfig: SystemConfig, useBenchmark: boolean) {
-    const items = prepareItems(newConfig, {}, useBenchmark);
+    const items = createExperimentItems(newConfig, {}, useBenchmark);
     setQueue((previous) => [...previous, ...items]);
-    setScenarioConfigDirty(false);
   }
-
   function handleRemoveQueueItem(id: string) {
     const item = queue.find((entry) => entry.id === id);
     const removeItem = () =>
       setQueue((prev) =>
         prev.filter((entry) => !item || !sameReviewGroup(entry, item)),
       );
-    if (item?.mapData && !item.scenarioId) {
+    if (item?.mapData) {
       setConfirmation({
         title: "Discard Prepared Item",
         description: item.benchmarkGroup
@@ -556,14 +314,13 @@ export function App() {
     }
     removeItem();
   }
-
   function handleClearQueue() {
     const clearQueue = () => {
       setQueue([]);
       setIsBatchMode(false);
       setBatchReviewIndex(0);
     };
-    if (queue.some((item) => item.mapData && !item.scenarioId)) {
+    if (queue.some((item) => item.mapData)) {
       setConfirmation({
         title: "Discard Prepared Items",
         description: "Discard the prepared items?",
@@ -574,22 +331,18 @@ export function App() {
     }
     clearQueue();
   }
-
   async function handleStartBatchReview(items = queue) {
-    const firstIndex = items.findIndex((item) => !item.scenarioId);
+    const firstIndex = items.length ? 0 : -1;
     if (firstIndex < 0) return;
     setIsBatchMode(true);
     setBatchReviewIndex(firstIndex);
-    setScenarioConfigDirty(false);
     setElapsedTime(0);
     setIsGeneratingMap(true);
     setErrorMessage(null);
-
     try {
       const firstItem = items[firstIndex];
       let firstMap = firstItem.mapData;
       let initialPath = firstItem.userPath;
-
       if (!firstMap) {
         firstMap = await generateMap(firstItem.config, false);
         initialPath = initialPath || firstMap.auto_path || [firstMap.start];
@@ -610,7 +363,6 @@ export function App() {
           ),
         );
       }
-
       setMapData(firstMap);
       setUserPath(initialPath || [firstMap.start]);
       setCurrentStep("route_canvas");
@@ -625,7 +377,6 @@ export function App() {
       setIsGeneratingMap(false);
     }
   }
-
   async function handleSwitchBatchMap(targetIndex: number) {
     if (
       targetIndex < 0 ||
@@ -634,15 +385,11 @@ export function App() {
     ) {
       return;
     }
-
     const updatedQueue = queue.map((it) =>
       sameReviewGroup(it, queue[batchReviewIndex]) ? { ...it, userPath } : it,
     );
     setQueue(updatedQueue);
-
     const targetItem = updatedQueue[targetIndex];
-    if (targetItem.scenarioId) return;
-
     if (targetItem.mapData) {
       setBatchReviewIndex(targetIndex);
       setMapData(targetItem.mapData);
@@ -657,7 +404,6 @@ export function App() {
         const newMap = await generateMap(targetItem.config, false);
         const initialPath = targetItem.userPath ||
           newMap.auto_path || [newMap.start];
-
         setQueue((prev) =>
           prev.map((it) =>
             sameReviewGroup(it, targetItem)
@@ -688,7 +434,6 @@ export function App() {
       }
     }
   }
-
   async function handleSaveSingleConfiguration() {
     if (!mapData) return;
     setElapsedTime(0);
@@ -716,13 +461,11 @@ export function App() {
       setIsGeneratingMap(false);
     }
   }
-
   async function handleSaveBatchConfigurations(finalQueue: QueueItem[]) {
     if (finalQueue.some((item) => !item.mapData || !item.userPath?.length)) {
       setErrorMessage("Every batch item must have a map and route.");
       return;
     }
-
     setElapsedTime(0);
     setIsGeneratingMap(true);
     setErrorMessage(null);
@@ -762,7 +505,6 @@ export function App() {
       setIsGeneratingMap(false);
     }
   }
-
   async function handleNextBatchMap() {
     if (workflowMode === "create") {
       const finalQueue = queue.map((item) =>
@@ -794,14 +536,12 @@ export function App() {
     if (nextIndex !== undefined) await handleSwitchBatchMap(nextIndex);
     else void handleExecuteBatch();
   }
-
   function handlePrevBatchMap() {
     const previousIndex = reviewIndices(queue)
       .filter((index) => index < batchReviewIndex)
       .at(-1);
     if (previousIndex !== undefined) void handleSwitchBatchMap(previousIndex);
   }
-
   function handleReuseRouteFrom(sourceIdx: number) {
     const sourceItem = queue[sourceIdx];
     const sourcePath = sourceItem?.userPath;
@@ -812,7 +552,6 @@ export function App() {
       setQueue((prev) =>
         prev.map((it) =>
           sameReviewGroup(it, queue[batchReviewIndex]) &&
-          !it.scenarioId &&
           !arePathsEqual(it.userPath, copy)
             ? {
                 ...it,
@@ -832,7 +571,6 @@ export function App() {
       setTimeout(() => setBatchRouteFeedback(null), 3500);
     }
   }
-
   function handleApplyRouteToAllMatching(targetIndices: number[]) {
     if (userPath.length === 0) return;
     const currentPathCopy = [...userPath];
@@ -840,7 +578,6 @@ export function App() {
       prev.map((it) =>
         (targetIndices.some((index) => sameReviewGroup(it, queue[index])) ||
           sameReviewGroup(it, queue[batchReviewIndex])) &&
-        !it.scenarioId &&
         !arePathsEqual(it.userPath, currentPathCopy)
           ? {
               ...it,
@@ -858,7 +595,6 @@ export function App() {
     );
     setTimeout(() => setBatchRouteFeedback(null), 3500);
   }
-
   async function handleExecuteBatch() {
     const finalQueue = queue.map((it) =>
       sameReviewGroup(it, queue[batchReviewIndex]) ? { ...it, userPath } : it,
@@ -883,18 +619,15 @@ export function App() {
       return;
     }
     setQueue(finalQueue);
-
     setElapsedTime(0);
     setIsSolvingISP(true);
     setErrorMessage(null);
     setCurrentStep("results");
     setActiveBatchResultIndex(0);
-
     for (let i = 0; i < finalQueue.length; i++) {
       const item = finalQueue[i];
-      if (item.scenarioId || item.result?.success) continue;
+      if (item.result?.success) continue;
       setActiveBatchResultIndex(i);
-
       setQueue((prev) =>
         prev.map((it, idx) =>
           idx === i
@@ -902,7 +635,6 @@ export function App() {
             : it,
         ),
       );
-
       try {
         const effectivePath = item.userPath || item.mapData?.auto_path || [];
         if (!item.mapData) {
@@ -916,7 +648,6 @@ export function App() {
           item.mapData.grid,
           item.naming,
         );
-
         setQueue((prev) =>
           prev.map((it, idx) =>
             idx === i
@@ -942,7 +673,6 @@ export function App() {
               : it,
           ),
         );
-
         if (i === 0) {
           setLastResult(response.result);
           setArtifacts(response.artifacts);
@@ -960,7 +690,6 @@ export function App() {
     }
     setIsSolvingISP(false);
   }
-
   function handleSelectQueueItem(item: QueueItem) {
     if (item.result) {
       const idx = queue.findIndex((q) => q.id === item.id);
@@ -979,77 +708,25 @@ export function App() {
       setCurrentStep("results");
     }
   }
-
   const hasMapData = Boolean(mapData);
   const hasResults = Boolean(lastResult || (isBatchMode && queue.length > 0));
-
   function handleSelectStep(step: "config" | "route_canvas" | "results") {
-    if (isSolvingISP || isGeneratingMap || savingScenario) return;
+    if (isSolvingISP || isGeneratingMap) return;
     if (currentStep === "route_canvas" && isBatchMode) {
       setQueue((previous) =>
         previous.map((item) =>
-          sameReviewGroup(item, queue[batchReviewIndex]) && !item.scenarioId
+          sameReviewGroup(item, queue[batchReviewIndex])
             ? { ...item, userPath }
             : item,
         ),
       );
     }
-    if (
-      step === "route_canvas" &&
-      isBatchMode &&
-      queue[batchReviewIndex]?.scenarioId
-    ) {
-      const index = queue.findIndex((item) => !item.scenarioId && item.mapData);
-      if (index < 0) return;
-      const item = queue[index];
-      setBatchReviewIndex(index);
-      setMapData(item.mapData!);
-      setUserPath(item.userPath ?? item.mapData!.auto_path);
-    }
-    if (
-      scenarioQuestionnaire !== null &&
-      currentStep === "config" &&
-      step !== "config" &&
-      scenarioConfigDirty
-    ) {
-      setConfirmation({
-        title: "Discard Configuration Changes",
-        description: "Discard changes to the configuration?",
-        confirmLabel: "Discard Changes",
-        onConfirm: () => {
-          setScenarioConfigDirty(false);
-          setCurrentStep(step);
-        },
-      });
-      return;
-    }
     setCurrentStep(step);
   }
-
   function openQuestionnaires() {
-    if (isSolvingISP || isGeneratingMap || savingScenario) return;
-    if (scenarioQuestionnaire === null) {
-      setShowAdmin(true);
-      return;
-    }
-    const hasUnsavedWork =
-      scenarioConfigDirty ||
-      scenarioQueue.some((item) => !item.scenarioId) ||
-      (!isBatchMode && Boolean(mapData));
-    if (!hasUnsavedWork) {
-      returnToAdmin();
-      return;
-    }
-    setConfirmation({
-      title: "Discard Unfinished Scenario",
-      description:
-        "Unsaved configuration, maps, routes and results will be discarded. Saved scenarios will remain in the questionnaire.",
-      cancelLabel: "Keep editing",
-      confirmLabel: "Discard and return",
-      onConfirm: () => returnToAdmin(),
-    });
+    if (isSolvingISP || isGeneratingMap) return;
+    setShowAdmin(true);
   }
-
   if (showAdmin) {
     return (
       <>
@@ -1057,10 +734,7 @@ export function App() {
           currentStep={currentStep}
           hasMapData={hasMapData}
           hasResults={hasResults}
-          initialQuestionnaireId={adminQuestionnaire}
-          onCreateScenario={startScenario}
           onSelectStep={(step) => {
-            setAdminQuestionnaire(null);
             setShowAdmin(false);
             handleSelectStep(step);
           }}
@@ -1073,7 +747,6 @@ export function App() {
       </>
     );
   }
-
   return (
     <div className="app-layout">
       <Topbar
@@ -1083,43 +756,14 @@ export function App() {
         hasMapData={hasMapData}
         hasResults={hasResults}
         onOpenAbout={() => setIsAboutOpen(true)}
-        scenarioMode={scenarioQuestionnaire !== null}
         onOpenAdmin={openQuestionnaires}
       />
 
       <main className="main-content-wrapper">
         <div className="workflow-context">
           <div>
-            <strong>
-              {scenarioQuestionnaire !== null
-                ? "Creating scenario"
-                : "Simulation"}
-            </strong>
-            {scenarioQuestionnaire !== null && (
-              <span>Questionnaire: {questionnaireTitle}</span>
-            )}
-            {scenarioQuestionnaire !== null && (
-              <span>
-                {currentStep === "config"
-                  ? activeTabMode === "queue"
-                    ? "Next: add or import configurations, then review their routes."
-                    : "Next: generate or import a map, then define a route."
-                  : currentStep === "route_canvas"
-                    ? "Next: solve the route, then review and save the scenario."
-                    : "Review the results and save the scenario to the questionnaire."}
-              </span>
-            )}
+            <strong>Simulation</strong>
           </div>
-          {scenarioQuestionnaire !== null && (
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={openQuestionnaires}
-              disabled={isGeneratingMap || isSolvingISP || savingScenario}
-            >
-              Back to questionnaire
-            </button>
-          )}
         </div>
         {errorMessage && (
           <div className="alert-banner">
@@ -1151,14 +795,8 @@ export function App() {
         {currentStep === "config" && (
           <div key="step-config" className="step-container config-step">
             <ConfigForm
-              scenarioMode={scenarioQuestionnaire !== null}
-              benchmark={scenarioQuestionnaire === null && benchmark}
+              benchmark={benchmark}
               onBenchmarkChange={setBenchmark}
-              onConfigChange={
-                scenarioQuestionnaire !== null
-                  ? () => setScenarioConfigDirty(true)
-                  : undefined
-              }
               onBeforeGenerate={(action) => {
                 if (!mapData && queue.length === 0) {
                   action();
@@ -1195,7 +833,6 @@ export function App() {
               <div className="queue-tab-content">
                 <QueuePanel
                   queue={queue}
-                  scenarioMode={scenarioQuestionnaire !== null}
                   workflowMode={workflowMode}
                   currentIndex={batchReviewIndex}
                   isProcessing={isSolvingISP || isGeneratingMap}
@@ -1221,8 +858,7 @@ export function App() {
                 if (isBatchMode && !arePathsEqual(path, userPath))
                   setQueue((previous) =>
                     previous.map((item) =>
-                      sameReviewGroup(item, queue[batchReviewIndex]) &&
-                      !item.scenarioId
+                      sameReviewGroup(item, queue[batchReviewIndex])
                         ? {
                             ...item,
                             userPath: path,
@@ -1259,16 +895,6 @@ export function App() {
                   setIsBatchMode(false);
                   setCurrentStep("config");
                 };
-                if (scenarioQuestionnaire !== null) {
-                  setConfirmation({
-                    title: "Return to Configuration",
-                    description:
-                      "Return to configuration? Your prepared maps and routes will be kept.",
-                    confirmLabel: "Return to Configuration",
-                    onConfirm: returnToConfig,
-                  });
-                  return;
-                }
                 returnToConfig();
               }}
               busyButtonText={
@@ -1309,7 +935,6 @@ export function App() {
                               .filter(
                                 ({ idx, item }) =>
                                   idx !== batchReviewIndex &&
-                                  !item.scenarioId &&
                                   !item.benchmarkGroup &&
                                   isSameMap(
                                     item.config,
@@ -1317,12 +942,10 @@ export function App() {
                                   ),
                               )
                           : [];
-
                       const isCurrentRouteComplete =
                         userPath.length > 0 &&
                         userPath[userPath.length - 1][0] === mapData.goal[0] &&
                         userPath[userPath.length - 1][1] === mapData.goal[1];
-
                       const matchingRunWithRoute = matchingBatchIndices.find(
                         ({ item }) => {
                           const itemGoal = item.mapData?.goal || mapData.goal;
@@ -1336,14 +959,12 @@ export function App() {
                           );
                         },
                       );
-
                       const areAllMatchingSynced =
                         matchingBatchIndices.length > 0 &&
                         isCurrentRouteComplete &&
                         matchingBatchIndices.every(({ item }) =>
                           arePathsEqual(userPath, item.userPath),
                         );
-
                       const isSyncedWithSource = Boolean(
                         matchingRunWithRoute &&
                         arePathsEqual(
@@ -1351,7 +972,6 @@ export function App() {
                           matchingRunWithRoute.item.userPath,
                         ),
                       );
-
                       return (
                         <div className="batch-stepper-bar">
                           <div className="batch-stepper-label">
@@ -1390,20 +1010,13 @@ export function App() {
                                         item.userPath.length - 1
                                       ][1] === itemGoal[1],
                                     );
-
                               return (
                                 <button
                                   key={item.id}
                                   type="button"
-                                  className={`batch-step-btn ${
-                                    isActive ? "active" : ""
-                                  }`}
+                                  className={`batch-step-btn ${isActive ? "active" : ""}`}
                                   onClick={() => handleSwitchBatchMap(idx)}
-                                  disabled={
-                                    isGeneratingMap ||
-                                    isSolvingISP ||
-                                    Boolean(item.scenarioId)
-                                  }
+                                  disabled={isGeneratingMap || isSolvingISP}
                                 >
                                   <span>
                                     {workflowMode === "create"
@@ -1411,9 +1024,7 @@ export function App() {
                                       : `Map ${reviewSteps.indexOf(idx) + 1} (${item.config.MAP_H}x${item.config.MAP_W})${item.benchmarkGroup ? " · 10 combinations" : ""}`}
                                   </span>
                                   <span
-                                    className={`batch-step-status-pill ${
-                                      isItemConnected ? "ready" : "pending"
-                                    }`}
+                                    className={`batch-step-status-pill ${isItemConnected ? "ready" : "pending"}`}
                                   >
                                     {isItemConnected ? "Ready" : "Pending"}
                                   </span>
@@ -1424,9 +1035,7 @@ export function App() {
 
                           {matchingBatchIndices.length > 0 && (
                             <div
-                              className={`batch-identical-maps-banner ${
-                                areAllMatchingSynced ? "is-synced" : ""
-                              }`}
+                              className={`batch-identical-maps-banner ${areAllMatchingSynced ? "is-synced" : ""}`}
                             >
                               <div className="identical-maps-top-row">
                                 <div className="identical-maps-info">
@@ -1516,98 +1125,10 @@ export function App() {
 
         {currentStep === "results" && (
           <div key="step-results" className="step-container results-step">
-            {scenarioQuestionnaire !== null &&
-              isBatchMode &&
-              !isSolvingISP &&
-              queue[activeBatchResultIndex] && (
-                <div className="qa-panel qa-form scenario-save-form">
-                  {queue[activeBatchResultIndex].error && (
-                    <p role="alert">{queue[activeBatchResultIndex].error}</p>
-                  )}
-                  {scenarioQuestionnaire !== null && (
-                    <div className="form-group">
-                      <label htmlFor="batch-scenario-name">Scenario name</label>
-                      <input
-                        id="batch-scenario-name"
-                        value={
-                          queue[activeBatchResultIndex].scenarioTitle ?? ""
-                        }
-                        disabled={
-                          Boolean(queue[activeBatchResultIndex].scenarioId) ||
-                          savingScenario
-                        }
-                        onChange={(event) => {
-                          const title = event.target.value;
-                          setScenarioQueue((previous) =>
-                            previous.map((item, index) =>
-                              index === activeBatchResultIndex
-                                ? { ...item, scenarioTitle: title }
-                                : item,
-                            ),
-                          );
-                        }}
-                      />
-                    </div>
-                  )}
-                  {queue[activeBatchResultIndex].scenarioId && (
-                    <p role="status">Saved to questionnaire</p>
-                  )}
-                  {scenarioQuestionnaire !== null && (
-                    <form onSubmit={saveScenario}>
-                      <button
-                        type="submit"
-                        className="btn btn-vibrant"
-                        disabled={
-                          savingScenario ||
-                          !queue.some(
-                            (item) => item.result?.success && !item.scenarioId,
-                          )
-                        }
-                      >
-                        {savingScenario
-                          ? "Saving scenarios..."
-                          : "Save successful scenarios"}
-                      </button>
-                    </form>
-                  )}
-                </div>
-              )}
-
-            {scenarioQuestionnaire !== null &&
-              !isBatchMode &&
-              lastResult?.success && (
-                <form
-                  className="qa-panel qa-form scenario-save-form"
-                  onSubmit={saveScenario}
-                >
-                  <div className="form-group">
-                    <label htmlFor="scenario-name">Scenario name</label>
-                    <input
-                      id="scenario-name"
-                      required
-                      value={scenarioTitle}
-                      onChange={(event) => setScenarioTitle(event.target.value)}
-                      disabled={savingScenario}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="btn btn-vibrant"
-                    disabled={savingScenario || !scenarioTitle.trim()}
-                  >
-                    {savingScenario
-                      ? "Saving scenario..."
-                      : "Save scenario to questionnaire"}
-                  </button>
-                </form>
-              )}
-
             <ResultsView
               result={lastResult}
               mapData={
-                isBatchMode
-                  ? queue[activeBatchResultIndex]?.mapData || null
-                  : mapData
+                isBatchMode ? queue[activeBatchResultIndex]?.mapData : mapData
               }
               userPath={
                 isBatchMode
@@ -1622,28 +1143,24 @@ export function App() {
                   ? queue[activeBatchResultIndex]?.mapData?.map_image_url
                   : mapData?.map_image_url
               }
-              onNewRun={
-                scenarioQuestionnaire !== null
-                  ? undefined
-                  : () => {
-                      if (isSolvingISP || savingScenario) return;
-                      const startAgain = () => {
-                        setIsBatchMode(false);
-                        setCurrentStep("config");
-                      };
-                      if (isBatchMode) {
-                        setConfirmation({
-                          title: "Start Again",
-                          description:
-                            "Discard the current simulation and start again?",
-                          confirmLabel: "Start Again",
-                          onConfirm: startAgain,
-                        });
-                        return;
-                      }
-                      startAgain();
-                    }
-              }
+              onNewRun={() => {
+                if (isSolvingISP) return;
+                const startAgain = () => {
+                  setIsBatchMode(false);
+                  setCurrentStep("config");
+                };
+                if (isBatchMode) {
+                  setConfirmation({
+                    title: "Start Again",
+                    description:
+                      "Discard the current simulation and start again?",
+                    confirmLabel: "Start Again",
+                    onConfirm: startAgain,
+                  });
+                  return;
+                }
+                startAgain();
+              }}
               batchQueue={isBatchMode && queue.length > 1 ? queue : undefined}
               activeBatchIndex={activeBatchResultIndex}
               onSelectBatchIndex={(idx) => {
@@ -1656,24 +1173,22 @@ export function App() {
               elapsedTime={elapsedTime}
             />
 
-            {scenarioQuestionnaire === null &&
-              queue.length > 0 &&
-              !isBatchMode && (
-                <div className="queue-results-summary">
-                  <QueuePanel
-                    queue={queue}
-                    workflowMode={workflowMode}
-                    currentIndex={batchReviewIndex}
-                    isProcessing={isSolvingISP}
-                    interactiveMode={interactiveQueueMode}
-                    onToggleInteractiveMode={setInteractiveQueueMode}
-                    onRemoveItem={handleRemoveQueueItem}
-                    onClearQueue={handleClearQueue}
-                    onStartQueue={() => void handleStartBatchReview()}
-                    onSelectItem={handleSelectQueueItem}
-                  />
-                </div>
-              )}
+            {queue.length > 0 && !isBatchMode && (
+              <div className="queue-results-summary">
+                <QueuePanel
+                  queue={queue}
+                  workflowMode={workflowMode}
+                  currentIndex={batchReviewIndex}
+                  isProcessing={isSolvingISP}
+                  interactiveMode={interactiveQueueMode}
+                  onToggleInteractiveMode={setInteractiveQueueMode}
+                  onRemoveItem={handleRemoveQueueItem}
+                  onClearQueue={handleClearQueue}
+                  onStartQueue={() => void handleStartBatchReview()}
+                  onSelectItem={handleSelectQueueItem}
+                />
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -1749,7 +1264,7 @@ export function App() {
         <ConfirmModal
           key={confirmation.title}
           {...confirmation}
-          busy={false}
+          busy={isGeneratingMap || isSolvingISP}
           onClose={() => setConfirmation(null)}
           onConfirm={() => {
             setConfirmation(null);
@@ -1761,5 +1276,4 @@ export function App() {
     </div>
   );
 }
-
 export default App;

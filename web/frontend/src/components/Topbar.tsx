@@ -1,6 +1,5 @@
 export interface TopbarProps {
   activeView: "simulation" | "admin";
-  scenarioMode?: boolean;
   currentStep: "config" | "route_canvas" | "results";
   onSelectStep: (step: "config" | "route_canvas" | "results") => void;
   hasMapData: boolean;
@@ -8,10 +7,8 @@ export interface TopbarProps {
   onOpenAdmin: () => void;
   onOpenAbout: () => void;
 }
-
 export function Topbar({
   activeView,
-  scenarioMode = false,
   currentStep,
   onSelectStep,
   hasMapData,
@@ -20,7 +17,6 @@ export function Topbar({
   onOpenAbout,
 }: TopbarProps) {
   const isAdmin = activeView === "admin";
-
   return (
     <header className="app-topbar">
       <div className="topbar-brand">
@@ -52,47 +48,35 @@ export function Topbar({
             type="button"
             role="tab"
             aria-selected={!isAdmin && currentStep === "config"}
-            className={`stepper-tab ${
-              !isAdmin && currentStep === "config" ? "active" : ""
-            } ${hasMapData ? "completed" : ""}`}
+            className={`stepper-tab ${!isAdmin && currentStep === "config" ? "active" : ""} ${hasMapData ? "completed" : ""}`}
             onClick={() => onSelectStep("config")}
           >
             <span className="stepper-indicator">{hasMapData ? "✓" : "1"}</span>
-            <span className="stepper-label">
-              {scenarioMode ? "Configure" : "Configuration"}
-            </span>
+            <span className="stepper-label">Configuration</span>
           </button>
 
           <button
             type="button"
             role="tab"
             aria-selected={!isAdmin && currentStep === "route_canvas"}
-            className={`stepper-tab ${
-              !isAdmin && currentStep === "route_canvas" ? "active" : ""
-            } ${hasResults ? "completed" : ""}`}
+            className={`stepper-tab ${!isAdmin && currentStep === "route_canvas" ? "active" : ""} ${hasResults ? "completed" : ""}`}
             onClick={() => hasMapData && onSelectStep("route_canvas")}
             disabled={!hasMapData}
           >
             <span className="stepper-indicator">{hasResults ? "✓" : "2"}</span>
-            <span className="stepper-label">
-              {scenarioMode ? "Define Route" : "Route Definition"}
-            </span>
+            <span className="stepper-label">Route Definition</span>
           </button>
 
           <button
             type="button"
             role="tab"
             aria-selected={!isAdmin && currentStep === "results"}
-            className={`stepper-tab ${
-              !isAdmin && currentStep === "results" ? "active" : ""
-            }`}
+            className={`stepper-tab ${!isAdmin && currentStep === "results" ? "active" : ""}`}
             onClick={() => hasResults && onSelectStep("results")}
             disabled={!hasResults}
           >
             <span className="stepper-indicator">3</span>
-            <span className="stepper-label">
-              {scenarioMode ? "Review and Save" : "Results & Metrics"}
-            </span>
+            <span className="stepper-label">Results &amp; Metrics</span>
           </button>
         </nav>
 

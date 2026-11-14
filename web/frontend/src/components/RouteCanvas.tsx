@@ -16,6 +16,8 @@ import { hasTerrainOverride } from "../utils/terrainAccess";
 import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
 
 interface RouteCanvasProps {
+  manualOnly?: boolean;
+  solveDisabled?: boolean;
   mapData: MapData;
   userPath: GridPoint[];
   onPathChange: (path: GridPoint[]) => void;
@@ -29,6 +31,8 @@ interface RouteCanvasProps {
 }
 
 export function RouteCanvas({
+  manualOnly = false,
+  solveDisabled = false,
   mapData,
   userPath,
   onPathChange,
@@ -436,22 +440,26 @@ export function RouteCanvas({
             role="group"
             aria-label="Route editing"
           >
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleAutoRoute}
-              disabled={isSolving}
-            >
-              Automatic Route
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={handleConnectGoal}
-              disabled={isSolving || isConnectedToGoal}
-            >
-              Connect to Goal
-            </button>
+            {!manualOnly && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleAutoRoute}
+                  disabled={isSolving}
+                >
+                  Automatic Route
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={handleConnectGoal}
+                  disabled={isSolving || isConnectedToGoal}
+                >
+                  Connect to Goal
+                </button>
+              </>
+            )}
             <button
               type="button"
               className="btn btn-ghost"
@@ -553,8 +561,9 @@ export function RouteCanvas({
             </span>
           ) : (
             <span className="badge badge-warning">
-              Pending route ({userPath.length} steps) &bull; Connect to Goal [
-              {goal[0]}, {goal[1]}]
+              Pending route ({userPath.length} steps) &bull;{" "}
+              {manualOnly ? "Draw to Goal" : "Connect to Goal"} [{goal[0]},{" "}
+              {goal[1]}]
             </span>
           )}
         </div>
@@ -586,7 +595,7 @@ export function RouteCanvas({
             type="button"
             className="btn btn-vibrant btn-large"
             onClick={onSolve}
-            disabled={isSolving || !isConnectedToGoal}
+            disabled={isSolving || !isConnectedToGoal || solveDisabled}
           >
             {isSolving
               ? busyButtonText || "Solving ISP..."

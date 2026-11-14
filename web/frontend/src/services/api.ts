@@ -74,6 +74,45 @@ export async function solveISP(
   return response.json();
 }
 
+export async function solveScenarioISP(
+  questionnaireId: number,
+  map: MapData,
+  userPath: [number, number][],
+): Promise<SolveResponse> {
+  const response = await fetch(
+    `/api/questionnaires/${questionnaireId}/scenario-solve`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        map: map.grid,
+        user_path: userPath,
+        start: map.start,
+        goal: map.goal,
+      }),
+    },
+  );
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(
+      typeof data?.detail === "string"
+        ? data.detail
+        : `Unable to resolve the scenario: ${response.statusText}`,
+    );
+  }
+  if (
+    data?.status !== "success" ||
+    typeof data.result?.success !== "boolean" ||
+    typeof data.result.solver_status !== "string" ||
+    !data.result.solver_status.trim()
+  ) {
+    throw new Error(
+      "The API returned an invalid scenario resolution response.",
+    );
+  }
+  return data as SolveResponse;
+}
+
 export async function saveConfigurations(
   payload: SaveConfigurationsPayload,
 ): Promise<{ status: string; saved_files: string[] }> {

@@ -1,5 +1,3 @@
-import hashlib
-import hmac
 import re
 import secrets
 from typing import Annotated
@@ -23,6 +21,7 @@ from web.api.participation_progress import (
 )
 from web.api.questionnaires import get_questionnaire, require_draft
 from web.api.study_protocol import (
+    STUDY_GROUPS,
     read_questions,
     require_protocol,
     route_order,
@@ -88,6 +87,15 @@ def generate_participation_keys(
         questionnaire = get_questionnaire(connection, questionnaire_id, lock=True)
         if questionnaire["status"] == "closed":
             raise HTTPException(status_code=409, detail="This questionnaire is closed")
+        issued = connection.execute(
+            "SELECT count(*) AS total FROM participation_keys WHERE questionnaire_id = %s",
+            (questionnaire_id,),
+        ).fetchone()["total"]
+        if issued + payload.quantity > 1000:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Only {1000 - issued} participation keys remain. Each questionnaire supports 1,000 three-digit codes.",
+            )
         keys = []
         while len(keys) < payload.quantity:
             key = secrets.token_urlsafe(18)
@@ -113,8 +121,8 @@ def activate_questionnaire(questionnaire_id: int):
         require_protocol(read_questions(connection, questionnaire_id))
         token = secrets.token_urlsafe(32)
         connection.execute(
-            "UPDATE questionnaires SET status = 'active', access_token = %s, group_secret = %s WHERE id = %s",
-            (token, secrets.token_hex(32), questionnaire_id),
+            "UPDATE questionnaires SET status = 'active', access_token = %s WHERE id = %s",
+            (token, questionnaire_id),
         )
         return {"status": "active"}
 
@@ -137,7 +145,7 @@ def close_questionnaire(questionnaire_id: int):
 
 def active_questionnaire(connection, token):
     questionnaire = connection.execute(
-        "SELECT id, title, description, protocol_version, group_secret, status FROM questionnaires WHERE access_token = %s AND status IN ('active', 'closed') FOR UPDATE",
+        "SELECT id, title, description, protocol_version, allocation_remaining, status FROM questionnaires WHERE access_token = %s AND status IN ('active', 'closed') FOR UPDATE",
         (token,),
     ).fetchone()
     if questionnaire is None:
@@ -230,15 +238,37 @@ def start_participation(payload: ParticipationStartInput, response: Response):
                 )
             questions = read_questions(connection, questionnaire["id"])
             require_protocol(questions)
-            digest = hmac.new(
-                questionnaire["group_secret"].encode(),
-                str(submission_key).encode(),
-                hashlib.sha256,
-            ).digest()
-            group = "experimental" if digest[0] & 1 else "control"
+            used_codes = {
+                row["export_code"]
+                for row in connection.execute(
+                    "SELECT export_code FROM participations WHERE questionnaire_id = %s",
+                    (questionnaire["id"],),
+                ).fetchall()
+            }
+            available_codes = [
+                f"{number:03d}"
+                for number in range(1000)
+                if f"{number:03d}" not in used_codes
+            ]
+            if not available_codes:
+                raise HTTPException(
+                    status_code=409,
+                    detail="All 1,000 participation codes are in use for this questionnaire",
+                )
+            export_code = secrets.choice(available_codes)
+            remaining = questionnaire["allocation_remaining"]
+            if not remaining:
+                remaining = secrets.SystemRandom().sample(
+                    STUDY_GROUPS, len(STUDY_GROUPS)
+                )
+            group = remaining[0]
             connection.execute(
-                "INSERT INTO participations (questionnaire_id, submission_key, participant_name, participant_email, participation_key, study_group, scenario_order) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                "UPDATE questionnaires SET allocation_remaining = %s WHERE id = %s",
+                (Jsonb(remaining[1:]), questionnaire["id"]),
+            )
+            connection.execute(
+                "INSERT INTO participations (questionnaire_id, submission_key, participant_name, participant_email, participation_key, study_group, export_code, scenario_order) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     questionnaire["id"],
                     submission_key,
@@ -246,6 +276,7 @@ def start_participation(payload: ParticipationStartInput, response: Response):
                     payload.email,
                     payload.key,
                     group,
+                    export_code,
                     Jsonb(scenario_order(questions, submission_key)),
                 ),
             )

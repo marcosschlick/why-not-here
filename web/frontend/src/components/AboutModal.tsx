@@ -9,17 +9,22 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const [isRendered, setIsRendered] = useState<boolean>(isOpen);
   const [isVisible, setIsVisible] = useState<boolean>(isOpen);
 
+  if (isOpen && !isRendered) {
+    setIsRendered(true);
+  }
+  if (!isOpen && isVisible) {
+    setIsVisible(false);
+  }
+
   useEffect(() => {
     let timer: number | undefined;
     let animFrame: number | undefined;
 
     if (isOpen) {
-      setIsRendered(true);
       animFrame = window.requestAnimationFrame(() => {
         setIsVisible(true);
       });
     } else if (isRendered) {
-      setIsVisible(false);
       timer = window.setTimeout(() => {
         setIsRendered(false);
       }, 160);

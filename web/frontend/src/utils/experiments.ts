@@ -56,7 +56,7 @@ export function reviewIndices(queue: QueueItem[]): number[] {
   const seen = new Set<string>();
   return queue.flatMap((item, index) => {
     const key = item.benchmarkGroup || item.id;
-    if (item.scenarioId || seen.has(key)) return [];
+    if (seen.has(key)) return [];
     seen.add(key);
     return [index];
   });

@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 
-type StudyGroup = "control" | "experimental";
+import { STUDY_GROUPS as GROUPS, GROUP_LABELS } from "../utils/studyGroups";
+import type { StudyGroup } from "../utils/studyGroups";
 type GroupValues<T> = Record<StudyGroup, T>;
 type ObservationCounts = {
   responses: number;
@@ -36,11 +37,6 @@ type QuestionnaireResults = {
   predictions: GroupValues<PredictionResults>;
 };
 
-const GROUPS: StudyGroup[] = ["control", "experimental"];
-const GROUP_LABELS: GroupValues<string> = {
-  control: "Control",
-  experimental: "Experimental",
-};
 const LIKERT_LABELS = [
   "Strongly disagree",
   "Somewhat disagree",
@@ -178,10 +174,11 @@ function PredictionCharts({
         aria-labelledby={accuracyId}
       >
         <figcaption id={accuracyId}>
-          <h4>Predictions matching the optimal route</h4>
+          <h4>Predictive accuracy / alignment with the system’s choice</h4>
           <p className="qa-muted">
-            Proportion of valid choices matching the optimal route across the
-            three unseen scenarios.
+            One measure: the proportion of valid predictions matching the
+            optimal route across the three unseen scenarios. Predictive accuracy
+            and alignment refer to this same proportion.
           </p>
         </figcaption>
         {GROUPS.map((group) => {
@@ -283,6 +280,8 @@ export function QuestionnaireResultsPanel({
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   const summary = results?.participation;
 
   useEffect(() => {
@@ -324,6 +323,42 @@ export function QuestionnaireResultsPanel({
     setRefreshVersion((current) => current + 1);
   }
 
+  async function downloadCsv() {
+    if (exporting) return;
+    setExporting(true);
+    setExportError("");
+    try {
+      const response = await fetch(
+        `/api/questionnaires/${questionnaireId}/responses.csv`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(
+          typeof data?.detail === "string"
+            ? data.detail
+            : "Unable to export responses.",
+        );
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `questionnaire-${questionnaireId}-responses.csv`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (reason) {
+      setExportError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to export responses.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <section
       className="qa-control-group qa-participation-summary qa-results-panel"
@@ -333,6 +368,14 @@ export function QuestionnaireResultsPanel({
       <div className="qa-heading">
         <h3>Participation</h3>
         <div className="qa-actions">
+          <button
+            type="button"
+            className="qa-secondary qa-overview-action"
+            disabled={exporting}
+            onClick={() => void downloadCsv()}
+          >
+            {exporting ? "Exporting…" : "Export completed responses (CSV)"}
+          </button>
           <button
             type="button"
             className="qa-secondary qa-overview-action"
@@ -352,6 +395,11 @@ export function QuestionnaireResultsPanel({
           </button>
         </div>
       </div>
+      {exportError && (
+        <p className="qa-error" role="alert">
+          {exportError}
+        </p>
+      )}
       <dl className="qa-participation-counts">
         <div className="qa-completed-count">
           <dt>Completed</dt>
@@ -369,10 +417,14 @@ export function QuestionnaireResultsPanel({
       {summary && (
         <p className="qa-results-cohort">
           Completed by group:{" "}
-          <strong>Control {summary.completed_by_group.control}</strong> ·{" "}
-          <strong>
-            Experimental {summary.completed_by_group.experimental}
-          </strong>
+          {GROUPS.map((group, index) => (
+            <span key={group}>
+              {index > 0 && " · "}
+              <strong>
+                {GROUP_LABELS[group]} {summary.completed_by_group[group]}
+              </strong>
+            </span>
+          ))}
         </p>
       )}
       {loading && (
