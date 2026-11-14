@@ -1,42 +1,30 @@
-from src import config
 from src.grid.grid import Grid
-from src.isp.semantics import SemanticModifications
-
-TERRAIN_NAMES = {
-    "COMPACTED_SOIL": "compacted soil",
-    "GRASS": "grass",
-    "DRY_VEGETATION": "dry vegetation",
-    "SAND": "sand",
-    "MUD": "mud",
-}
+from src.isp.types import SemanticModifications
 
 
 def generate_explanation_text(
     modifications: SemanticModifications | None,
     grid: Grid | None = None,
-    fallback_reason: str | None = None,
-    solver_status: str = "OPTIMAL",
+    solver_status: str = "CANDIDATE_UNVALIDATED",
     stop_reason: str | None = None,
     objective_cost: int | None = None,
+    objective_certified: bool = False,
+    original_optimal_available: bool = True,
 ) -> str:
     if stop_reason == "COST_MODEL_MISMATCH":
         return (
             "Execution error: modeled edge costs differ from the costs applied to the candidate map. "
-            "The physical route validation is recorded separately and does not certify this execution."
+            "Physical validation is recorded separately; this execution is not successful or certified."
         )
     if modifications is None:
-        if fallback_reason:
-            return fallback_reason
         reason = stop_reason or solver_status
         if reason == "INFEASIBLE":
-            return "The solver reported infeasibility in the current formulation and intervention domain. No candidate intervention is available."
+            return "The current formulation is infeasible within the declared intervention domain. No candidate explanation is available."
         if reason in {
             "TIME_BUDGET_EXHAUSTED",
             "TIME_LIMIT",
-            "TIMEOUT",
             "SOLVER_LIMIT",
             "INTERRUPTED",
-            "VALIDATED_AFTER_SOLVER_LIMIT",
         }:
             return "The execution stopped at a time or solver limit before a usable candidate was available. Feasibility remains undetermined."
         if reason in {
@@ -49,7 +37,8 @@ def generate_explanation_text(
         }:
             return "The execution failed before a usable candidate was available. See the recorded execution error."
         return "No usable candidate was returned. This inconclusive result does not establish infeasibility."
-    if grid is not None and grid.isp_model == "BRANDAO":
+    validated = solver_status == "PATH_VALIDATED"
+    if modifications.model == "BRANDAO":
         improved = sum(
             grid.get_cell(node).terrain == "FOREST" and target == "GRASS"
             for node, target in modifications.terrain_assignments
@@ -58,147 +47,77 @@ def generate_explanation_text(
             grid.get_cell(node).terrain == "GRASS" and target == "FOREST"
             for node, target in modifications.terrain_assignments
         )
-        validation = (
-            "The candidate is optimal only within the reduced subgraph. Global optimality validation failed."
-            if stop_reason == "SUBGRAPH_OPTIMAL_ONLY"
-            else "The desired route is globally validated within the total cost tolerance."
-            if solver_status == "PATH_VALIDATED"
-            else "Global path validation has not passed."
+        lines = [
+            (
+                "In this Brandao-inspired 2D-grid adaptation, the contrast between the chosen route p* "
+                "and the desired route p' depends on the prepared map's fast and slow terrain assignments. "
+                "The candidate terrain assignments seek to make p' optimal in the modified prepared model:"
+            ),
+            f"- Change {improved} cells from slow to fast terrain and {worsened} cells from fast to slow terrain, including changes on competing routes when needed.",
+            f"- Weighted intervention cost: {objective_cost}. Each changed cell costs 1 inside the desired path's interior and 10 outside it. Preparation conversions are excluded.",
+        ]
+    else:
+        lines = [
+            "This Eder-inspired 2D-grid explanation contrasts the chosen optimal route p* with the alternative route p'. "
+            "The candidate changes concern terrain traversability, slope, environmental speed limits and hypothetical robot capabilities:"
+            if original_optimal_available
+            else "No feasible route existed in the original map. The following candidate changes propose how the desired route p' could become traversable and optimal:",
+        ]
+        for record in modifications.cell_openings:
+            reasons = []
+            if record.original_obstacle:
+                reasons.append("a physical obstacle")
+            if record.impassable_terrain:
+                reasons.append(
+                    f"impassable {record.original_terrain.lower().replace('_', ' ')} terrain"
+                )
+            lines.append(
+                f"- Make cell {record.cell} traversable by resolving {' and '.join(reasons)} as one intervention. "
+                f"Preserve its terrain class and use {record.opened_speed_mps:g} m/s before edge slope effects."
+            )
+        for record in modifications.slope_adjustments:
+            lines.append(
+                f"- Make directed edge {record.edge[0]} -> {record.edge[1]} traversable by adjusting its effective slope "
+                f"from {record.original_slope_deg:+.2f} to {record.effective_slope_deg:+g} degrees. Elevations and the reverse edge are unchanged."
+            )
+        for records, description in (
+            (
+                modifications.environmental_speed_edges,
+                "Remove the environmental speed limitation",
+            ),
+            (
+                modifications.robot_capability_edges,
+                "Hypothetically increase the robot's speed capability",
+            ),
+        ):
+            for record in records:
+                lines.append(
+                    f"- {description} on directed edge {record.edge[0]} -> {record.edge[1]}: "
+                    f"effective speed {record.target_speed_mps:g} m/s, original eligibility reference {record.reference_speed_mps:.6g} m/s. "
+                    "The resulting cost is distance divided by this speed; passage corrections remain separate interventions."
+                )
+        if len(lines) == 1:
+            lines.append("No interventions are proposed.")
+        lines.append(
+            f"Each cell opening and each directed edge intervention costs 1; total intervention cost: {objective_cost}."
         )
-        return (
-            f"Brandao-inspired adaptation: {improved} slow-to-fast and {worsened} fast-to-slow cell changes, "
-            f"including possible changes on competing routes; weighted intervention cost: {objective_cost}. "
-            "Each change costs 1 inside the desired path and 10 outside its interior. "
-            f"Preparation conversions are excluded. {validation}"
+    if validated:
+        lines.append(
+            "The alternative route is physically traversable and globally optimal in the modified model within the total-cost tolerance; ties are permitted."
         )
-    subgraph_only = (
-        stop_reason == "SUBGRAPH_OPTIMAL_ONLY"
-        or solver_status == "SUBGRAPH_OPTIMAL_ONLY"
+    elif stop_reason == "SUBGRAPH_OPTIMAL_ONLY":
+        lines.append(
+            "The candidate is optimal only within the reduced subgraph. Full-grid validation failed."
+        )
+    else:
+        lines.append(
+            "This remains an unvalidated candidate: global route validation has not passed."
+        )
+    lines.append(
+        "The minimum intervention objective is certified within the declared domain."
+        if objective_certified
+        else "The minimum intervention objective is not certified."
     )
-    uncertified_candidate = solver_status in {
-        "TIMEOUT",
-        "CANDIDATE_UNVALIDATED",
-        "TIME_LIMIT",
-        "SOLVER_LIMIT",
-        "INTERRUPTED",
-    }
-    subgraph_message = (
-        "The candidate makes the alternative route p' optimal only within the reduced subgraph. "
-        "Global optimality validation failed; there is no global optimality certification."
-    )
-    has_terrain = bool(modifications.terrain_nodes)
-    obstacle_nodes = modifications.obstacle_nodes
-    if grid is not None:
-        obstacle_nodes = [u for u in obstacle_nodes if grid.get_cell(u).obstacle != 0]
-    has_obstacle = bool(obstacle_nodes)
-    has_slope = bool(modifications.slope_edges)
-    has_opened_terrain = bool(modifications.opened_terrain_nodes)
-    has_robot_speed = bool(modifications.robot_speed_edges)
-
-    if not any(
-        (has_terrain, has_obstacle, has_slope, has_opened_terrain, has_robot_speed)
-    ):
-        if subgraph_only:
-            return (
-                subgraph_message
-                + " No interventions were required within the subgraph."
-            )
-        if uncertified_candidate:
-            return (
-                "A candidate intervention was found, but global optimality was not certified before the run stopped. "
-                "The candidate contains no semantic changes."
-            )
-        return "The alternative route p' already has the same estimated traversal time as the optimal route p*, so no interventions are needed."
-
-    lines = [
-        subgraph_message + " Candidate interventions:"
-        if subgraph_only
-        else (
-            "A candidate intervention was found, but global optimality was not certified before the run stopped. "
-            "Candidate interventions:"
-            if uncertified_candidate
-            else (
-                "This contrastive explanation describes why the planner selected the optimal route p* "
-                "over the alternative route p': terrain, traversability, and robot capabilities determine their traversal times. "
-                "The candidate interventions proposed to make the alternative route p' optimal are:"
-            )
-        )
-    ]
-
-    if has_terrain:
-        counts: dict[tuple[str, str], int] = {}
-        for node, terrain in modifications.terrain_assignments:
-            original = (
-                grid.get_cell(node).terrain if grid is not None else "original terrain"
-            )
-            original_name = TERRAIN_NAMES.get(
-                original, original.lower().replace("_", " ")
-            )
-            final_name = TERRAIN_NAMES.get(terrain, terrain.lower().replace("_", " "))
-            key = (original_name, final_name)
-            counts[key] = counts.get(key, 0) + 1
-        for (original_name, final_name), count in counts.items():
-            cell_label = "cell" if count == 1 else "cells"
-            lines.append(
-                f"- Convert {count} terrain {cell_label} from {original_name} to {final_name} along the desired route."
-            )
-
-    if has_obstacle:
-        obstacle_count = len(obstacle_nodes)
-        obstacle_cell_label = "cell" if obstacle_count == 1 else "cells"
-        lines.append(
-            f"- Remove physical obstacles blocking {obstacle_count} "
-            f"{obstacle_cell_label} on the alternative route."
-        )
-
-    if has_slope:
-        slope_count = len(modifications.slope_edges)
-        if slope_count == 1:
-            lines.append(
-                "- Level 1 steep-slope segment that slows or prevents continuous robot traversal."
-            )
-        else:
-            lines.append(
-                f"- Level {slope_count} steep-slope segments "
-                "that slow or prevent continuous robot traversal."
-            )
-
-    if has_opened_terrain:
-        counts: dict[str, int] = {}
-        for node in modifications.opened_terrain_nodes:
-            terrain = (
-                grid.get_cell(node).terrain
-                if grid is not None
-                else "impassable terrain"
-            )
-            name = (
-                "water"
-                if terrain == "WATER_RIVER"
-                else terrain.lower().replace("_", " ")
-            )
-            counts[name] = counts.get(name, 0) + 1
-        for name, count in counts.items():
-            label = "cell" if count == 1 else "cells"
-            lines.append(
-                f"- Make {count} {name} {label} traversable at the base-terrain speed while preserving the original terrain."
-            )
-
-    if has_robot_speed:
-        count = len(modifications.robot_speed_edges)
-        edge_label = "edge" if count == 1 else "edges"
-        speed = (
-            grid.robot_speed_theoretical
-            if grid is not None
-            else config.ROBOT_SPEED_THEORETICAL
-        )
-        lines.append(
-            f"- Increase the robot speed capability to {speed:g} m/s on {count} directed {edge_label} of the alternative route."
-        )
-
-    if not subgraph_only and not uncertified_candidate:
-        lines.append(
-            "These interventions make the alternative route optimal under the modified traversal model."
-        )
     return "\n".join(lines)
 
 

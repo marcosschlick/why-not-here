@@ -3,7 +3,7 @@ MAX_SLOPE_DEG = 20.0
 
 # Terrain definitions and nominal speeds (m/s)
 TERRAINS = {
-    "COMPACTED_SOIL": 1.2,
+    "COMPACTED_SOIL": 1.0,
     "GRASSLAND": 1.0,
     "GRASS": 1.0,
     "UNPAVED_TRACK": 0.9,
@@ -32,8 +32,7 @@ TERRAIN_COLORS = {
     "DENSE_FOREST": "#234A32",
 }
 
-# Default base terrain for nominal traversability
-BASE_TERRAIN = "GRASS"
+# Aquatic terrain identifier
 WATER_TERRAIN = "WATER_RIVER"
 
 # Water stays impassable even if a runtime terrain registry changes its speed.
@@ -41,5 +40,8 @@ IMPASSABLE_TERRAINS = {name for name, speed in TERRAINS.items() if speed <= 0.0}
     WATER_TERRAIN
 }
 
-# Maximum nominal speed derived automatically from the fastest terrain
+# Normal robot speed limit (m/s), following Eder's experimental setup.
+ROBOT_SPEED_NORMAL = 1.0
+
+# Maximum nominal speed for planning heuristics.
 V_MAX = max(TERRAINS.values())

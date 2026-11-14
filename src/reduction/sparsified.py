@@ -15,7 +15,7 @@ def _edge_indicators(
     terrain_blocked = False
     for node in (u, v):
         cell = grid.get_cell(node)
-        terrain_override = node in grid.terrain_overrides
+        terrain_override = node in grid.cell_openings
         if cell.obstacle != 0 or (
             cell.terrain in IMPASSABLE_TERRAINS and not terrain_override
         ):

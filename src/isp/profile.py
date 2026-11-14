@@ -41,7 +41,7 @@ def prepare_scenario_grid(
             cell = prepared.get_cell(node)
             blocked_terrain = grid._get_effective_speed(node) <= 0 or (
                 original.terrain in IMPASSABLE_TERRAINS
-                and node not in grid.terrain_overrides
+                and node not in grid.cell_openings
             )
             if node in interior and (original.obstacle or blocked_terrain):
                 cell.terrain = "FOREST"
@@ -52,7 +52,7 @@ def prepare_scenario_grid(
             elif not blocked_terrain:
                 if (
                     original.terrain not in FAST_TERRAINS | SLOW_TERRAINS
-                    and node not in grid.terrain_overrides
+                    and node not in grid.cell_openings
                 ):
                     raise ValueError(
                         f"No Brandao classification for terrain {original.terrain!r}."
@@ -65,9 +65,10 @@ def prepare_scenario_grid(
         "FOREST": 0.125,
         **{name: 0.0 for name in IMPASSABLE_TERRAINS},
     }
-    prepared.leveled_slopes.clear()
-    prepared.terrain_overrides.clear()
-    prepared.robot_speed_edges.clear()
+    prepared.slope_adjustments.clear()
+    prepared.cell_openings.clear()
+    prepared.environmental_speed_edges.clear()
+    prepared.robot_capability_edges.clear()
     return prepared, {
         "version": BRANDAO_PROFILE_VERSION,
         "fast_terrains": sorted(FAST_TERRAINS),

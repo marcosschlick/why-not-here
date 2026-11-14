@@ -4,6 +4,17 @@ Contrastive explanations for autonomous path planning via Inverse Shortest Path 
 
 The system answers _"Why was the optimal path $p^*$ chosen instead of the user-expected alternative $p'$?"_ by formulating and solving an inverse optimization problem that identifies minimal cost adjustments and semantic explanations.
 
+The normal model uses four Eder-inspired interventions: one cell opening for all
+blocking causes, directed slope correction to ±20°, environmental speed removal
+at 1 m/s, and hypothetical robot capability at 5 m/s. Every action costs one.
+Speed eligibility is frozen at the original 75% threshold; speed activations use
+effective edge speed without an extra slope penalty. The finite reference for
+blocked edges is a documented grid adaptation. Brandao retains its separate
+terrain-assignment model. See [model details](docs/benchmark.md).
+Saved normal configurations require `NORMAL_MODEL_VERSION=normal-eder-grid-v1`;
+incompatible old configurations, maps and intervention records must be regenerated.
+No migration or compatibility conversion is provided.
+
 ---
 
 ## Project Structure

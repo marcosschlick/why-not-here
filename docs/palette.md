@@ -26,33 +26,41 @@ outline 0.20 cell widths. In cells shared by both paths, offset the lines by
 are specific to the tactical map and do not add tokens to the official
 five-color palette.
 
-For semantic map changes, use map-specific colors: Pink (`#FF3B8D`) for changed
-terrain, Lime (`#C6FF00`) for removed obstacles, Violet (`#A855F7`) for
-leveled slopes, and Turquoise (`#00C9C7`) for opened impassable terrain (water or dense forest). Draw cell
-changes as filled circles with a 0.39-cell radius and a Shadow Grey (`#282828`)
-edge 0.05 cells wide, with no halo. Group changes of the same cell-based type
-transitively when both their row and column offsets are at most one. Connect
-grouped marker centers with rounded capsules 0.78 cells wide and an outer edge
-0.05 cells wide, preserving empty regions in the group's shape. Terrain,
-obstacle, and opened-terrain marker categories must not share coordinates; treat a shared
-marker coordinate as invalid visual data. Compound underlying actions remain separate
-in intervention records and counts. When opening impassable terrain also requires
-removing a physical obstacle in the same cell, use the opened-terrain marker once;
-its tooltip/explanation and action counts retain both interventions. Marker projection
-uses opened terrain, then changed terrain, then obstacle removal precedence.
+For normal-model interventions, use Turquoise (`#00C9C7`) for cell openings,
+Violet (`#A855F7`) for directed slope adjustments, Pink (`#FF3B8D`) for
+removing environmental speed limits, and Lime (`#C6FF00`) for hypothetical
+robot speed capability. Brandao keeps Pink (`#FF3B8D`) for terrain assignments;
+its map colors, cell grouping, routes and endpoints are unchanged.
 
-Draw each leveled slope edge as an individual rounded cross, centered at the
-edge midpoint. Align its 0.50-cell main stroke with the edge and its
-0.30-cell perpendicular stroke across the midpoint. Use a colored width of
-0.07 cells and a Shadow Grey outer width 0.10 cells wider than each colored
-stroke. Draw both dark outlines before both violet strokes so the contour
-stays around the cross without crossing its violet center. Do not group slope
-edges by proximity or join consecutive edges into capsules. Draw slope crosses
-after cell changes so they remain visible over cell markers. Use circles for
-cell changes and a cross for slope changes in map legends; slope counts
-represent leveled edges.
-These colors are specific to the tactical map and do not add tokens to the
-official palette.
+Draw cell changes as filled circles with radius 0.39 cells and a Shadow Grey
+(`#282828`) edge 0.05 cells wide, without a halo. Group same-type cells
+transitively when row and column offsets are both at most one, connecting their
+centers with rounded capsules 0.78 cells wide and an outer edge 0.05 cells wide.
+Preserve empty regions. One normal opening resolves obstacle, impassable terrain
+or both and is counted once; original reasons remain in inspection and explanations.
+There is no precedence projection or separate overlapping obstacle-opening marker.
+
+Draw each directed slope adjustment as an individual rounded cross at the edge
+midpoint: a 0.50-cell main stroke, a 0.30-cell perpendicular stroke, and a small
+arrow tip pointing toward the destination. Arrow-tip wings extend 0.10 cells
+backward and 0.07 cells sideways. Colored strokes are 0.07 cells wide, surrounded
+by a 0.17-cell dark contour. Draw every outline before colored strokes. Slope
+counts represent directed edges adjusted to their signed traversability limit,
+not leveled terrain. Do not group edge symbols into capsules.
+
+Draw environmental speed interventions as single arrows and hypothetical robot
+capability interventions as double arrows. The shaft is 0.50 cells long, with
+0.13-cell backward and 0.10-cell sideways arrowhead wings; the second tip is
+0.20 cells behind the first. Use the same 0.07/0.17-cell colored/dark stroke
+widths. Shift speed-arrow centers 0.46 cells to the left normal of the directed
+edge in row/column screen coordinates, separating them from centered slope
+crosses and from reverse-direction actions. Draw cell markers first, slope
+crosses next, then speed arrows and endpoints. Use matching symbols in Web and
+PNG legends. Inspection identifies directed endpoints and all coincident actions.
+The prepared background remains visible beneath intervention overlays in both
+Canvas and PNG; saved candidate maps carry the actual applied physical state.
+
+These map-specific colors do not add tokens to the official five-color UI palette.
 
 Preserve the start and goal as diamonds with their existing colors and a
 0.4-cell radius.
@@ -74,9 +82,10 @@ Preserve the start and goal as diamonds with their existing colors and a
   --map-route-outline: #282828;
   --map-optimal-route: #327de1;
   --map-change-terrain: #ff3b8d;
-  --map-change-obstacle: #c6ff00;
+  --map-change-robot-capability: #c6ff00;
+  --map-change-environmental-speed: #ff3b8d;
   --map-change-slope: #a855f7;
-  --map-change-opened-terrain: #00c9c7;
+  --map-change-cell-opening: #00c9c7;
 }
 ```
 

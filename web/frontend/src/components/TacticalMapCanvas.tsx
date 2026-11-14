@@ -70,10 +70,10 @@ const USER_PATH_RGB: Rgb = [248, 248, 248];
 const USER_PATH_OUTLINE_RGB: Rgb = [40, 40, 40];
 const OPTIMAL_PATH_RGB: Rgb = [50, 125, 225];
 const MODIFICATION_TERRAIN_RGB: Rgb = [255, 59, 141];
-const MODIFICATION_OBSTACLE_RGB: Rgb = [198, 255, 0];
+const MODIFICATION_ROBOT_CAPABILITY_RGB: Rgb = [198, 255, 0];
 const MODIFICATION_SLOPE_RGB: Rgb = [168, 85, 247];
-const MODIFICATION_OPENED_TERRAIN_RGB: Rgb = [0, 201, 199];
-const MODIFICATION_SPEED_RGB: Rgb = [219, 84, 97];
+const MODIFICATION_CELL_OPENING_RGB: Rgb = [0, 201, 199];
+const MODIFICATION_ENVIRONMENTAL_SPEED_RGB: Rgb = [255, 59, 141];
 const MODIFICATION_EDGE_RGB: Rgb = [40, 40, 40];
 const GRID_RGB: Rgb = [255, 255, 255];
 const MODIFICATION_RADIUS = 0.39;
@@ -211,29 +211,32 @@ function drawSpeedArrow(
   from: GridPoint,
   to: GridPoint,
   cellSize: number,
-  offset: number,
+  color: Rgb,
+  double: boolean,
 ) {
   const angle = Math.atan2(to[0] - from[0], to[1] - from[1]);
   if (from[0] === to[0] && from[1] === to[1]) return;
   ctx.save();
   ctx.translate(
-    ((from[1] + to[1] + 1) / 2 - Math.sin(angle) * offset) * cellSize,
-    ((from[0] + to[0] + 1) / 2 + Math.cos(angle) * offset) * cellSize,
+    ((from[1] + to[1] + 1) / 2 - Math.sin(angle) * 0.46) * cellSize,
+    ((from[0] + to[0] + 1) / 2 + Math.cos(angle) * 0.46) * cellSize,
   );
   ctx.rotate(angle);
   ctx.beginPath();
-  ctx.moveTo(-0.3 * cellSize, 0);
-  ctx.lineTo(0.3 * cellSize, 0);
-  ctx.moveTo(0.08 * cellSize, -0.2 * cellSize);
-  ctx.lineTo(0.3 * cellSize, 0);
-  ctx.lineTo(0.08 * cellSize, 0.2 * cellSize);
+  ctx.moveTo(-0.25 * cellSize, 0);
+  ctx.lineTo(0.25 * cellSize, 0);
+  for (const tip of double ? [0.25, 0.05] : [0.25]) {
+    ctx.moveTo((tip - 0.13) * cellSize, -0.1 * cellSize);
+    ctx.lineTo(tip * cellSize, 0);
+    ctx.lineTo((tip - 0.13) * cellSize, 0.1 * cellSize);
+  }
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.strokeStyle = rgba(MODIFICATION_EDGE_RGB);
-  ctx.lineWidth = 0.18 * cellSize;
+  ctx.lineWidth = 0.17 * cellSize;
   ctx.stroke();
-  ctx.strokeStyle = rgba(MODIFICATION_SPEED_RGB);
-  ctx.lineWidth = 0.1 * cellSize;
+  ctx.strokeStyle = rgba(color);
+  ctx.lineWidth = 0.07 * cellSize;
   ctx.stroke();
   ctx.restore();
 }
@@ -275,6 +278,20 @@ function drawSlopeEdge(
       centerY + perpendicularY * halfCrossLength,
     ],
   ];
+  const tipX = centerX + directionX * halfPathLength;
+  const tipY = centerY + directionY * halfPathLength;
+  for (const side of [-1, 1]) {
+    segments.push([
+      tipX -
+        directionX * cellSize * 0.1 +
+        perpendicularX * side * cellSize * 0.07,
+      tipY -
+        directionY * cellSize * 0.1 +
+        perpendicularY * side * cellSize * 0.07,
+      tipX,
+      tipY,
+    ]);
+  }
   const drawSegments = (strokeColor: Rgb, lineWidth: number) => {
     for (const [startX, startY, endX, endY] of segments) {
       ctx.beginPath();
@@ -291,33 +308,6 @@ function drawSlopeEdge(
   );
   drawSegments(color, cellSize * SLOPE_MARKER_WIDTH);
   ctx.restore();
-}
-
-function overlappingCellChanges(
-  terrainNodes: GridPoint[],
-  obstacleNodes: GridPoint[],
-  openedTerrainNodes: GridPoint[],
-): string[] {
-  const owners = new Map<string, string>();
-  const conflicts = new Set<string>();
-
-  for (const [category, points] of [
-    ["terrain", terrainNodes],
-    ["obstacle", obstacleNodes],
-    ["opened terrain", openedTerrainNodes],
-  ] as const) {
-    for (const [row, col] of points) {
-      const key = `${row},${col}`;
-      const existingCategory = owners.get(key);
-      if (existingCategory && existingCategory !== category) {
-        conflicts.add(key);
-      } else {
-        owners.set(key, category);
-      }
-    }
-  }
-
-  return [...conflicts];
 }
 
 function groupModificationPoints(points: MarkerPoint[]): MarkerGroup[] {
@@ -699,23 +689,8 @@ export function TacticalMapCanvas({
     }
 
     const terrainNodes = modifications?.terrain_nodes ?? [];
-    const obstacleNodes = modifications?.obstacle_nodes ?? [];
-    const slopeEdges = modifications?.slope_edges ?? [];
-    const openedTerrainNodes = modifications?.opened_terrain_nodes ?? [];
-    const conflictingCellChanges = overlappingCellChanges(
-      terrainNodes,
-      obstacleNodes,
-      openedTerrainNodes,
-    );
-    if (conflictingCellChanges.length > 0) {
-      console.error(
-        new Error(
-          "Cell modification categories overlap at the same grid cells.",
-        ),
-        conflictingCellChanges,
-      );
-    }
-
+    const openingNodes =
+      modifications?.cell_openings.map(({ cell }) => cell) ?? [];
     const userPathCells = new Set(
       userPath.map(([row, col]) => `${row},${col}`),
     );
@@ -761,32 +736,32 @@ export function TacticalMapCanvas({
     );
     drawModificationCells(
       ctx,
-      obstacleNodes,
-      MODIFICATION_OBSTACLE_RGB,
+      openingNodes,
+      MODIFICATION_CELL_OPENING_RGB,
       effectiveCellSize,
     );
-    drawModificationCells(
-      ctx,
-      openedTerrainNodes,
-      MODIFICATION_OPENED_TERRAIN_RGB,
-      effectiveCellSize,
-    );
-    for (const [from, to] of slopeEdges) {
+    for (const {
+      edge: [from, to],
+    } of modifications?.slope_adjustments ?? []) {
       drawSlopeEdge(ctx, from, to, MODIFICATION_SLOPE_RGB, effectiveCellSize);
     }
-    const speedEdges = modifications?.robot_speed_edges ?? [];
-    const speedEdgeKeys = new Set(
-      speedEdges.map(([from, to]) => `${from[0]},${from[1]}:${to[0]},${to[1]}`),
-    );
-    for (const [from, to] of speedEdges) {
-      const reverseKey = `${to[0]},${to[1]}:${from[0]},${from[1]}`;
-      drawSpeedArrow(
-        ctx,
-        from,
-        to,
-        effectiveCellSize,
-        speedEdgeKeys.has(reverseKey) ? 0.16 : 0,
-      );
+    for (const [records, color, double] of [
+      [
+        modifications?.environmental_speed_edges ?? [],
+        MODIFICATION_ENVIRONMENTAL_SPEED_RGB,
+        false,
+      ],
+      [
+        modifications?.robot_capability_edges ?? [],
+        MODIFICATION_ROBOT_CAPABILITY_RGB,
+        true,
+      ],
+    ] as const) {
+      for (const {
+        edge: [from, to],
+      } of records) {
+        drawSpeedArrow(ctx, from, to, effectiveCellSize, color, double);
+      }
     }
 
     const startX = start[1] * effectiveCellSize + effectiveCellSize / 2;
@@ -978,21 +953,17 @@ export function TacticalMapLegend({
   showAlternativePath?: boolean;
   alternativePathLabel?: string;
 }) {
-  const terrainCount =
-    modifications?.terrain ?? modifications?.terrain_nodes?.length ?? 0;
-  const obstacleCount =
-    modifications?.obstacle ?? modifications?.obstacle_nodes?.length ?? 0;
-  const slopeCount =
-    modifications?.slope ?? modifications?.slope_edges?.length ?? 0;
-  const openedTerrainCount = modifications?.opened_terrain ?? 0;
-  const speedCount =
-    modifications?.robot_speed ?? modifications?.robot_speed_edges?.length ?? 0;
+  const terrainCount = modifications?.terrain ?? 0;
+  const openingCount = modifications?.cell_opening ?? 0;
+  const slopeCount = modifications?.slope ?? 0;
+  const environmentalCount = modifications?.environmental_speed ?? 0;
+  const capabilityCount = modifications?.robot_capability ?? 0;
   const hasChanges =
     terrainCount +
-      obstacleCount +
+      openingCount +
       slopeCount +
-      openedTerrainCount +
-      speedCount >
+      environmentalCount +
+      capabilityCount >
     0;
 
   return (
@@ -1079,52 +1050,67 @@ export function TacticalMapLegend({
       {hasChanges && (
         <div className="legend-group">
           <span className="legend-group-label">Changes</span>
-          {(modifications?.obstacle ?? 0) >
-            (modifications?.obstacle_nodes?.length ?? 0) && (
-            <span className="legend-item">
-              Compound cell actions use the terrain-opening marker
-            </span>
-          )}
           {terrainCount > 0 && (
             <span className="legend-item">
               <span className="legend-color legend-change-cell legend-change-terrain" />
               Terrain changed ({terrainCount})
             </span>
           )}
-          {obstacleCount > 0 && (
+          {openingCount > 0 && (
             <span className="legend-item">
-              <span className="legend-color legend-change-cell legend-change-obstacle" />
-              Obstacle cleared ({obstacleCount})
+              <span className="legend-color legend-change-cell legend-change-cell-opening" />
+              Cells made traversable ({openingCount})
             </span>
           )}
           {slopeCount > 0 && (
-            <span className="legend-item">
-              <span className="legend-color legend-change-edge legend-change-slope" />
-              Slope leveled ({slopeCount})
-            </span>
-          )}
-          {openedTerrainCount > 0 && (
-            <span className="legend-item">
-              <span className="legend-color legend-change-cell legend-change-opened-terrain" />
-              Terrain opened ({openedTerrainCount})
-            </span>
-          )}
-          {speedCount > 0 && (
             <span className="legend-item">
               <svg
                 className="legend-speed-arrow"
                 viewBox="0 0 20 14"
                 aria-hidden="true"
+                style={{ color: "var(--map-change-slope)" }}
               >
                 <path
                   className="legend-speed-outline"
-                  d="M2 7h15M11 2l6 5-6 5"
+                  d="M3 7h14M10 3v8M14 4l3 3-3 3"
                 />
-                <path className="legend-speed-color" d="M2 7h15M11 2l6 5-6 5" />
+                <path
+                  className="legend-speed-color"
+                  d="M3 7h14M10 3v8M14 4l3 3-3 3"
+                />
               </svg>
-              Robot speed activated ({speedCount})
+              Directed slopes adjusted ({slopeCount})
             </span>
           )}
+          {[
+            {
+              count: environmentalCount,
+              label: "Environmental speed limit removed",
+              color: "var(--map-change-environmental-speed)",
+              path: "M2 7h15M11 3l6 4-6 4",
+            },
+            {
+              count: capabilityCount,
+              label: "Hypothetical robot capability",
+              color: "var(--map-change-robot-capability)",
+              path: "M2 7h15M11 3l6 4-6 4M6 3l6 4-6 4",
+            },
+          ]
+            .filter(({ count }) => count > 0)
+            .map(({ count, label, color, path }) => (
+              <span className="legend-item" key={label}>
+                <svg
+                  className="legend-speed-arrow"
+                  viewBox="0 0 20 14"
+                  aria-hidden="true"
+                  style={{ color }}
+                >
+                  <path className="legend-speed-outline" d={path} />
+                  <path className="legend-speed-color" d={path} />
+                </svg>
+                {label} ({count} directed edges)
+              </span>
+            ))}
         </div>
       )}
     </div>

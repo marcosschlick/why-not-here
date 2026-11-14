@@ -49,7 +49,7 @@ order effects remain possible. No claim of randomized experimental control is ma
 
 The source map is copied. Fast original terrain types are `COMPACTED_SOIL`,
 `GRASSLAND`, `GRASS`, `UNPAVED_TRACK` and `DRY_VEGETATION` (nominal speeds
-0.8–1.2 m/s in the normal model). Slow types are `SAND`, `FOREST`, `MUD` and
+0.8–1.0 m/s in the normal model). Slow types are `SAND`, `FOREST`, `MUD` and
 `ROCKY` (0.3–0.6 m/s). Classification is fixed by type, not by the number or
 spatial distribution of cells. Internal labels `GRASS` and `FOREST` represent
 fast and slow, respectively; map legends identify their new meanings.
@@ -108,23 +108,45 @@ requiring the A* result to have the same sequence of vertices as the desired pat
 
 ## Cost consistency and tolerance
 
-The normal model retains its existing intervention domain: non-worsening terrain
-assignments on eligible desired-path cells, removal of desired-path obstacles,
-opening impassable desired terrain at base speed, leveling eligible desired edges,
-and directed robot-speed activation under the original eligibility rule. Removing
-an obstacle does not change the underlying terrain; opening terrain preserves
-its label. Different actions on the same cell remain separate objective units.
-`distinct_cells` counts cell-based changes only, separately from edge actions.
+The normal model uses the four Eder-inspired categories: one opening per blocked
+interior cell, one correction per excessive directed slope, environmental speed
+intervention and hypothetical robot speed capability. Each costs one. A cell with
+both an obstacle and impassable terrain costs one opening, while retaining both
+reasons. Opening impassable terrain uses the minimum positive terrain speed,
+currently 0.3 m/s, without relabeling the terrain. Slopes are clamped to their
+signed 20-degree limit on the selected directed edge; cell elevations and the
+reverse direction are unchanged. Start and goal cells remain protected.
 
-Both strategies share the same affine edge expressions and binary-product
-linearizations. Permanently blocked edges are excluded. Mandatory desired-path
-openings are explicit actions, rather than finite blocking penalties. Incremental
-competitors outside an initial reduction add their physical edges to the
-formulation, so shared intervention effects are not replaced by original costs.
-Sparsification protects semantic decisions and their incident neighborhoods;
-validation checks remaining shortcuts against their stored physical paths.
-Graph-size metrics describe the actual augmented formulation, not just the
-initially extracted region.
+Without a speed intervention, costs use horizontal distance, the harmonic mean
+of endpoint speeds and the uphill factor `1 + max(0, effective_slope / 20)`.
+Activated speed interventions set effective edge speed to 1 or 5 m/s, with cost
+`distance / speed` and no additional uphill factor. They still require passage
+corrections. Only environmental intervention is available below 75% of the normal
+limit; at or above 75%, only hypothetical capability is available. Classification
+is frozen from original terrain speeds and slope. For originally blocked edges,
+a finite provisional reference ignores obstacle flags and replaces impassable
+terrain speeds with the minimum positive configured speed. This extension to
+blocked edges is a project decision, not an explicit rule in Eder.
+
+### Relation to Eder (2024)
+
+[Eder and Steinbauer-Wagner (2024)](../refs/correlate_eder2024.pdf), Section IV-B,
+Equations 4–6, supplies the four semantic categories and original-velocity
+threshold split; Section V supplies 1 m/s, 5 m/s, 75% and the 20-degree limit.
+This project adapts these to a 2D grid, cell-level union openings, endpoint-averaged
+terrain speeds, an explicit uphill cost approximation, directed signed slope
+corrections and the finite blocked-edge reference above. Unlike the high-speed
+branch of Equation 4, an inactive speed intervention preserves the original
+terrain-and-slope velocity rather than promoting it automatically to 1 m/s.
+These choices are not a reproduction of the paper's measured Husky velocity model.
+
+Both strategies share affine expressions and the same grid cost evaluator.
+Permanently blocked edges are excluded. Required passage corrections are explicit
+mandatory actions. Incremental competitors outside an initial reduction add their
+physical edges, including effects of opened incident cells. Sparsification protects
+semantic decisions and their neighborhoods; shortcut validation expands stored
+physical paths. `distinct_cells` counts cell actions only; `distinct_edges` counts
+the union of edge actions, while the objective counts each category separately.
 
 `INCREMENTAL_TOLERANCE` remains the shared absolute total-cost tolerance,
 `epsilon = 1e-4 seconds`. Despite its historical name it applies to both
@@ -321,3 +343,7 @@ combinations and reductions, objective values and trustworthy bounds, stopping
 behavior under short budgets, and repetition/order effects can be checked. Such checks can establish
 empirical agreement and expose implementation issues; they cannot require
 identical changed cells when multiple optimal solutions exist.
+
+Normal map and saved experiment contracts identify `normal-eder-grid-v1`.
+Old incompatible records are rejected, never converted. Brandao remains
+`brandao-grid-v2` with its scientific behavior and visual encoding preserved.

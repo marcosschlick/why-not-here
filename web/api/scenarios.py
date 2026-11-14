@@ -175,6 +175,7 @@ class ScenarioDetails(ScenarioSummary):
 
 
 def add_appearance(scenario):
+    validate_scenario(scenario["data"])
     scenario["terrain_colors"] = resolve_scenario_terrain_colors(
         scenario["configuration"]
     )

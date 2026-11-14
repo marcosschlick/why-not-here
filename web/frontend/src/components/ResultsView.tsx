@@ -14,7 +14,10 @@ import { formatReductionMethod } from "../utils/formatters";
 import { useMapCanvasFit } from "../utils/useMapCanvasFit";
 import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
 import type { GridPoint } from "../utils/geometry";
-import { hasTerrainOverride } from "../utils/terrainAccess";
+import {
+  hasCellOpening,
+  interventionDescriptions,
+} from "../utils/terrainAccess";
 
 interface ResultsViewProps {
   result: LastResult | null;
@@ -213,13 +216,7 @@ export function ResultsView({
     ? showOriginalMap
       ? originalMapData
       : preparedMapData
-    : preparedMapData && currentResult?.modified_grid
-      ? {
-          ...preparedMapData,
-          ...currentResult.modified_grid,
-          terrain_colors: preparedMapData.terrain_colors,
-        }
-      : preparedMapData;
+    : preparedMapData;
   const currentUserPath = isBatch
     ? (activeBatchItem?.userPath ??
       activeBatchItem?.mapData?.auto_path ??
@@ -329,19 +326,13 @@ export function ResultsView({
     modifications: SemanticModificationsData | null | undefined,
   ) => {
     if (!modifications) return false;
-    const count =
-      modifications.terrain +
-      modifications.obstacle +
-      modifications.slope +
-      (modifications.opened_terrain ?? 0) +
-      (modifications.robot_speed ?? 0);
     return (
-      count > 0 ||
-      (modifications.terrain_nodes?.length ?? 0) > 0 ||
-      (modifications.obstacle_nodes?.length ?? 0) > 0 ||
-      (modifications.slope_edges?.length ?? 0) > 0 ||
-      (modifications.opened_terrain_nodes?.length ?? 0) > 0 ||
-      (modifications.robot_speed_edges?.length ?? 0) > 0
+      modifications.terrain +
+        modifications.cell_opening +
+        modifications.slope +
+        modifications.environmental_speed +
+        modifications.robot_capability >
+      0
     );
   };
 
@@ -396,18 +387,16 @@ export function ResultsView({
       ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
     ),
   );
-  const isCellObstacleModified = Boolean(
-    hoveredCell &&
-    visibleModifications?.obstacle_nodes?.some(
-      ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
-    ),
-  );
-  const isCellTerrainOpened = Boolean(
-    hoveredCell &&
-    visibleModifications?.opened_terrain_nodes.some(
-      ([r, c]) => r === hoveredCell[0] && c === hoveredCell[1],
-    ),
-  );
+  const cellOpening = hoveredCell
+    ? visibleModifications?.cell_openings.find(
+        ({ cell }) => cell[0] === hoveredCell[0] && cell[1] === hoveredCell[1],
+      )
+    : undefined;
+  const isCellObstacleModified = Boolean(cellOpening?.original_obstacle);
+  const isCellTerrainOpened = Boolean(cellOpening?.impassable_terrain);
+  const interventionDetails = hoveredCell
+    ? interventionDescriptions(visibleModifications, hoveredCell)
+    : [];
   const isStart = Boolean(
     hoveredCell &&
     currentMapData &&
@@ -428,7 +417,7 @@ export function ResultsView({
   const isTerrainOpened = Boolean(
     hoveredCell &&
     currentMapData &&
-    hasTerrainOverride(currentMapData, hoveredCell),
+    hasCellOpening(currentMapData, hoveredCell),
   );
   const hoveredTerrainBlocked =
     !isTerrainOpened &&
@@ -478,7 +467,8 @@ export function ResultsView({
           </strong>
         ) : isCellTerrainOpened ? (
           <strong className="cell-status cell-status-free">
-            Traversable terrain at base-terrain speed
+            Traversable terrain at {cellOpening?.opened_speed_mps} m/s before
+            slope effects
           </strong>
         ) : (
           <strong className="cell-status cell-status-free">Free</strong>
@@ -496,9 +486,14 @@ export function ResultsView({
             className="mod-badge opened-terrain"
             style={{ marginLeft: "0.35rem" }}
           >
-            Terrain override
+            Cell made traversable
           </strong>
         )}
+        {interventionDetails.map((detail) => (
+          <span className="intervention-inspection" key={detail}>
+            {detail}
+          </span>
+        ))}
         {isStart && (
           <strong
             className="node-marker start-badge"

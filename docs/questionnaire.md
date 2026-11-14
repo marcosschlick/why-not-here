@@ -585,3 +585,9 @@ DROP TABLE IF EXISTS answers, participations, participation_keys, questions,
 This discards all old questionnaire data and responses. Initialization creates
 the new tables; it does not perform migrations or automatically erase data.
 Other database tables, simulation files and Docker volumes must be preserved.
+
+Scenario calculations and explanations use the current `normal-eder-grid-v1`
+intervention contract. Saved map and intervention records are checked on save,
+inspection and participation serialization. Incompatible scenarios are rejected
+with an instruction to generate new ones; existing data is not migrated or erased.
+This model update does not change the study protocol or database schema.

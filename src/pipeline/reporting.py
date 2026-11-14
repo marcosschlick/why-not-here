@@ -6,8 +6,6 @@ from dataclasses import asdict
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from src.isp.types import marker_modifications
-
 
 def finite_data(value):
     if isinstance(value, float) and not math.isfinite(value):
@@ -52,13 +50,13 @@ def execution_error(result) -> str | None:
 def serialize_result(result) -> dict:
     modifications = None
     if result.modifications is not None:
-        modifications = asdict(marker_modifications(result.modifications))
+        modifications = asdict(result.modifications)
         for key, attribute in (
             ("terrain", "terrain_nodes"),
-            ("obstacle", "obstacle_nodes"),
-            ("slope", "slope_edges"),
-            ("opened_terrain", "opened_terrain_nodes"),
-            ("robot_speed", "robot_speed_edges"),
+            ("cell_opening", "cell_openings"),
+            ("slope", "slope_adjustments"),
+            ("environmental_speed", "environmental_speed_edges"),
+            ("robot_capability", "robot_capability_edges"),
         ):
             modifications[key] = len(getattr(result.modifications, attribute))
     return finite_data(

@@ -287,46 +287,16 @@ class BaseISPSolver:
         self,
         formulation: MIPFormulation,
     ) -> SemanticModifications:
-        isp = formulation.isp
-        z_val = np.zeros(isp.total_z_vars, dtype=np.float64)
-        if (
-            formulation.z_terrain is not None
-            and formulation.z_terrain.value is not None
+        values = {}
+        for name in (
+            "terrain",
+            "cell_opening",
+            "slope",
+            "environmental_speed",
+            "robot_capability",
         ):
-            z_val[: isp.num_terrain_vars] = np.clip(
-                formulation.z_terrain.value, 0.0, 1.0
+            variable = getattr(formulation, f"z_{name}")
+            values[name] = (
+                np.clip(variable.value, 0, 1) if variable is not None else np.array([])
             )
-
-        if (
-            formulation.z_obstacle is not None
-            and formulation.z_obstacle.value is not None
-        ):
-            z_val[
-                isp.num_terrain_vars : isp.num_terrain_vars + isp.num_obstacle_vars
-            ] = np.clip(formulation.z_obstacle.value, 0.0, 1.0)
-
-        if formulation.z_slope is not None and formulation.z_slope.value is not None:
-            slope_start = isp.num_terrain_vars + isp.num_obstacle_vars
-            slope_end = slope_start + isp.num_slope_vars
-            z_val[slope_start:slope_end] = np.clip(formulation.z_slope.value, 0.0, 1.0)
-
-        if (
-            formulation.z_opened_terrain is not None
-            and formulation.z_opened_terrain.value is not None
-        ):
-            opened_terrain_start = (
-                isp.num_terrain_vars + isp.num_obstacle_vars + isp.num_slope_vars
-            )
-            z_val[
-                opened_terrain_start : opened_terrain_start
-                + isp.num_opened_terrain_vars
-            ] = np.clip(formulation.z_opened_terrain.value, 0.0, 1.0)
-
-        if (
-            formulation.z_robot_speed is not None
-            and formulation.z_robot_speed.value is not None
-        ):
-            speed_start = isp.total_z_vars - isp.num_robot_speed_vars
-            z_val[speed_start:] = np.clip(formulation.z_robot_speed.value, 0.0, 1.0)
-
-        return isp.get_modifications(z_val)
+        return formulation.isp.get_modifications(values)

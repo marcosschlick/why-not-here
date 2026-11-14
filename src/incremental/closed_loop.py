@@ -8,7 +8,6 @@ from src.isp.precheck import validate_alternative_path
 from src.isp.semantics import edge_is_possible, terrain_change_weight
 from src.isp.solver import ISPSolver
 from src.isp.types import SemanticModifications
-from src.pipeline.path_metrics import measure_paths
 from src.planning.astar import astar
 from src.reduction import create_reduced_graph, prepare_subgraph
 
@@ -21,13 +20,18 @@ from .validator import ISPValidator
 def intervention_counts(modifications, grid: Grid, path) -> dict:
     if modifications is None:
         return {"total": None, "distinct_cells": None}
-    terrain = len(modifications.terrain_nodes)
     counts = {
-        "terrain": terrain,
-        "obstacle": len(modifications.obstacle_nodes),
-        "opened_terrain": len(modifications.opened_terrain_nodes),
-        "slope": len(modifications.slope_edges),
-        "robot_speed": len(modifications.robot_speed_edges),
+        "terrain": len(modifications.terrain_nodes),
+        "cell_opening": len(modifications.cell_openings),
+        "slope": len(modifications.slope_adjustments),
+        "environmental_speed": len(modifications.environmental_speed_edges),
+        "robot_capability": len(modifications.robot_capability_edges),
+        "physical_obstacle_reasons": sum(
+            bool(record.original_obstacle) for record in modifications.cell_openings
+        ),
+        "impassable_terrain_reasons": sum(
+            record.impassable_terrain for record in modifications.cell_openings
+        ),
         "slow_to_fast": sum(
             grid.get_cell(node).terrain == "FOREST" and target == "GRASS"
             for node, target in modifications.terrain_assignments
@@ -43,17 +47,33 @@ def intervention_counts(modifications, grid: Grid, path) -> dict:
     }
     counts["total"] = sum(
         counts[key]
-        for key in ("terrain", "obstacle", "opened_terrain", "slope", "robot_speed")
+        for key in (
+            "terrain",
+            "cell_opening",
+            "slope",
+            "environmental_speed",
+            "robot_capability",
+        )
     )
     counts["distinct_cells"] = len(
         set(modifications.terrain_nodes)
-        | set(modifications.obstacle_nodes)
-        | set(modifications.opened_terrain_nodes)
+        | {record.cell for record in modifications.cell_openings}
+    )
+    counts["distinct_edges"] = len(
+        {
+            record.edge
+            for records in (
+                modifications.slope_adjustments,
+                modifications.environmental_speed_edges,
+                modifications.robot_capability_edges,
+            )
+            for record in records
+        }
     )
     interior = set(path[1:-1])
     counts["objective_cost"] = (
         counts["total"]
-        - terrain
+        - counts["terrain"]
         + sum(
             terrain_change_weight(grid, node, interior)
             for node in modifications.terrain_nodes
@@ -110,6 +130,7 @@ class ClosedLoopISPSolver:
         metrics = result.metrics
         metrics.update(
             model=full_grid.isp_model,
+            model_version=full_grid.isp_model_version,
             strategy="INCREMENTAL" if self.incremental else "MONOLITHIC",
             reduction=method,
             astar_scope=scope,
@@ -169,6 +190,8 @@ class ClosedLoopISPSolver:
                         cost, initial_alt
                     )
                     if original:
+                        from src.pipeline.path_metrics import measure_paths
+
                         result.path_metrics = measure_paths(
                             original, alternative_path, full_grid.cell_size
                         )
@@ -197,7 +220,7 @@ class ClosedLoopISPSolver:
                         method=method,
                     )
                 if start == goal and len(alternative_path) == 1:
-                    last_candidate = SemanticModifications([], [], [])
+                    last_candidate = SemanticModifications(model=full_grid.isp_model)
                     result.success = True
                     result.solver_status = "NOT_REQUIRED"
                     result.final_alternative_cost = 0.0
@@ -287,6 +310,11 @@ class ClosedLoopISPSolver:
                         self.budget.check()
                         with self.budget.phase("validation_sec"):
                             metrics["validation_status"] = "INCOMPLETE"
+                            changed_cells = set(candidate.terrain_nodes) | {
+                                record.cell for record in candidate.cell_openings
+                            }
+                            if changed_cells & {start, goal}:
+                                raise ValueError("Endpoint cells cannot be modified.")
                             modified = ISPValidator.apply_modifications(
                                 full_grid, candidate
                             )
@@ -460,7 +488,10 @@ class ClosedLoopISPSolver:
             result.solver_status = solver.last_solver_status or "NOT_RUN"
             metrics["stop_reason"] = "TIME_BUDGET_EXHAUSTED"
         except (ValueError, RuntimeError, KeyError, MemoryError, TypeError) as exc:
-            metrics.update(stop_reason="ERROR", error=str(exc))
+            result.success = False
+            metrics.update(
+                stop_reason="ERROR", error=str(exc), objective_certified=False
+            )
         finally:
             result.modifications = last_candidate
             result.competing_paths_count = len(competing)
@@ -492,11 +523,9 @@ class ClosedLoopISPSolver:
                     if result.success
                     else "CANDIDATE_UNVALIDATED",
                     objective_cost=metrics["interventions"].get("objective_cost"),
+                    objective_certified=metrics["objective_certified"],
+                    original_optimal_available=bool(result.original_optimal_path),
                 )
-                if not metrics["objective_certified"]:
-                    result.explanation_text += (
-                        " The minimum objective is not certified."
-                    )
             if result.graph_nodes is not None:
                 metrics["node_reduction_ratio"] = (
                     1 - result.graph_nodes / metrics["full_graph_nodes"]

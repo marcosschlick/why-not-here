@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { PointerEvent } from "react";
 import type { MapData, SemanticModificationsData } from "../types";
+import { interventionDescriptions } from "../utils/terrainAccess";
 import type { GridPoint } from "../utils/geometry";
 import { useMapCanvasFit } from "../utils/useMapCanvasFit";
 import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
@@ -128,6 +129,13 @@ export function ScenarioMapView({
                 )}{" "}
                 m
               </strong>
+              {interventionDescriptions(modifications, hoveredCell).map(
+                (detail) => (
+                  <span className="intervention-inspection" key={detail}>
+                    {detail}
+                  </span>
+                ),
+              )}
             </span>
           ) : (
             "Hover over grid to inspect cell attributes"

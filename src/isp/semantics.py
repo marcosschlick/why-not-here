@@ -1,3 +1,4 @@
+import math
 from itertools import pairwise
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from .. import config
 from ..config import IMPASSABLE_TERRAINS
 from ..grid import Grid
+from ..grid.interventions import CellOpening, SlopeAdjustment, SpeedIntervention
 from ..resources import require_memory
 from .budget import check_deadline
 from .modifier import apply_semantic_modifications
@@ -23,10 +25,8 @@ def edge_is_possible(grid: Grid, edge, path_nodes, path_edges) -> bool:
         ):
             return False
     slope_allowed = abs(grid.get_slope(u, v)) <= grid.max_slope_deg
-    slope_can_be_leveled = grid.isp_model == "NORMAL" and bool(
-        {edge, (v, u)} & path_edges
-    )
-    return slope_allowed or slope_can_be_leveled
+    slope_can_be_adjusted = grid.isp_model == "NORMAL" and edge in path_edges
+    return slope_allowed or slope_can_be_adjusted
 
 
 class ISPSemantics:
@@ -40,6 +40,7 @@ class ISPSemantics:
         | None = None,
         terrain_decision_nodes: set[tuple[int, int]] | None = None,
     ) -> None:
+        grid.validate_interventions()
         path_nodes = set(candidate_path)
         endpoints = {candidate_path[0], candidate_path[-1]} if candidate_path else set()
         path_edges = set(pairwise(candidate_path))
@@ -69,7 +70,7 @@ class ISPSemantics:
                 else {(row, col) for row in range(grid.h) for col in range(grid.w)}
             )
             if brandao
-            else path_nodes
+            else set()
         )
 
         if active_nodes is None:
@@ -108,26 +109,27 @@ class ISPSemantics:
                 self.terrain_nodes.append(u)
                 self.terrain_to_idx[u] = idx
 
-        self.obstacle_nodes: list[tuple[int, int]] = []
-        self.obstacle_to_idx: dict[tuple[int, int], int] = {}
+        self.cell_openings = []
         if not brandao:
-            for u in (node for node in unique_path_nodes if node not in endpoints):
-                if grid.get_cell(u).obstacle != 0:
-                    idx = len(self.obstacle_nodes)
-                    self.obstacle_nodes.append(u)
-                    self.obstacle_to_idx[u] = idx
-
-        self.opened_terrain_nodes: list[tuple[int, int]] = []
-        self.opened_terrain_to_idx: dict[tuple[int, int], int] = {}
-        if not brandao:
-            for u in (node for node in unique_path_nodes if node not in endpoints):
-                if (
-                    grid.get_cell(u).terrain in IMPASSABLE_TERRAINS
-                    and u not in grid.terrain_overrides
-                ):
-                    idx = len(self.opened_terrain_nodes)
-                    self.opened_terrain_nodes.append(u)
-                    self.opened_terrain_to_idx[u] = idx
+            for node in unique_path_nodes:
+                if node in endpoints or grid.is_cell_traversable(node):
+                    continue
+                cell = grid.get_cell(node)
+                blocked_terrain = (
+                    grid.is_impassable_terrain(node) and node not in grid.cell_openings
+                )
+                self.cell_openings.append(
+                    CellOpening(
+                        node,
+                        cell.terrain,
+                        cell.obstacle,
+                        blocked_terrain,
+                        grid.minimum_terrain_speed
+                        if blocked_terrain
+                        else grid._get_effective_speed(node),
+                    )
+                )
+        self.opened_cells = {record.cell for record in self.cell_openings}
 
         self.edges: list[tuple[tuple[int, int], tuple[int, int]]] = []
         self.edge_to_idx: dict[tuple[tuple[int, int], tuple[int, int]], int] = {}
@@ -163,118 +165,80 @@ class ISPSemantics:
                     self.edges.append(edge)
                     self.edge_to_idx[edge] = idx
 
-        self.slope_edges: list[tuple[tuple[int, int], tuple[int, int]]] = []
-        self.slope_to_idx: dict[tuple[tuple[int, int], tuple[int, int]], int] = {}
-
-        if not brandao:
-            for r in range(len(candidate_path) - 1):
-                edge = (candidate_path[r], candidate_path[r + 1])
-                if edge not in self.edge_to_idx or edge in self.slope_to_idx:
-                    continue
-                u, v = edge
-                has_slope_pen = (
-                    abs(grid.get_slope(u, v)) > grid.max_slope_deg
-                    or grid.get_slope(u, v) > 1e-4
-                )
-                if (
-                    has_slope_pen
-                    and edge not in grid.leveled_slopes
-                    and (v, u) not in grid.leveled_slopes
-                ):
-                    s_idx = len(self.slope_edges)
-                    self.slope_edges.append(edge)
-                    self.slope_to_idx[edge] = s_idx
-                    self.slope_to_idx[(v, u)] = s_idx
-
-        if not np.isfinite(
-            grid.robot_speed_theoretical
-        ) or grid.robot_speed_theoretical <= max(grid.speeds.values()):
-            raise ValueError(
-                "The theoretical robot speed must be finite and exceed the maximum nominal speed."
-            )
+        self.slope_adjustments = []
+        self.environmental_speed_edges = []
+        self.robot_capability_edges = []
         ratio = config.ROBOT_SPEED_ELIGIBILITY_RATIO
-        if not np.isfinite(ratio) or not 0.0 <= ratio <= 1.0:
+        if not np.isfinite(ratio) or not 0 <= ratio <= 1:
             raise ValueError(
                 "The robot speed eligibility ratio must be finite and within [0, 1]."
             )
-        self.robot_speed_edges = []
-        self.robot_speed_to_idx = {}
         if not brandao:
-            for edge in pairwise(candidate_path):
+            for edge in dict.fromkeys(pairwise(candidate_path)):
+                if edge not in self.edge_to_idx:
+                    continue
+                slope = grid.get_slope(*edge)
+                if abs(slope) > grid.max_slope_deg:
+                    self.slope_adjustments.append(
+                        SlopeAdjustment(
+                            edge, slope, math.copysign(grid.max_slope_deg, slope)
+                        )
+                    )
                 if (
-                    edge in self.robot_speed_to_idx
-                    or edge in grid.robot_speed_edges
-                    or edge in self.custom_edge_costs
+                    edge in grid.environmental_speed_edges
+                    or edge in grid.robot_capability_edges
                 ):
                     continue
-                cost = grid.get_cost(*edge)
-                if (
-                    np.isfinite(cost)
-                    and cost > 0.0
-                    and grid.get_distance(*edge) / cost
-                    >= ratio * max(grid.speeds.values())
-                ):
-                    self.robot_speed_to_idx[edge] = len(self.robot_speed_edges)
-                    self.robot_speed_edges.append(edge)
-
+                if edge in self.custom_edge_costs:
+                    raise ValueError(
+                        "Desired physical edges cannot have fixed shortcut costs."
+                    )
+                reference = grid.get_reference_velocity(*edge)
+                environmental = reference < ratio * grid.robot_speed_normal
+                record = SpeedIntervention(
+                    edge,
+                    reference,
+                    grid.robot_speed_normal
+                    if environmental
+                    else grid.robot_speed_theoretical,
+                )
+                collection = (
+                    self.environmental_speed_edges
+                    if environmental
+                    else self.robot_capability_edges
+                )
+                collection.append(record)
+        self.corrected_edges = {record.edge for record in self.slope_adjustments}
         self.num_terrain_vars = len(self.terrain_nodes) * len(self.terrain_classes)
-        self.num_obstacle_vars = len(self.obstacle_nodes)
-        self.num_slope_vars = len(self.slope_edges)
-        self.num_opened_terrain_vars = len(self.opened_terrain_nodes)
-        self.num_robot_speed_vars = len(self.robot_speed_edges)
-        self.total_z_vars = (
-            self.num_terrain_vars
-            + self.num_obstacle_vars
-            + self.num_slope_vars
-            + self.num_opened_terrain_vars
-            + self.num_robot_speed_vars
-        )
 
-    def get_modifications(self, z: np.ndarray) -> SemanticModifications:
-        z_terrain = z[: self.num_terrain_vars]
-        z_obstacle = z[
-            self.num_terrain_vars : self.num_terrain_vars + self.num_obstacle_vars
-        ]
-        slope_end = self.num_terrain_vars + self.num_obstacle_vars + self.num_slope_vars
-        z_slope = z[self.num_terrain_vars + self.num_obstacle_vars : slope_end]
-        z_opened_terrain = z[slope_end : slope_end + self.num_opened_terrain_vars]
-
-        terrain_assignments = []
+    def get_modifications(self, values: dict[str, np.ndarray]) -> SemanticModifications:
+        assignments = []
         class_count = len(self.terrain_classes)
-        for u in self.terrain_nodes:
-            start = self.terrain_to_idx[u] * class_count
-            for j, terrain in enumerate(self.terrain_classes):
+        for node in self.terrain_nodes:
+            start = self.terrain_to_idx[node] * class_count
+            for index, terrain in enumerate(self.terrain_classes):
                 if (
-                    z_terrain[start + j] > 0.5
-                    and terrain != self.grid.get_cell(u).terrain
+                    values["terrain"][start + index] > 0.5
+                    and terrain != self.grid.get_cell(node).terrain
                 ):
-                    terrain_assignments.append((u, terrain))
-        terrain_nodes = [u for u, _ in terrain_assignments]
-        obstacle_nodes = [
-            u for u in self.obstacle_nodes if z_obstacle[self.obstacle_to_idx[u]] > 0.5
-        ]
-        slope_edges = [
-            edge for edge in self.slope_edges if z_slope[self.slope_to_idx[edge]] > 0.5
-        ]
-        opened_terrain_nodes = [
-            u
-            for u in self.opened_terrain_nodes
-            if z_opened_terrain[self.opened_terrain_to_idx[u]] > 0.5
-        ]
-        speed_start = slope_end + self.num_opened_terrain_vars
-        robot_speed_edges = [
-            edge
-            for edge in self.robot_speed_edges
-            if z[speed_start + self.robot_speed_to_idx[edge]] > 0.5
-        ]
-
+                    assignments.append((node, terrain))
         return SemanticModifications(
-            terrain_nodes=terrain_nodes,
-            obstacle_nodes=obstacle_nodes,
-            slope_edges=slope_edges,
-            opened_terrain_nodes=opened_terrain_nodes,
-            terrain_assignments=terrain_assignments,
-            robot_speed_edges=robot_speed_edges,
+            model=self.grid.isp_model,
+            terrain_nodes=[node for node, _ in assignments],
+            terrain_assignments=assignments,
+            **{
+                name: [
+                    record
+                    for index, record in enumerate(getattr(self, name))
+                    if values[variable][index] > 0.5
+                ]
+                for name, variable in (
+                    ("cell_openings", "cell_opening"),
+                    ("slope_adjustments", "slope"),
+                    ("environmental_speed_edges", "environmental_speed"),
+                    ("robot_capability_edges", "robot_capability"),
+                )
+            },
         )
 
     @staticmethod

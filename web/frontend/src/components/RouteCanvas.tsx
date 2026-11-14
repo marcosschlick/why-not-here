@@ -12,7 +12,7 @@ import {
   type GridPoint,
 } from "../utils/geometry";
 import { useMapCanvasFit } from "../utils/useMapCanvasFit";
-import { hasTerrainOverride } from "../utils/terrainAccess";
+import { hasCellOpening } from "../utils/terrainAccess";
 import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
 
 interface RouteCanvasProps {
@@ -384,7 +384,7 @@ export function RouteCanvas({
     : "-";
   const hoveredTerrainSpeed = mapData.speeds?.[hoveredTerrain];
   const isTerrainOpened = Boolean(
-    hoveredCell && hasTerrainOverride(mapData, hoveredCell),
+    hoveredCell && hasCellOpening(mapData, hoveredCell),
   );
   const hoveredTerrainBlocked =
     !isTerrainOpened &&

@@ -33,7 +33,7 @@ class ISPSolver(BaseISPSolver):
 
         if start == goal and len(alternative_path) == 1:
             self.last_solver_status = "OPTIMAL"
-            return True, SemanticModifications([], [], []), 0.0
+            return True, SemanticModifications(model=grid.isp_model), 0.0
 
         self.budget.check()
         with self.budget.phase("preparation_sec"):

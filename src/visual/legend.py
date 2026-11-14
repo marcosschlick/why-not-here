@@ -7,11 +7,13 @@ from matplotlib.lines import Line2D
 from ..grid import Grid
 from ..isp import SemanticModifications
 from .style import (
+    BRANDAO_BLOCKED_COLOR,
     GOAL_COLOR,
     GOAL_EDGE_COLOR,
+    MODIFICATION_CELL_OPENING_COLOR,
     MODIFICATION_EDGE_COLOR,
-    MODIFICATION_OBSTACLE_COLOR,
-    MODIFICATION_OPENED_TERRAIN_COLOR,
+    MODIFICATION_ENVIRONMENTAL_SPEED_COLOR,
+    MODIFICATION_ROBOT_CAPABILITY_COLOR,
     MODIFICATION_SLOPE_COLOR,
     MODIFICATION_TERRAIN_COLOR,
     OPTIMAL_PATH_COLOR,
@@ -21,7 +23,6 @@ from .style import (
     USER_PATH_COLOR,
     USER_PATH_OUTLINE_COLOR,
     USER_PATH_OUTLINE_WIDTH,
-    BRANDAO_BLOCKED_COLOR,
     terrain_color_rgb,
 )
 
@@ -129,44 +130,66 @@ class ModificationEdgeHandler(HandlerBase):
         fontsize,
         transform,
     ):
-        center_y = ydescent + height / 2
-        start_x = xdescent + width * 0.24
-        end_x = xdescent + width * 0.76
-        cross_start_y = ydescent + height * 0.20
-        cross_end_y = ydescent + height * 0.80
+        segments = (
+            ((0.24, 0.5), (0.76, 0.5)),
+            ((0.5, 0.20), (0.5, 0.80)),
+            ((0.60, 0.25), (0.76, 0.5)),
+            ((0.76, 0.5), (0.60, 0.75)),
+        )
         return [
             Line2D(
-                [start_x, end_x],
-                [center_y, center_y],
-                color=MODIFICATION_EDGE_COLOR,
-                linewidth=4.4,
+                [xdescent + first[0] * width, xdescent + last[0] * width],
+                [ydescent + first[1] * height, ydescent + last[1] * height],
+                color=color,
+                linewidth=line_width,
                 solid_capstyle="round",
                 transform=transform,
-            ),
+            )
+            for color, line_width in (
+                (MODIFICATION_EDGE_COLOR, 4.4),
+                (original_handle.get_color(), 2.4),
+            )
+            for first, last in segments
+        ]
+
+
+class SpeedHandle(Line2D):
+    def __init__(self, color: str, label: str) -> None:
+        super().__init__([], [], color=color, label=label)
+
+
+class SpeedHandler(HandlerBase):
+    def create_artists(
+        self,
+        legend,
+        original_handle,
+        xdescent,
+        ydescent,
+        width,
+        height,
+        fontsize,
+        transform,
+    ):
+        segments = [((0.05, 0.5), (0.95, 0.5))]
+        double = original_handle.get_color() == MODIFICATION_ROBOT_CAPABILITY_COLOR
+        for tip in (0.95, 0.60) if double else (0.95,):
+            segments.extend(
+                [((tip - 0.25, 0.10), (tip, 0.5)), ((tip, 0.5), (tip - 0.25, 0.90))]
+            )
+        return [
             Line2D(
-                [xdescent + width / 2, xdescent + width / 2],
-                [cross_start_y, cross_end_y],
-                color=MODIFICATION_EDGE_COLOR,
-                linewidth=4.4,
+                [xdescent + first[0] * width, xdescent + last[0] * width],
+                [ydescent + first[1] * height, ydescent + last[1] * height],
+                color=color,
+                linewidth=line_width,
                 solid_capstyle="round",
                 transform=transform,
-            ),
-            Line2D(
-                [start_x, end_x],
-                [center_y, center_y],
-                color=original_handle.get_color(),
-                linewidth=2.4,
-                solid_capstyle="round",
-                transform=transform,
-            ),
-            Line2D(
-                [xdescent + width / 2, xdescent + width / 2],
-                [cross_start_y, cross_end_y],
-                color=original_handle.get_color(),
-                linewidth=2.4,
-                solid_capstyle="round",
-                transform=transform,
-            ),
+            )
+            for color, line_width in (
+                (MODIFICATION_EDGE_COLOR, 3.4),
+                (original_handle.get_color(), 1.4),
+            )
+            for first, last in segments
         ]
 
 
@@ -258,55 +281,55 @@ def build_tactical_legend(
     )
     handles.append(
         mpatches.Patch(
-            facecolor=BRANDAO_BLOCKED_COLOR if grid.isp_model == "BRANDAO" else "#777B80",
+            facecolor=BRANDAO_BLOCKED_COLOR
+            if grid.isp_model == "BRANDAO"
+            else "#777B80",
             edgecolor="#282828",
             hatch="xx",
-            label="Blocked" if grid.isp_model == "BRANDAO" else "Obstacle (terrain shade)",
+            label="Blocked"
+            if grid.isp_model == "BRANDAO"
+            else "Obstacle (terrain shade)",
         )
     )
 
     if modifications is not None:
-        if set(modifications.opened_terrain_nodes) & set(modifications.obstacle_nodes):
-            handles.append(
-                mpatches.Patch(
-                    facecolor="none",
-                    edgecolor="none",
-                    label="Compound cell actions: terrain-opening marker",
-                )
-            )
         changes = (
             (
                 len(modifications.terrain_nodes),
                 MODIFICATION_TERRAIN_COLOR,
                 "Terrain changed",
+                ModificationDotHandle,
             ),
             (
-                len(modifications.obstacle_nodes),
-                MODIFICATION_OBSTACLE_COLOR,
-                "Obstacle cleared",
+                len(modifications.cell_openings),
+                MODIFICATION_CELL_OPENING_COLOR,
+                "Cells made traversable",
+                ModificationDotHandle,
             ),
             (
-                len(modifications.slope_edges),
+                len(modifications.slope_adjustments),
                 MODIFICATION_SLOPE_COLOR,
-                "Slope leveled",
+                "Directed slopes adjusted",
+                ModificationEdgeHandle,
             ),
             (
-                len(modifications.opened_terrain_nodes),
-                MODIFICATION_OPENED_TERRAIN_COLOR,
-                "Terrain opened",
+                len(modifications.environmental_speed_edges),
+                MODIFICATION_ENVIRONMENTAL_SPEED_COLOR,
+                "Environmental speed limit removed",
+                SpeedHandle,
+            ),
+            (
+                len(modifications.robot_capability_edges),
+                MODIFICATION_ROBOT_CAPABILITY_COLOR,
+                "Hypothetical robot capability",
+                SpeedHandle,
             ),
         )
-        if any(count > 0 for count, _, _ in changes):
+        if any(count for count, _, _, _ in changes):
             add_section("Changes")
-            for count, color, label in changes:
-                if count == 0:
-                    continue
-                handle = (
-                    ModificationEdgeHandle(color, f"{label} ({count})")
-                    if label == "Slope leveled"
-                    else ModificationDotHandle(color, f"{label} ({count})")
-                )
-                handles.append(handle)
+            for count, color, label, handle_type in changes:
+                if count:
+                    handles.append(handle_type(color, f"{label} ({count})"))
 
     legend = ax.legend(
         handles=handles,
@@ -321,6 +344,7 @@ def build_tactical_legend(
             SharedRouteHandle: SharedRouteHandler(),
             ModificationDotHandle: ModificationDotHandler(),
             ModificationEdgeHandle: ModificationEdgeHandler(),
+            SpeedHandle: SpeedHandler(),
         },
     )
     for label in legend.get_texts():

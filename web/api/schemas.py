@@ -1,6 +1,8 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from src.grid.interventions import CellOpening, SlopeAdjustment, SpeedIntervention
 
 
 class NamingMetadata(BaseModel):
@@ -75,21 +77,60 @@ class SolveISPRequest(BaseModel):
 
 
 class SemanticModificationsData(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
-    terrain: int
-    obstacle: int
-    slope: int
-    opened_terrain: int
-    robot_speed: int = 0
+    model: Literal["NORMAL", "BRANDAO"]
+    terrain: int = Field(ge=0)
+    cell_opening: int = Field(ge=0)
+    slope: int = Field(ge=0)
+    environmental_speed: int = Field(ge=0)
+    robot_capability: int = Field(ge=0)
     terrain_nodes: list[tuple[int, int]]
-    obstacle_nodes: list[tuple[int, int]]
-    slope_edges: list[tuple[tuple[int, int], tuple[int, int]]]
-    opened_terrain_nodes: list[tuple[int, int]]
-    terrain_assignments: list[tuple[tuple[int, int], str]] = Field(default_factory=list)
-    robot_speed_edges: list[tuple[tuple[int, int], tuple[int, int]]] = Field(
-        default_factory=list
-    )
+    terrain_assignments: list[tuple[tuple[int, int], str]]
+    cell_openings: list[CellOpening]
+    slope_adjustments: list[SlopeAdjustment]
+    environmental_speed_edges: list[SpeedIntervention]
+    robot_capability_edges: list[SpeedIntervention]
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_records(cls, data):
+        try:
+            for name, record_type in (
+                ("cell_openings", CellOpening),
+                ("slope_adjustments", SlopeAdjustment),
+                ("environmental_speed_edges", SpeedIntervention),
+                ("robot_capability_edges", SpeedIntervention),
+            ):
+                for record in data[name]:
+                    record_type(**record)
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("Invalid or incompatible intervention records.") from error
+        return data
+
+    @model_validator(mode="after")
+    def validate_categories(self):
+        from src.isp.types import SemanticModifications
+
+        SemanticModifications(
+            model=self.model,
+            terrain_nodes=self.terrain_nodes,
+            terrain_assignments=self.terrain_assignments,
+            cell_openings=self.cell_openings,
+            slope_adjustments=self.slope_adjustments,
+            environmental_speed_edges=self.environmental_speed_edges,
+            robot_capability_edges=self.robot_capability_edges,
+        )
+        for count, records in (
+            (self.terrain, self.terrain_nodes),
+            (self.cell_opening, self.cell_openings),
+            (self.slope, self.slope_adjustments),
+            (self.environmental_speed, self.environmental_speed_edges),
+            (self.robot_capability, self.robot_capability_edges),
+        ):
+            if count != len(records):
+                raise ValueError("Intervention counts do not match their records.")
+        return self
 
 
 class ExportConfigRequest(BaseModel):

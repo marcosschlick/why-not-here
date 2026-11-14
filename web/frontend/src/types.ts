@@ -39,6 +39,7 @@ export interface MapAppearance {
 
 export interface SystemConfig {
   MAP_PROFILE_VERSION?: string;
+  NORMAL_MODEL_VERSION?: string;
   MAP_W: number;
   MAP_H: number;
   CELL_SIZE?: number;
@@ -65,11 +66,17 @@ export interface SystemConfig {
 }
 
 export interface GridLayersData {
-  isp_model?: string;
+  isp_model: "NORMAL" | "BRANDAO";
   elevation: number[][];
   terrain: string[][];
   obstacle: number[][];
-  terrain_overrides: [number, number][];
+  isp_model_version: string;
+  cell_openings: CellOpening[];
+  slope_adjustments: SlopeAdjustment[];
+  environmental_speed_edges: SpeedIntervention[];
+  robot_capability_edges: SpeedIntervention[];
+  robot_speed_normal: number;
+  robot_speed_theoretical: number;
   generation_profile: Partial<SystemConfig> & { MAP_PROFILE_VERSION: string };
   appearance: MapAppearance;
   steep_cells?: [number, number][];
@@ -102,18 +109,39 @@ export interface MapGenerationMetadata {
   generation_attempt: number | null;
 }
 
+export interface CellOpening {
+  cell: [number, number];
+  original_terrain: string;
+  original_obstacle: number;
+  impassable_terrain: boolean;
+  opened_speed_mps: number;
+}
+
+export interface SlopeAdjustment {
+  edge: [[number, number], [number, number]];
+  original_slope_deg: number;
+  effective_slope_deg: number;
+}
+
+export interface SpeedIntervention {
+  edge: [[number, number], [number, number]];
+  reference_speed_mps: number;
+  target_speed_mps: number;
+}
+
 export interface SemanticModificationsData {
+  model: "NORMAL" | "BRANDAO";
   terrain: number;
-  obstacle: number;
+  cell_opening: number;
   slope: number;
-  opened_terrain: number;
-  opened_terrain_nodes: [number, number][];
-  robot_speed?: number;
-  terrain_nodes?: [number, number][];
-  obstacle_nodes?: [number, number][];
-  slope_edges?: [[number, number], [number, number]][];
-  terrain_assignments?: [[number, number], string][];
-  robot_speed_edges?: [[number, number], [number, number]][];
+  environmental_speed: number;
+  robot_capability: number;
+  terrain_nodes: [number, number][];
+  terrain_assignments: [[number, number], string][];
+  cell_openings: CellOpening[];
+  slope_adjustments: SlopeAdjustment[];
+  environmental_speed_edges: SpeedIntervention[];
+  robot_capability_edges: SpeedIntervention[];
 }
 
 export interface LastResult {
@@ -154,7 +182,7 @@ export interface LastResult {
 }
 
 export interface SolveResponse {
-  status: string;
+  status: "completed" | "failed";
   result: LastResult;
   artifacts: string[];
   output_dir: string;
@@ -217,6 +245,7 @@ export interface ExecutionMetadata {
 }
 
 export interface ScenarioMetrics {
+  model_version?: string;
   model?: string;
   strategy?: string;
   reduction?: string;

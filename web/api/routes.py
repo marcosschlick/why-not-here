@@ -1,5 +1,6 @@
 import math
 from collections.abc import Callable
+from dataclasses import asdict
 from functools import wraps
 from typing import Any
 from urllib.parse import quote
@@ -95,7 +96,20 @@ def _grid_layers(grid: Grid) -> dict[str, Any]:
         "speeds": grid.speeds,
         "terrain_colors": config.TERRAIN_COLORS,
         "appearance": resolve_map_appearance(grid.h, grid.w),
-        "terrain_overrides": sorted(grid.terrain_overrides),
+        "isp_model": grid.isp_model,
+        "isp_model_version": grid.isp_model_version,
+        "cell_openings": [asdict(record) for record in grid.cell_openings.values()],
+        "slope_adjustments": [
+            asdict(record) for record in grid.slope_adjustments.values()
+        ],
+        "environmental_speed_edges": [
+            asdict(record) for record in grid.environmental_speed_edges.values()
+        ],
+        "robot_capability_edges": [
+            asdict(record) for record in grid.robot_capability_edges.values()
+        ],
+        "robot_speed_normal": grid.robot_speed_normal,
+        "robot_speed_theoretical": grid.robot_speed_theoretical,
         "generation_profile": grid.generation_profile,
         "steep_cells": sorted(find_steep_cells(grid)),
     }
@@ -432,7 +446,7 @@ def solve_isp_data(payload: SolveISPRequest) -> dict[str, Any]:
             runner.state["error"] = sanitized_result["execution_error"]
 
         return {
-            "status": "success",
+            "status": sanitized_result["execution_status"],
             "result": sanitized_result,
             "artifacts": artifacts,
             "output_dir": str(output_dir),

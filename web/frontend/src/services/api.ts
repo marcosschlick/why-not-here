@@ -105,7 +105,7 @@ export async function solveScenarioISP(
     );
   }
   if (
-    data?.status !== "success" ||
+    !["completed", "failed"].includes(data?.status) ||
     typeof data.result?.success !== "boolean" ||
     typeof data.result.solver_status !== "string" ||
     !data.result.solver_status.trim()

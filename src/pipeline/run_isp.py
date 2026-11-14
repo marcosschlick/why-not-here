@@ -160,6 +160,13 @@ def run_isp(
         memory=memory_metrics,
         preparation=preparation,
         model=config.ISP_MODEL,
+        model_version=prepared.isp_model_version
+        if prepared is not None
+        else (
+            config.NORMAL_MODEL_VERSION
+            if config.ISP_MODEL == "NORMAL"
+            else "brandao-grid-v2"
+        ),
         strategy="INCREMENTAL" if config.USE_INCREMENTAL_SOLVER else "MONOLITHIC",
         reduction=config.DEFAULT_REDUCTION_METHOD,
     )
@@ -176,7 +183,9 @@ def run_isp(
                 "desired_path": p_user,
                 "tolerance_sec": config.INCREMENTAL_TOLERANCE,
                 "robot_speed_eligibility_ratio": config.ROBOT_SPEED_ELIGIBILITY_RATIO,
-                "formulation_version": "isp-grid-v3",
+                "formulation_version": prepared.isp_model_version
+                if prepared is not None
+                else None,
             }
         )
         if prepared is not None
@@ -210,7 +219,9 @@ def run_isp(
         "generation_attempt": source.generation_attempt,
         "generation_profile": source.generation_profile,
         "versions": runtime_versions(),
-        "formulation_version": "isp-grid-v3",
+        "formulation_version": prepared.isp_model_version
+        if prepared is not None
+        else None,
         "requested_mip_gap": config.MIP_GAP_TOLERANCE,
         "optimality_tolerance_sec": config.INCREMENTAL_TOLERANCE,
         "robot_speed_eligibility_ratio": config.ROBOT_SPEED_ELIGIBILITY_RATIO,

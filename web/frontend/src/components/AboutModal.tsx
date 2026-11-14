@@ -107,9 +107,9 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
               <p>
                 Computes the least-cost path (
                 <strong className="symbol-opt">p*</strong>) over 2D grids
-                accounting for distance, terrain friction, elevation slope,
-                robot speed, physical obstacles, and impassable biomes (water,
-                dense forest).
+                accounting for distance, terrain speeds, elevation slope, robot
+                speed, physical obstacles, and impassable biomes (water, dense
+                forest).
               </p>
             </div>
 
@@ -119,11 +119,12 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
                 <h3>Semantic ISP (MILP)</h3>
               </div>
               <p>
-                Solves a Mixed-Integer Linear Program to find minimal
+                Solves a Mixed-Integer Linear Program seeking minimum-cost
                 interventions making{" "}
-                <strong className="symbol-user">p&apos;</strong> optimal:
-                terrain changes, obstacle removal, slope leveling, opening
-                impassable terrain, and speed adjustments.
+                <strong className="symbol-user">p&apos;</strong> optimal: cell
+                openings, directed slope corrections, environmental speed limits
+                at 1 m/s, and hypothetical robot capability at 5 m/s. Brandao
+                retains its separate terrain-assignment model.
               </p>
             </div>
 
@@ -135,8 +136,8 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
               <p>
                 Supports graph reduction (Bounding Box, Reachable Set, Path
                 Only, Sparsified), incremental cutting-plane solving, and batch
-                runs—distinguishing globally certified solutions from unverified
-                candidates.
+                runs. Full-grid route validation and certification of the
+                minimum intervention objective are reported separately.
               </p>
             </div>
 

@@ -141,6 +141,25 @@ def validate_scenario_configuration(configuration):
 
 
 def validate_scenario(data):
+    from src.grid import Grid
+    from web.api.schemas import SemanticModificationsData
+
+    try:
+        Grid.from_dict(data["map"])
+        if data["metrics"]["model_version"] != config.NORMAL_MODEL_VERSION:
+            raise ValueError("Unsupported normal intervention model.")
+        if data.get("modifications") is not None:
+            SemanticModificationsData.model_validate(data["modifications"])
+        if data["metrics"]["validation_status"] != "VALID" or not data["metrics"].get(
+            "cost_expression_consistent",
+            data["metrics"].get("stop_reason") == "ALREADY_OPTIMAL",
+        ):
+            raise ValueError("Scenario validation or modeled costs are inconsistent.")
+    except (KeyError, TypeError, ValueError, IndexError) as error:
+        raise HTTPException(
+            status_code=422,
+            detail="Scenario uses an incompatible model or invalid intervention data. Generate a new scenario.",
+        ) from error
     if (
         not valid_scenario_map(data)
         or not all(
@@ -220,7 +239,7 @@ def route_order(submission_key: UUID, question_id: int) -> list[str]:
 
 
 def resolve_scenario_terrain_colors(configuration):
-    return configuration.get("TERRAIN_COLORS") or config.TERRAIN_COLORS
+    return config.TERRAIN_COLORS
 
 
 def serialize_step(questions, index, submission_key, group, scenario_ids):
@@ -250,6 +269,7 @@ def serialize_step(questions, index, submission_key, group, scenario_ids):
         )
         return step
     data = question["data"]
+    validate_scenario(data)
     order = route_order(submission_key, question["id"])
     scenario_index = scenario_ids.index(question["scenario_id"])
     step["scenario_number"] = scenario_index % 3 + 1

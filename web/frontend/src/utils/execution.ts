@@ -25,6 +25,10 @@ export function requestFailure(
     metrics: {
       identity: execution,
       model: config.ISP_MODEL ?? "NORMAL",
+      model_version:
+        config.ISP_MODEL === "BRANDAO"
+          ? "brandao-grid-v2"
+          : map.isp_model_version,
       strategy: config.USE_INCREMENTAL_SOLVER ? "INCREMENTAL" : "MONOLITHIC",
       reduction: config.DEFAULT_REDUCTION_METHOD,
       stop_reason: "REQUEST_ERROR",
@@ -53,7 +57,8 @@ export function scientificOutcome(
   result: LastResult,
 ): "validated" | "infeasible" | "inconclusive" | "stopped" | "error" {
   if (executionStatus(result) === "failed") return "error";
-  if (result.metrics?.validation_status === "VALID") return "validated";
+  if (result.success && result.metrics?.validation_status === "VALID")
+    return "validated";
   if (
     result.solver_status === "INFEASIBLE" ||
     result.metrics?.stop_reason === "BLOCKED_ENDPOINT"

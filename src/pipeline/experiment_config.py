@@ -39,7 +39,6 @@ CONFIG_REGISTRY = {
     "MAP_ROUGHNESS_THRESHOLDS": "config_map.py",
     "MAP_MIN_MAIN_COMPONENT_RATIO": "config_map.py",
     "MAP_MAX_GENERATION_ATTEMPTS": "config_map.py",
-    "BASE_TERRAIN": "config_terrain.py",
     "TERRAINS": "config_terrain.py",
     "TERRAIN_COLORS": "config_terrain.py",
     "MAX_SLOPE_DEG": "config_terrain.py",
@@ -54,7 +53,6 @@ CONFIG_REGISTRY = {
 FIXED_TERRAIN_CONFIG_KEYS = frozenset(
     {
         "DEFAULT_TERRAIN",
-        "BASE_TERRAIN",
         "TERRAINS",
         "TERRAIN_COLORS",
         "MAX_SLOPE_DEG",
@@ -82,6 +80,7 @@ def get_experiment_configurations() -> dict[str, Any]:
         if hasattr(config, key)
     }
     values.update(resolve_map_profile(values["MAP_H"], values["MAP_W"]))
+    values["NORMAL_MODEL_VERSION"] = config.NORMAL_MODEL_VERSION
     return values
 
 
@@ -198,6 +197,8 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"Terrain speed for {name!r} must be numeric.") from exc
         if not math.isfinite(speed):
             raise ValueError(f"Terrain speed for {name!r} must be finite.")
+        if speed > config.ROBOT_SPEED_NORMAL:
+            raise ValueError("Terrain speeds cannot exceed the normal robot limit.")
         terrains[name] = speed
 
     if terrains.get("WATER_RIVER", 0.0) > 0.0:
@@ -221,11 +222,8 @@ def _validate_configuration(candidate: dict[str, Any]) -> dict[str, Any]:
         colors[name] = color.upper()
 
     default_terrain = candidate.get("DEFAULT_TERRAIN")
-    base_terrain = candidate.get("BASE_TERRAIN")
     if default_terrain not in terrains:
         raise ValueError("DEFAULT_TERRAIN must exist in TERRAINS.")
-    if base_terrain not in traversable:
-        raise ValueError("BASE_TERRAIN must exist and have a speed greater than zero.")
 
     threshold_specs = {
         "MAP_TERRAIN_THRESHOLDS": {
@@ -283,8 +281,17 @@ def _build_configuration_candidate(
         raise ValueError(
             f"Unsupported configuration profile. Use {config.MAP_PROFILE_VERSION}."
         )
+    if (
+        "NORMAL_MODEL_VERSION" in updates
+        and updates["NORMAL_MODEL_VERSION"] != config.NORMAL_MODEL_VERSION
+    ):
+        raise ValueError(
+            "Unsupported normal intervention model. Export a new configuration."
+        )
     updates = {
-        key: value for key, value in updates.items() if key != "MAP_PROFILE_VERSION"
+        key: value
+        for key, value in updates.items()
+        if key not in {"MAP_PROFILE_VERSION", "NORMAL_MODEL_VERSION"}
     }
     unknown_keys = set(updates) - set(EXPERIMENT_CONFIG_REGISTRY)
     if unknown_keys:
@@ -354,6 +361,7 @@ def expand_scenario_configurations(
         raise ValueError("Experiment configurations must describe a normal scenario.")
     normal = {key: copy.deepcopy(resolved[key]) for key in EXPERIMENT_CONFIG_REGISTRY}
     normal["MAP_PROFILE_VERSION"] = config.MAP_PROFILE_VERSION
+    normal["NORMAL_MODEL_VERSION"] = config.NORMAL_MODEL_VERSION
     scenarios = []
     if benchmark:
         for incremental in (False, True):
@@ -407,6 +415,7 @@ def build_experiment_config(
     }
 
     export_dict["MAP_PROFILE_VERSION"] = config.MAP_PROFILE_VERSION
+    export_dict["NORMAL_MODEL_VERSION"] = config.NORMAL_MODEL_VERSION
     if raw_start is not None:
         export_dict["start"] = [int(raw_start[0]), int(raw_start[1])]
     if raw_goal is not None:
@@ -476,7 +485,12 @@ def validate_experiment_config(
             f"Unsupported configuration profile. Export a new configuration using {config.MAP_PROFILE_VERSION}."
         )
 
+    if data.get("NORMAL_MODEL_VERSION") != config.NORMAL_MODEL_VERSION:
+        raise ValueError(
+            "Unsupported or missing normal intervention model. Export a new configuration."
+        )
     allowed_keys = set(EXPERIMENT_CONFIG_REGISTRY) | {
+        "NORMAL_MODEL_VERSION",
         "MAP_PROFILE_VERSION",
         "start",
         "goal",

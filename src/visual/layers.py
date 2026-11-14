@@ -9,13 +9,15 @@ from ..isp import SemanticModifications
 from .appearance import resolve_map_appearance
 from .relief import relief_intensity
 from .style import (
+    BRANDAO_BLOCKED_COLOR,
     GOAL_COLOR,
     GOAL_EDGE_COLOR,
+    MODIFICATION_CELL_OPENING_COLOR,
     MODIFICATION_EDGE_COLOR,
+    MODIFICATION_ENVIRONMENTAL_SPEED_COLOR,
     MODIFICATION_GROUP_WIDTH,
-    MODIFICATION_OBSTACLE_COLOR,
-    MODIFICATION_OPENED_TERRAIN_COLOR,
     MODIFICATION_RADIUS,
+    MODIFICATION_ROBOT_CAPABILITY_COLOR,
     MODIFICATION_SLOPE_COLOR,
     MODIFICATION_SLOPE_MARKER_CROSS_LENGTH,
     MODIFICATION_SLOPE_MARKER_PATH_LENGTH,
@@ -23,7 +25,6 @@ from .style import (
     MODIFICATION_TERRAIN_COLOR,
     START_COLOR,
     START_EDGE_COLOR,
-    BRANDAO_BLOCKED_COLOR,
     terrain_color_rgb,
 )
 
@@ -91,10 +92,6 @@ def draw_modifications(
     modifications: SemanticModifications,
     edge_width: float,
 ) -> None:
-    from src.isp.types import marker_modifications
-
-    modifications = marker_modifications(modifications)
-    _validate_cell_modification_categories(modifications)
     origin_x = ax.transData.transform((0, 0))[0]
     next_x = ax.transData.transform((1, 0))[0]
     cell_width_points = abs(next_x - origin_x) * 72 / ax.figure.dpi
@@ -107,42 +104,56 @@ def draw_modifications(
     )
     _draw_modification_cells(
         ax,
-        modifications.obstacle_nodes,
-        MODIFICATION_OBSTACLE_COLOR,
-        edge_width,
-        cell_width_points,
-    )
-    _draw_modification_cells(
-        ax,
-        modifications.opened_terrain_nodes,
-        MODIFICATION_OPENED_TERRAIN_COLOR,
+        [record.cell for record in modifications.cell_openings],
+        MODIFICATION_CELL_OPENING_COLOR,
         edge_width,
         cell_width_points,
     )
     _draw_slope_edges(
         ax,
-        modifications.slope_edges,
+        [record.edge for record in modifications.slope_adjustments],
         edge_width,
         cell_width_points,
     )
-
-
-def _validate_cell_modification_categories(
-    modifications: SemanticModifications,
-) -> None:
-    owners: dict[tuple[int, int], str] = {}
-    for category, points in (
-        ("terrain", modifications.terrain_nodes),
-        ("obstacle", modifications.obstacle_nodes),
-        ("opened terrain", modifications.opened_terrain_nodes),
+    for records, color, double in (
+        (
+            modifications.environmental_speed_edges,
+            MODIFICATION_ENVIRONMENTAL_SPEED_COLOR,
+            False,
+        ),
+        (
+            modifications.robot_capability_edges,
+            MODIFICATION_ROBOT_CAPABILITY_COLOR,
+            True,
+        ),
     ):
-        for point in points:
-            previous_category = owners.get(point)
-            if previous_category is not None and previous_category != category:
-                raise ValueError(
-                    f"Cell {point} has conflicting {previous_category} and {category} modifications."
-                )
-            owners[point] = category
+        for record in records:
+            _draw_speed_arrow(ax, record.edge, color, double, cell_width_points)
+
+
+def _draw_speed_arrow(ax, edge, color, double, cell_width_points):
+    u, v = edge
+    direction = np.array([v[1] - u[1], v[0] - u[0]], dtype=float)
+    direction /= np.linalg.norm(direction)
+    perpendicular = np.array([-direction[1], direction[0]])
+    center = np.array([(u[1] + v[1]) / 2, (u[0] + v[0]) / 2]) + perpendicular * 0.46
+    segments = [((-0.25, 0), (0.25, 0))]
+    for tip in (0.25, 0.05) if double else (0.25,):
+        segments.extend(
+            [((tip - 0.13, -0.10), (tip, 0)), ((tip, 0), (tip - 0.13, 0.10))]
+        )
+    for stroke_color, width in ((MODIFICATION_EDGE_COLOR, 0.17), (color, 0.07)):
+        for start, end in segments:
+            first = center + direction * start[0] + perpendicular * start[1]
+            last = center + direction * end[0] + perpendicular * end[1]
+            ax.plot(
+                [first[0], last[0]],
+                [first[1], last[1]],
+                color=stroke_color,
+                linewidth=cell_width_points * width,
+                solid_capstyle="round",
+                zorder=6.2,
+            )
 
 
 def _draw_slope_edges(
@@ -182,6 +193,17 @@ def _draw_slope_edges(
                 center_x + perpendicular_x * half_cross_length,
                 center_y + perpendicular_y * half_cross_length,
             ),
+        )
+        tip_x = center_x + direction_x * half_path_length
+        tip_y = center_y + direction_y * half_path_length
+        segments += tuple(
+            (
+                tip_x - direction_x * 0.10 + perpendicular_x * side * 0.07,
+                tip_y - direction_y * 0.10 + perpendicular_y * side * 0.07,
+                tip_x,
+                tip_y,
+            )
+            for side in (-1, 1)
         )
         for color, linewidth in (
             (MODIFICATION_EDGE_COLOR, outer_width),
