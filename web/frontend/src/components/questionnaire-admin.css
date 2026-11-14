@@ -169,7 +169,7 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
   gap: 0.5rem;
 }
-.qa-app button {
+.qa-app button:not(:where(.route-canvas-section button)) {
   border: 0;
   background: color-mix(in srgb, var(--azure-blue) 70%, var(--yale-blue));
   color: var(--bright-snow);
@@ -179,42 +179,14 @@
   font: inherit;
   font-weight: 650;
 }
-.qa-app button:hover:not(:disabled) {
+.qa-app button:not(:where(.route-canvas-section button)):hover:not(:disabled) {
   background: color-mix(in srgb, var(--azure-blue) 60%, var(--yale-blue));
 }
-.qa-app button:disabled {
+.qa-app button:not(:where(.route-canvas-section button)):disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
-.qa-app .batch-step-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-height: 2.25rem;
-  padding: 0.4rem 0.55rem;
-  color: var(--text-structural);
-  background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
-  font-size: 0.74rem;
-  font-weight: 700;
-}
-.qa-app .batch-step-btn.active {
-  color: var(--text-inverse);
-  background: var(--yale-blue);
-  border-color: var(--yale-blue);
-}
-@media (hover: hover) and (pointer: fine) {
-  .qa-app .batch-step-btn:not(:disabled):hover {
-    border-color: var(--azure-blue);
-    background: var(--surface-info);
-    color: var(--text-structural);
-  }
-  .qa-app .batch-step-btn.active:not(:disabled):hover {
-    color: var(--text-inverse);
-    background: var(--yale-blue);
-  }
-}
-.qa-app button:focus-visible,
+.qa-app button:not(:where(.route-canvas-section button)):focus-visible,
 .qa-app input:focus-visible,
 .qa-app textarea:focus-visible,
 .qa-app select:focus-visible {
