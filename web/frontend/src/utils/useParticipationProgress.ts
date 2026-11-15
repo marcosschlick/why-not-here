@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ApiError,
+  FrontendError,
+  presentError,
+  requestedLanguage,
+} from "../i18n";
 
 export type RouteFields = {
   choice?: number | null;
@@ -16,11 +22,11 @@ export type StepProgress = {
   choice_changed: boolean;
 };
 
-export class RequestError extends Error {
+export class RequestError extends ApiError {
   status: number;
 
   constructor(message: string, status: number) {
-    super(message);
+    super(message, "Unable to load or save this step. Please try again.");
     this.status = status;
   }
 }
@@ -161,7 +167,7 @@ export function useParticipationProgress({
       window.clearTimeout(timeout.current);
       while (inFlight.current) await inFlight.current;
       if (blocked.current)
-        throw new Error("Reload this questionnaire before continuing.");
+        throw new FrontendError("Reload this questionnaire before continuing.");
       if (preview) return;
       const send = async (item: {
         revision: number;
@@ -209,9 +215,11 @@ export function useParticipationProgress({
         if (mounted.current) {
           setSaved(false);
           setSaveError(
-            failure instanceof Error
-              ? failure.message
-              : "Unable to save progress. Please try again.",
+            presentError(
+              requestedLanguage(),
+              failure,
+              "Unable to save progress. Please try again.",
+            ),
           );
         }
         throw failure;

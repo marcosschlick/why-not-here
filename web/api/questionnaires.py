@@ -233,6 +233,7 @@ def preview_questionnaire(
     group: StudyGroup,
     submission_key: UUID,
     step: Annotated[int, Query(ge=0)] = 0,
+    lang: str | None = None,
 ):
     with connect_database() as connection:
         questionnaire = get_questionnaire(connection, questionnaire_id)
@@ -248,7 +249,9 @@ def preview_questionnaire(
             "total_steps": len(study_steps(questions, order)),
             "draft": None,
             "draft_revision": 0,
-            "step": serialize_step(questions, step, submission_key, group, order),
+            "step": serialize_step(
+                questions, step, submission_key, group, order, lang or "en"
+            ),
         }
 
 

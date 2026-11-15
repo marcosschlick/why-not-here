@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App";
 import { Participant } from "./components/Participant";
-import { requestedLanguage } from "./i18n";
+import { requestedLanguage, useI18n } from "./i18n";
 import { LanguageProvider } from "./LanguageProvider";
 
 export function Root() {
@@ -11,26 +11,38 @@ export function Root() {
   const isQuestionnaire = window.location.pathname === "/questionnaire";
   const isPublicOnly = import.meta.env.VITE_PUBLIC_ONLY === "true";
   useLayoutEffect(() => {
-    document.documentElement.lang =
-      isQuestionnaire || isPublicOnly ? "en" : language;
-  }, [isQuestionnaire, isPublicOnly, language]);
+    document.documentElement.lang = language;
+  }, [language]);
   if (isQuestionnaire) {
-    return <Participant />;
+    return (
+      <LanguageProvider language={language}>
+        <Participant />
+      </LanguageProvider>
+    );
   }
   if (isPublicOnly) {
     return (
-      <main className="qa-content">
-        <section className="qa-panel">
-          <h1>Participant questionnaire</h1>
-          <p>Open the participant link provided by the administrator.</p>
-        </section>
-      </main>
+      <LanguageProvider language={language}>
+        <PublicOnlyNotice />
+      </LanguageProvider>
     );
   }
   return (
     <LanguageProvider language={language}>
       <App />
     </LanguageProvider>
+  );
+}
+
+function PublicOnlyNotice() {
+  const { t } = useI18n();
+  return (
+    <main className="qa-content">
+      <section className="qa-panel">
+        <h1>{t("Participant questionnaire")}</h1>
+        <p>{t("Open the participant link provided by the administrator.")}</p>
+      </section>
+    </main>
   );
 }
 

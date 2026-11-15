@@ -56,6 +56,26 @@ export function presentError(
   if (error instanceof FrontendError) return translate(language, error.message);
   if (error instanceof ApiError) {
     if (language === "en") return error.message;
+    const seed =
+      /^Seed (\d+) has no optimal route\. Generate a replacement\.$/.exec(
+        error.message,
+      );
+    if (seed)
+      return translate(
+        language,
+        "Seed {seed} has no optimal route. Generate a replacement.",
+        { seed: formatNumber(language, Number(seed[1])) },
+      );
+    const remainingKeys =
+      /^Only (\d+) participation keys remain\. Each questionnaire supports 1,000 three-digit codes\.$/.exec(
+        error.message,
+      );
+    if (remainingKeys)
+      return translate(
+        language,
+        "Only {count} participation keys remain. Each questionnaire supports 1,000 three-digit codes.",
+        { count: formatNumber(language, Number(remainingKeys[1])) },
+      );
     const endpoint =
       /^Endpoint \((-?\d+), (-?\d+)\) (is blocked and cannot be modified|falls outside the grid)\.$/.exec(
         error.message,

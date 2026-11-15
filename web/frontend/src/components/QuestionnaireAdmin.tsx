@@ -23,6 +23,24 @@ import type {
   SemanticModificationsData,
 } from "../types";
 import "./questionnaire-admin.css";
+import {
+  ApiError,
+  formatNumber,
+  presentError,
+  requestedLanguage,
+  translate,
+  useI18n,
+} from "../i18n";
+
+const t = (message: string, variables?: Record<string, string | number>) =>
+  translate(requestedLanguage(), message, variables);
+
+function displayScenarioTitle(title: string): string {
+  const match = /^Scenario (\d+) · Seed (\d+)$/.exec(title);
+  return match
+    ? t("Scenario {number} · Seed {seed}", { number: match[1], seed: match[2] })
+    : title;
+}
 
 type Point = [number, number];
 type Question = {
@@ -66,7 +84,13 @@ type Scenario = {
   };
 };
 function localParticipantLink(): string {
-  return new URL("/questionnaire", window.location.origin).toString();
+  return participantLink(window.location.origin);
+}
+
+function participantLink(base: string): string {
+  const url = new URL("/questionnaire", base);
+  if (requestedLanguage() === "pt-BR") url.searchParams.set("lang", "pt-BR");
+  return url.toString();
 }
 
 function publicParticipantLink(): string | null {
@@ -82,7 +106,7 @@ function publicParticipantLink(): string | null {
       url.hash
     )
       return null;
-    return new URL("/questionnaire", url).toString();
+    return participantLink(url.toString());
   } catch {
     return null;
   }
@@ -108,7 +132,7 @@ function ParticipantLinkActions({
           disabled={disabled}
           onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
         >
-          Open questionnaire
+          {t("Open questionnaire")}
         </button>
         <button
           type="button"
@@ -116,7 +140,7 @@ function ParticipantLinkActions({
           disabled={disabled}
           onClick={() => onCopy(url)}
         >
-          Copy link
+          {t("Copy link")}
         </button>
       </div>
     </div>
@@ -136,10 +160,11 @@ async function api<T>(
   if (!response.ok) {
     const error = await response.json().catch(() => null);
     const detail = error?.detail;
-    throw new Error(
+    throw new ApiError(
       typeof detail === "string"
         ? detail
         : detail?.message || `Request failed (${response.status}).`,
+      "Request failed.",
     );
   }
   return response.status === 204 ? (undefined as T) : response.json();
@@ -181,9 +206,11 @@ function ParticipationKeysPanel({
       .catch((reason: unknown) => {
         if (!cancelled)
           setError(
-            reason instanceof Error
-              ? reason.message
-              : "Unable to load participation keys.",
+            presentError(
+              requestedLanguage(),
+              reason,
+              "Unable to load participation keys.",
+            ),
           );
       })
       .finally(() => {
@@ -217,14 +244,23 @@ function ParticipationKeysPanel({
       setKeys((current) => [...created, ...(current ?? [])]);
       setFilter("available");
       setMessage(
-        `${created.length} ${created.length === 1 ? "key" : "keys"} generated.`,
+        t(
+          created.length === 1
+            ? "{count} key generated."
+            : "{count} keys generated.",
+          {
+            count: formatNumber(requestedLanguage(), created.length),
+          },
+        ),
       );
       closeGenerator();
     } catch (reason) {
       setError(
-        reason instanceof Error
-          ? reason.message
-          : "Unable to generate participation keys.",
+        presentError(
+          requestedLanguage(),
+          reason,
+          "Unable to generate participation keys.",
+        ),
       );
     } finally {
       setOperation(null);
@@ -242,12 +278,16 @@ function ParticipationKeysPanel({
       if (items.length === 1) setCopiedKey(items[0].key);
       setMessage(
         items.length === 1
-          ? "Key copied."
-          : `${items.length} available keys copied.`,
+          ? t("Key copied.")
+          : t("{count} available keys copied.", {
+              count: formatNumber(requestedLanguage(), items.length),
+            }),
       );
     } catch {
       setError(
-        "Unable to copy participation keys. Allow clipboard access and try again.",
+        t(
+          "Unable to copy participation keys. Allow clipboard access and try again.",
+        ),
       );
     } finally {
       setOperation(null);
@@ -257,11 +297,11 @@ function ParticipationKeysPanel({
   return (
     <section
       className="qa-control-group qa-keys-panel"
-      aria-label="Participation keys"
+      aria-label={t("Participation keys")}
       aria-busy={operation !== null}
     >
       <div className="qa-heading">
-        <h3>Participation keys</h3>
+        <h3>{t("Participation keys")}</h3>
         <div className="qa-actions">
           <button
             type="button"
@@ -276,7 +316,7 @@ function ParticipationKeysPanel({
               setShowGenerator(true);
             }}
           >
-            Generate keys
+            {t("Generate keys")}
           </button>
           <button
             type="button"
@@ -288,19 +328,20 @@ function ParticipationKeysPanel({
               setRefreshVersion((current) => current + 1);
             }}
           >
-            Refresh
+            {t("Refresh")}
           </button>
         </div>
       </div>
       <p className="qa-muted">
-        Give one key to each participant. Keys are consumed when participation
-        starts.
+        {t(
+          "Give one key to each participant. Keys are consumed when participation starts.",
+        )}
       </p>
       <div id="participation-key-generator" hidden={!showGenerator}>
         {showGenerator && (
           <form className="qa-key-generator" onSubmit={generateKeys}>
             <label htmlFor="participation-key-quantity">
-              Number of keys
+              {t("Number of keys")}{" "}
               <input
                 id="participation-key-quantity"
                 type="number"
@@ -320,7 +361,7 @@ function ParticipationKeysPanel({
                 className="qa-overview-action"
                 disabled={busy}
               >
-                {operation === "generating" ? "Generating..." : "Generate"}
+                {t(operation === "generating" ? "Generating..." : "Generate")}
               </button>
               <button
                 type="button"
@@ -331,7 +372,7 @@ function ParticipationKeysPanel({
                   closeGenerator();
                 }}
               >
-                Cancel
+                {t("Cancel")}
               </button>
             </div>
           </form>
@@ -343,7 +384,7 @@ function ParticipationKeysPanel({
             <div
               className="qa-actions"
               role="group"
-              aria-label="Filter participation keys"
+              aria-label={t("Filter participation keys")}
             >
               {(["available", "used"] as const).map((value) => (
                 <button
@@ -357,11 +398,15 @@ function ParticipationKeysPanel({
                     resetFeedback();
                   }}
                 >
-                  {value === "available" ? "Available" : "Used"} (
-                  {value === "available"
-                    ? availableKeys.length
-                    : keys.length - availableKeys.length}
-                  )
+                  {t("{label} ({count})", {
+                    label: t(value === "available" ? "Available" : "Used"),
+                    count: formatNumber(
+                      requestedLanguage(),
+                      value === "available"
+                        ? availableKeys.length
+                        : keys.length - availableKeys.length,
+                    ),
+                  })}
                 </button>
               ))}
             </div>
@@ -371,7 +416,7 @@ function ParticipationKeysPanel({
               disabled={busy || availableKeys.length === 0}
               onClick={() => void copyKeys(availableKeys)}
             >
-              Copy available keys
+              {t("Copy available keys")}
             </button>
           </div>
           {visibleKeys.length > 0 ? (
@@ -379,8 +424,8 @@ function ParticipationKeysPanel({
               className="qa-key-list"
               aria-label={
                 filter === "available"
-                  ? "Available participation keys"
-                  : "Used participation keys"
+                  ? t("Available participation keys")
+                  : t("Used participation keys")
               }
               tabIndex={0}
             >
@@ -388,7 +433,7 @@ function ParticipationKeysPanel({
                 <li key={item.key}>
                   <code>{item.key}</code>
                   {item.used ? (
-                    <span className="qa-key-used">Used</span>
+                    <span className="qa-key-used">{t("Used")}</span>
                   ) : (
                     <button
                       type="button"
@@ -396,12 +441,12 @@ function ParticipationKeysPanel({
                       disabled={busy}
                       aria-label={
                         copiedKey === item.key
-                          ? "Key copied"
-                          : `Copy key ${item.key}`
+                          ? t("Key copied")
+                          : t("Copy key {key}", { key: item.key })
                       }
                       onClick={() => void copyKeys([item])}
                     >
-                      {copiedKey === item.key ? "Copied" : "Copy"}
+                      {t(copiedKey === item.key ? "Copied" : "Copy")}
                     </button>
                   )}
                 </li>
@@ -409,17 +454,19 @@ function ParticipationKeysPanel({
             </ul>
           ) : (
             <p className="qa-key-empty">
-              {keys.length === 0
-                ? "No keys yet. Generate a batch to get started."
-                : filter === "available"
-                  ? "No available keys. Generate more to invite participants."
-                  : "No keys have been used yet."}
+              {t(
+                keys.length === 0
+                  ? "No keys yet. Generate a batch to get started."
+                  : filter === "available"
+                    ? "No available keys. Generate more to invite participants."
+                    : "No keys have been used yet.",
+              )}
             </p>
           )}
         </>
       )}
       <p className="qa-muted" role="status">
-        {operation === "loading" ? "Loading participation keys..." : message}
+        {operation === "loading" ? t("Loading participation keys...") : message}
       </p>
       {error && (
         <p className="qa-error" role="alert">
@@ -447,7 +494,9 @@ const ScenarioMap = memo(function ScenarioMap({
     !scenario.appearance
   )
     return (
-      <p className="qa-muted">Map data is unavailable for this scenario.</p>
+      <p className="qa-muted">
+        {t("Map data is unavailable for this scenario.")}
+      </p>
     );
   const mapData = {
     ...map,
@@ -483,9 +532,14 @@ export function QuestionnaireAdmin({
   onSelectStep: (step: "config" | "route_canvas" | "results") => void;
   onOpenAbout: () => void;
 }) {
+  const { language, n } = useI18n();
   const [list, setList] = useState<Summary[]>([]);
-  const [statusFilter, setStatusFilter] = useState<"all" | Summary["status"]>("all");
-  const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "name_asc" | "name_desc">("newest");
+  const [statusFilter, setStatusFilter] = useState<"all" | Summary["status"]>(
+    "all",
+  );
+  const [sortOrder, setSortOrder] = useState<
+    "newest" | "oldest" | "name_asc" | "name_desc"
+  >("newest");
   const [selected, setSelected] = useState<Questionnaire | null>(null);
   const publicLink =
     selected?.status === "active" ? publicParticipantLink() : null;
@@ -534,10 +588,7 @@ export function QuestionnaireAdmin({
     scenarioName !==
       scenarios.find((scenario) => scenario.id === renamingScenario)?.title;
   const hasUnsavedChanges =
-    detailsDirty ||
-    scenarioDirty ||
-    preparationDirty ||
-    preparationBusy;
+    detailsDirty || scenarioDirty || preparationDirty || preparationBusy;
 
   useLayoutEffect(() => {
     const restore = restoreViewRef.current;
@@ -590,11 +641,13 @@ export function QuestionnaireAdmin({
       return;
     }
     setConfirmation({
-      title: "Discard Unsaved Changes",
+      title: t("Discard Unsaved Changes"),
       description: preparationDirty
-        ? "Unresolved maps and route drawings will be discarded. Successful scenarios, configuration and reserved seeds are saved."
-        : "Discard unsaved changes?",
-      confirmLabel: "Discard Changes",
+        ? t(
+            "Unresolved maps and route drawings will be discarded. Successful scenarios, configuration and reserved seeds are saved.",
+          )
+        : t("Discard unsaved changes?"),
+      confirmLabel: t("Discard Changes"),
       onConfirm: action,
     });
   }
@@ -633,17 +686,21 @@ export function QuestionnaireAdmin({
   useEffect(() => {
     api<Summary[]>("/questionnaires")
       .then(setList)
-      .catch((reason: Error) => setError(reason.message));
-  }, []);
+      .catch((reason: Error) =>
+        setError(
+          presentError(language, reason, "Unable to load questionnaires."),
+        ),
+      );
+  }, [language]);
   async function perform(action: () => Promise<void>, message = "Working…") {
     if (busy) return;
-    setActivity(message);
+    setActivity(t(message));
     setBusy(true);
     setError("");
     try {
       await action();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Request failed.");
+      setError(presentError(language, reason, "Request failed."));
     } finally {
       setBusy(false);
       setActivity("");
@@ -690,8 +747,8 @@ export function QuestionnaireAdmin({
     event.preventDefault();
     const cleanTitle = title.trim();
     const cleanDescription = description.trim();
-    setTitleError(cleanTitle ? "" : "Enter a title.");
-    setDescriptionError(cleanDescription ? "" : "Enter a description.");
+    setTitleError(cleanTitle ? "" : t("Enter a title."));
+    setDescriptionError(cleanDescription ? "" : t("Enter a description."));
     if (!cleanTitle || !cleanDescription) return;
     void perform(async () => {
       let item: Summary;
@@ -702,8 +759,17 @@ export function QuestionnaireAdmin({
           { title: cleanTitle, description: cleanDescription },
         );
       } catch (reason) {
-        if (reason instanceof Error && reason.message === "Questionnaire title already exists.") {
-          setTitleError(reason.message);
+        if (
+          reason instanceof Error &&
+          reason.message === "Questionnaire title already exists."
+        ) {
+          setTitleError(
+            presentError(
+              language,
+              reason,
+              "Unable to save questionnaire details.",
+            ),
+          );
           return;
         }
         throw reason;
@@ -717,10 +783,12 @@ export function QuestionnaireAdmin({
     setCopyStatus("");
     try {
       await navigator.clipboard.writeText(url);
-      setCopyStatus("Participant link copied.");
+      setCopyStatus(t("Participant link copied."));
     } catch {
       setError(
-        "Unable to copy the participant link. Allow clipboard access and try again.",
+        t(
+          "Unable to copy the participant link. Allow clipboard access and try again.",
+        ),
       );
     }
   }
@@ -729,15 +797,17 @@ export function QuestionnaireAdmin({
     await perform(async () => {
       await api(`/questionnaires/${selected.id}/protocol`, "PUT");
       await loadQuestionnaire(selected.id);
-    }, "Saving study setup...");
+    }, t("Saving study setup..."));
   }
   function handleActivateQuestionnaire() {
     if (!selected) return;
     confirmDiscard(() => {
       setConfirmation({
-        title: "Activate Questionnaire",
-        description: "Activate this questionnaire? It can no longer be edited.",
-        confirmLabel: "Activate Questionnaire",
+        title: t("Activate Questionnaire"),
+        description: t(
+          "Activate this questionnaire? It can no longer be edited.",
+        ),
+        confirmLabel: t("Activate Questionnaire"),
         onConfirm: () => {
           setTitle(selected.title);
           setDescription(selected.description);
@@ -784,7 +854,7 @@ export function QuestionnaireAdmin({
       );
       setRenamingScenario(null);
       setScenarioName("");
-    }, "Renaming scenario…");
+    }, t("Renaming scenario…"));
   }
   const currentScenario = scenarios.find(
     (item) => item.id === selectedScenario,
@@ -798,7 +868,11 @@ export function QuestionnaireAdmin({
       const comparison = sortOrder.startsWith("name")
         ? a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
         : new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      return (sortOrder === "newest" || sortOrder === "name_desc" ? -comparison : comparison) || a.id - b.id;
+      return (
+        (sortOrder === "newest" || sortOrder === "name_desc"
+          ? -comparison
+          : comparison) || a.id - b.id
+      );
     });
 
   return (
@@ -815,7 +889,10 @@ export function QuestionnaireAdmin({
       <div className="qa-app">
         <div className="qa-layout">
           <main className="qa-content">
-            <section className={`qa-selector${selectorMotion ? " is-animated" : ""}`} aria-label="Questionnaires">
+            <section
+              className={`qa-selector${selectorMotion ? " is-animated" : ""}`}
+              aria-label={t("Questionnaires")}
+            >
               <div className="qa-selector-bar">
                 <button
                   type="button"
@@ -828,10 +905,12 @@ export function QuestionnaireAdmin({
                     setSelectorOpen(!selectorOpen);
                   }}
                 >
-                  <span className="qa-selector-indicator" aria-hidden="true">▶</span>
+                  <span className="qa-selector-indicator" aria-hidden="true">
+                    ▶
+                  </span>
                   <span className="qa-selector-label">
-                    <span>Questionnaires</span>
-                    <strong>{selected?.title || "New questionnaire"}</strong>
+                    <span>{t("Questionnaires")}</span>
+                    <strong>{selected?.title || t("New questionnaire")}</strong>
                   </span>
                 </button>
                 <button
@@ -841,537 +920,720 @@ export function QuestionnaireAdmin({
                   disabled={busy && !selecting}
                   aria-disabled={busy}
                 >
-                  + New
+                  {t("+ New")}
                 </button>
               </div>
-              <div id="questionnaire-list" className={`qa-selector-collapse${selectorOpen ? " is-open" : ""}`} inert={!selectorOpen} aria-hidden={!selectorOpen}>
-              <div className="qa-selector-content">
-                {list.length === 0 ? (
-                  <div className="qa-selector-empty">
-                    <p className="qa-empty-title">No questionnaires yet</p>
-                    <p className="qa-empty-desc">Use + New to create your first study.</p>
-                  </div>
-                ) : (
-                  <>
-                  <div className="qa-list-controls">
-                    <label>
-                      Status
-                      <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
-                        <option value="all">All</option>
-                        <option value="draft">Draft</option>
-                        <option value="active">Active</option>
-                        <option value="closed">Closed</option>
-                      </select>
-                    </label>
-                    <label>
-                      Sort by
-                      <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value as typeof sortOrder)}>
-                        <option value="newest">Newest first</option>
-                        <option value="oldest">Oldest first</option>
-                        <option value="name_asc">Name A to Z</option>
-                        <option value="name_desc">Name Z to A</option>
-                      </select>
-                    </label>
-                  </div>
-                  {visibleQuestionnaires.length === 0 ? (
-                    <p className="qa-list-no-results" role="status">No questionnaires match this status.</p>
+              <div
+                id="questionnaire-list"
+                className={`qa-selector-collapse${selectorOpen ? " is-open" : ""}`}
+                inert={!selectorOpen}
+                aria-hidden={!selectorOpen}
+              >
+                <div className="qa-selector-content">
+                  {list.length === 0 ? (
+                    <div className="qa-selector-empty">
+                      <p className="qa-empty-title">
+                        {t("No questionnaires yet")}
+                      </p>
+                      <p className="qa-empty-desc">
+                        {t("Use + New to create your first study.")}
+                      </p>
+                    </div>
                   ) : (
-                  <nav aria-label="Questionnaires" className="qa-nav-list">
-                    {visibleQuestionnaires.map((item) => (
-                      <button
-                        className={`qa-list-item ${selected?.id === item.id ? "is-active" : ""}`}
-                        key={item.id}
-                        aria-current={selected?.id === item.id ? "page" : undefined}
-                        onClick={() => select(item.id)}
-                        disabled={busy && !selecting}
-                        aria-disabled={busy}
-                        type="button"
-                      >
-                        <span className="qa-list-info">
-                          <strong>{item.title}</strong>
-                          <span className="qa-list-description">{item.description}</span>
-                        </span>
-                        <span className={`qa-list-status status-${item.status}`}>
-                          {item.status === "draft" ? "Draft" : item.status === "active" ? "Active" : "Closed"}
-                        </span>
-                      </button>
-                    ))}
-                  </nav>
+                    <>
+                      <div className="qa-list-controls">
+                        <label>
+                          {t("Status")}{" "}
+                          <select
+                            value={statusFilter}
+                            onChange={(event) =>
+                              setStatusFilter(
+                                event.target.value as typeof statusFilter,
+                              )
+                            }
+                          >
+                            <option value="all">{t("All")}</option>
+                            <option value="draft">{t("Draft")}</option>
+                            <option value="active">{t("Active")}</option>
+                            <option value="closed">{t("Closed")}</option>
+                          </select>
+                        </label>
+                        <label>
+                          {t("Sort by")}{" "}
+                          <select
+                            value={sortOrder}
+                            onChange={(event) =>
+                              setSortOrder(
+                                event.target.value as typeof sortOrder,
+                              )
+                            }
+                          >
+                            <option value="newest">{t("Newest first")}</option>
+                            <option value="oldest">{t("Oldest first")}</option>
+                            <option value="name_asc">{t("Name A to Z")}</option>
+                            <option value="name_desc">
+                              {t("Name Z to A")}
+                            </option>
+                          </select>
+                        </label>
+                      </div>
+                      {visibleQuestionnaires.length === 0 ? (
+                        <p className="qa-list-no-results" role="status">
+                          {t("No questionnaires match this status.")}
+                        </p>
+                      ) : (
+                        <nav
+                          aria-label={t("Questionnaires")}
+                          className="qa-nav-list"
+                        >
+                          {visibleQuestionnaires.map((item) => (
+                            <button
+                              className={`qa-list-item ${selected?.id === item.id ? "is-active" : ""}`}
+                              key={item.id}
+                              aria-current={
+                                selected?.id === item.id ? "page" : undefined
+                              }
+                              onClick={() => select(item.id)}
+                              disabled={busy && !selecting}
+                              aria-disabled={busy}
+                              type="button"
+                            >
+                              <span className="qa-list-info">
+                                <strong>{item.title}</strong>
+                                <span className="qa-list-description">
+                                  {item.description}
+                                </span>
+                              </span>
+                              <span
+                                className={`qa-list-status status-${item.status}`}
+                              >
+                                {t(
+                                  item.status === "draft"
+                                    ? "Draft"
+                                    : item.status === "active"
+                                      ? "Active"
+                                      : "Closed",
+                                )}
+                              </span>
+                            </button>
+                          ))}
+                        </nav>
+                      )}
+                    </>
                   )}
-                  </>
-                )}
-              </div>
+                </div>
               </div>
             </section>
             <span className="qa-visually-hidden" role="status">
-              {selecting ? "Loading questionnaire…" : ""}
+              {selecting ? t("Loading questionnaire…") : ""}
             </span>
             <div className="qa-selection-content" inert={selecting}>
-            {error && (
-              <div
-                className="qa-error"
-                role="alert"
-                tabIndex={-1}
-                ref={errorRef}
-              >
-                {error}
-              </div>
-            )}
-            <span role="status" className="qa-visually-hidden">
-              {busy && !selecting ? activity : ""}
-            </span>
-            {selected && view === "preparation" ? (
-              <ScenarioPreparation
-                key={selected.id}
-                questionnaireId={selected.id}
-                initial={{
-                  configuration: selected.preparation_configuration,
-                  savedIds: scenarios.map((scenario) => scenario.id),
-                  protocolComplete: Boolean(protocolComplete),
-                }}
-                onDirtyChange={setPreparationDirty}
-                onBusyChange={setPreparationBusy}
-                onComplete={() => loadQuestionnaire(selected.id, true)}
-                onBack={() =>
-                  confirmDiscard(() => {
-                    void perform(() => loadQuestionnaire(selected.id, true));
-                  })
-                }
-              />
-            ) : (
-              <>
-                <section className="qa-panel qa-details-panel">
-                  <div className="qa-heading">
-                    <div>
-                      <span className="qa-overline">
-                        {selected
-                          ? `${selected.status.toUpperCase()} / ${selected.id}`
-                          : "NEW QUESTIONNAIRE"}
-                      </span>
-                      <h2>
-                        {selected ? selected.title : "Start a questionnaire"}
-                      </h2>
-                      {!selected ? (
-                        <p className="qa-muted">Give your study a clear title and description.</p>
-                      ) : !editable && selected?.description ? (
-                        <p className="qa-muted">{selected.description}</p>
-                      ) : null}
+              {error && (
+                <div
+                  className="qa-error"
+                  role="alert"
+                  tabIndex={-1}
+                  ref={errorRef}
+                >
+                  {error}
+                </div>
+              )}
+              <span role="status" className="qa-visually-hidden">
+                {busy && !selecting ? activity : ""}
+              </span>
+              {selected && view === "preparation" ? (
+                <ScenarioPreparation
+                  key={selected.id}
+                  questionnaireId={selected.id}
+                  initial={{
+                    configuration: selected.preparation_configuration,
+                    savedIds: scenarios.map((scenario) => scenario.id),
+                    protocolComplete: Boolean(protocolComplete),
+                  }}
+                  onDirtyChange={setPreparationDirty}
+                  onBusyChange={setPreparationBusy}
+                  onComplete={() => loadQuestionnaire(selected.id, true)}
+                  onBack={() =>
+                    confirmDiscard(() => {
+                      void perform(() => loadQuestionnaire(selected.id, true));
+                    })
+                  }
+                />
+              ) : (
+                <>
+                  <section className="qa-panel qa-details-panel">
+                    <div className="qa-heading">
+                      <div>
+                        <span className="qa-overline">
+                          {selected
+                            ? `${t(selected.status.toUpperCase())} / ${n(selected.id)}`
+                            : t("NEW QUESTIONNAIRE")}
+                        </span>
+                        <h2>
+                          {selected
+                            ? selected.title
+                            : t("Start a questionnaire")}
+                        </h2>
+                        {!selected ? (
+                          <p className="qa-muted">
+                            {t(
+                              "Give your study a clear title and description.",
+                            )}
+                          </p>
+                        ) : !editable && selected?.description ? (
+                          <p className="qa-muted">{selected.description}</p>
+                        ) : null}
+                      </div>
+                      <div className="qa-actions qa-overview-actions">
+                        {selected && (!editable || preview) && (
+                          <button
+                            type="button"
+                            disabled={
+                              !preview &&
+                              (hasUnsavedChanges || !protocolComplete)
+                            }
+                            onClick={() =>
+                              setView(preview ? "overview" : "preview")
+                            }
+                            className="qa-secondary qa-overview-action"
+                          >
+                            {t(
+                              preview
+                                ? editable
+                                  ? "Back to editor"
+                                  : "Back to overview"
+                                : "Preview questionnaire",
+                            )}
+                          </button>
+                        )}
+                        {selected && !editable && (
+                          <button
+                            type="button"
+                            className="qa-secondary qa-overview-action"
+                            aria-expanded={view === "scenarios"}
+                            aria-controls="questionnaire-scenarios"
+                            disabled={panelBusy}
+                            onClick={() =>
+                              setView(
+                                view === "scenarios" ? "overview" : "scenarios",
+                              )
+                            }
+                          >
+                            {t(
+                              view === "scenarios"
+                                ? "Hide scenarios"
+                                : "View scenarios",
+                            )}{" "}
+                            ({n(scenarios.length)})
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="qa-actions qa-overview-actions">
-                      {selected && (!editable || preview) && (
-                        <button
-                          type="button"
-                          disabled={
-                            !preview && (hasUnsavedChanges || !protocolComplete)
-                          }
-                          onClick={() =>
-                            setView(preview ? "overview" : "preview")
-                          }
-                          className="qa-secondary qa-overview-action"
-                        >
-                          {preview
-                            ? editable
-                              ? "Back to editor"
-                              : "Back to overview"
-                            : "Preview questionnaire"}
-                        </button>
-                      )}
-                      {selected && !editable && (
-                        <button
-                          type="button"
-                          className="qa-secondary qa-overview-action"
-                          aria-expanded={view === "scenarios"}
-                          aria-controls="questionnaire-scenarios"
-                          disabled={panelBusy}
-                          onClick={() =>
-                            setView(
-                              view === "scenarios" ? "overview" : "scenarios",
-                            )
-                          }
-                        >
-                          {view === "scenarios"
-                            ? "Hide scenarios"
-                            : "View scenarios"}{" "}
-                          ({scenarios.length})
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {selected && !editable && (
-                    <QuestionnaireResultsPanel
-                      key={`${selected.id}:${selected.status}`}
-                      questionnaireId={selected.id}
-                    />
-                  )}
-                  {selected?.status === "active" && (
-                    <section
-                      className="qa-control-group"
-                      aria-label="Participant access"
-                    >
-                      <ParticipantLinkActions
-                        title="Local participation"
-                        url={localParticipantLink()}
-                        disabled={panelBusy}
-                        onCopy={(url) => void copyParticipantLink(url)}
+                    {selected && !editable && (
+                      <QuestionnaireResultsPanel
+                        key={`${selected.id}:${selected.status}`}
+                        questionnaireId={selected.id}
                       />
-                      {publicLink && (
+                    )}
+                    {selected?.status === "active" && (
+                      <section
+                        className="qa-control-group"
+                        aria-label={t("Participant access")}
+                      >
                         <ParticipantLinkActions
-                          title="Public participation"
-                          url={publicLink}
+                          title={t("Local participation")}
+                          url={localParticipantLink()}
                           disabled={panelBusy}
                           onCopy={(url) => void copyParticipantLink(url)}
                         />
-                      )}
-                      <p className="qa-muted" role="status">
-                        {copyStatus}
-                      </p>
-                    </section>
-                  )}
-                  {selected?.status === "active" && (
-                    <button
-                      type="button"
-                      className="qa-secondary"
-                      disabled={panelBusy}
-                      onClick={() =>
-                        setConfirmation({
-                          title: "Close Questionnaire",
-                          description:
-                            "Close this questionnaire? New submissions will no longer be accepted.",
-                          confirmLabel: "Close Questionnaire",
-                          onConfirm: () => {
-                            void perform(async () => {
-                              await api(
-                                `/questionnaires/${selected.id}/close`,
-                                "POST",
-                              );
-                              setSelected((current) =>
-                                current?.id === selected.id
-                                  ? { ...current, status: "closed" }
-                                  : current,
-                              );
-                              await loadList();
-                              await loadQuestionnaire(selected.id);
-                            });
-                          },
-                        })
-                      }
-                    >
-                      Close questionnaire
-                    </button>
-                  )}
-                  {editable && !preview && (
-                    <details className="qa-edit-details" open={!selected || detailsDirty || undefined}>
-                      <summary>{selected ? "Edit details" : "Questionnaire details"}</summary>
-                    <form onSubmit={saveDraft} className="qa-form">
-                      <label>
-                        Title
-                        <input
-                          required
-                          maxLength={100}
-                          value={title}
-                          onChange={(e) => { setTitle(e.target.value); setTitleError(""); }}
-                          aria-invalid={Boolean(titleError)}
-                          aria-describedby={titleError ? "questionnaire-title-error" : undefined}
-                          disabled={panelBusy}
-                        />
-                        {titleError && <span id="questionnaire-title-error" className="field-error-message" role="alert">{titleError}</span>}
-                      </label>
-                      <label>
-                        Description
-                        <textarea
-                          required
-                          rows={2}
-                          maxLength={1000}
-                          value={description}
-                          onChange={(e) => { setDescription(e.target.value); setDescriptionError(""); }}
-                          aria-invalid={Boolean(descriptionError)}
-                          aria-describedby={descriptionError ? "questionnaire-description-error" : undefined}
-                          disabled={panelBusy}
-                        />
-                        {descriptionError && <span id="questionnaire-description-error" className="field-error-message" role="alert">{descriptionError}</span>}
-                      </label>
-                      <button disabled={panelBusy} type="submit">
-                        {selected ? "Save details" : "Create draft"}
-                      </button>
-                    </form>
-                    </details>
-                  )}
-                </section>
-                {selected && preview && (
-                  <section className="qa-panel qa-preview">
-                    <span className="qa-overline">PARTICIPANT PREVIEW</span>
-                    <label>
-                      Group
-                      <select
-                        value={previewGroup}
-                        onChange={(event) =>
-                          setPreviewGroup(event.target.value as StudyGroup)
+                        {publicLink && (
+                          <ParticipantLinkActions
+                            title={t("Public participation")}
+                            url={publicLink}
+                            disabled={panelBusy}
+                            onCopy={(url) => void copyParticipantLink(url)}
+                          />
+                        )}
+                        <p className="qa-muted" role="status">
+                          {copyStatus}
+                        </p>
+                      </section>
+                    )}
+                    {selected?.status === "active" && (
+                      <button
+                        type="button"
+                        className="qa-secondary"
+                        disabled={panelBusy}
+                        onClick={() =>
+                          setConfirmation({
+                            title: t("Close Questionnaire"),
+                            description: t(
+                              "Close this questionnaire? New submissions will no longer be accepted.",
+                            ),
+                            confirmLabel: t("Close Questionnaire"),
+                            onConfirm: () => {
+                              void perform(async () => {
+                                await api(
+                                  `/questionnaires/${selected.id}/close`,
+                                  "POST",
+                                );
+                                setSelected((current) =>
+                                  current?.id === selected.id
+                                    ? { ...current, status: "closed" }
+                                    : current,
+                                );
+                                await loadList();
+                                await loadQuestionnaire(selected.id);
+                              });
+                            },
+                          })
                         }
                       >
-                        {STUDY_GROUPS.map((group) => (
-                          <option key={group} value={group}>
-                            {GROUP_LABELS[group]}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <p className="qa-muted">
-                      This preview does not save answers.
-                    </p>
-                    <Participant
-                      key={`${selected.id}-${previewGroup}`}
-                      preview={{
-                        questionnaireId: selected.id,
-                        group: previewGroup,
-                        submissionKey: previewSubmissionKey,
-                      }}
-                    />
-                  </section>
-                )}
-                {selected && !preview && (
-                  <>
-                    {(editable || view === "scenarios") && (
-                      <section
-                        className="qa-panel"
-                        id="questionnaire-scenarios"
+                        {t("Close questionnaire")}
+                      </button>
+                    )}
+                    {editable && !preview && (
+                      <details
+                        className="qa-edit-details"
+                        open={!selected || detailsDirty || undefined}
                       >
-                        <div className="qa-heading">
-                          <div>
-                            {editable && (
-                              <span className="qa-overline">STEP 1 OF 2</span>
-                            )}
-                            <h2>
-                              Study scenarios{" "}
-                              <span className="qa-count">
-                                {scenarios.length}
+                        <summary>
+                          {t(
+                            selected ? "Edit details" : "Questionnaire details",
+                          )}
+                        </summary>
+                        <form onSubmit={saveDraft} className="qa-form">
+                          <label>
+                            {t("Title")}{" "}
+                            <input
+                              required
+                              maxLength={100}
+                              value={title}
+                              onChange={(e) => {
+                                setTitle(e.target.value);
+                                setTitleError("");
+                              }}
+                              aria-invalid={Boolean(titleError)}
+                              aria-describedby={
+                                titleError
+                                  ? "questionnaire-title-error"
+                                  : undefined
+                              }
+                              disabled={panelBusy}
+                            />
+                            {titleError && (
+                              <span
+                                id="questionnaire-title-error"
+                                className="field-error-message"
+                                role="alert"
+                              >
+                                {titleError}
                               </span>
-                            </h2>
-                            {editable && (
-                              <p className="qa-muted">
-                                Prepare six maps and draw an alternative route for each.
-                              </p>
                             )}
+                          </label>
+                          <label>
+                            {t("Description")}{" "}
+                            <textarea
+                              required
+                              rows={2}
+                              maxLength={1000}
+                              value={description}
+                              onChange={(e) => {
+                                setDescription(e.target.value);
+                                setDescriptionError("");
+                              }}
+                              aria-invalid={Boolean(descriptionError)}
+                              aria-describedby={
+                                descriptionError
+                                  ? "questionnaire-description-error"
+                                  : undefined
+                              }
+                              disabled={panelBusy}
+                            />
+                            {descriptionError && (
+                              <span
+                                id="questionnaire-description-error"
+                                className="field-error-message"
+                                role="alert"
+                              >
+                                {descriptionError}
+                              </span>
+                            )}
+                          </label>
+                          <button disabled={panelBusy} type="submit">
+                            {t(selected ? "Save details" : "Create draft")}
+                          </button>
+                        </form>
+                      </details>
+                    )}
+                  </section>
+                  {selected && preview && (
+                    <section className="qa-panel qa-preview">
+                      <span className="qa-overline">
+                        {t("PARTICIPANT PREVIEW")}
+                      </span>
+                      <label>
+                        {t("Group")}{" "}
+                        <select
+                          value={previewGroup}
+                          onChange={(event) =>
+                            setPreviewGroup(event.target.value as StudyGroup)
+                          }
+                        >
+                          {STUDY_GROUPS.map((group) => (
+                            <option key={group} value={group}>
+                              {t(GROUP_LABELS[group])}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <p className="qa-muted">
+                        {t("This preview does not save answers.")}
+                      </p>
+                      <Participant
+                        key={`${selected.id}-${previewGroup}`}
+                        preview={{
+                          questionnaireId: selected.id,
+                          group: previewGroup,
+                          submissionKey: previewSubmissionKey,
+                        }}
+                      />
+                    </section>
+                  )}
+                  {selected && !preview && (
+                    <>
+                      {(editable || view === "scenarios") && (
+                        <section
+                          className="qa-panel"
+                          id="questionnaire-scenarios"
+                        >
+                          <div className="qa-heading">
+                            <div>
+                              {editable && (
+                                <span className="qa-overline">
+                                  {t("STEP 1 OF 2")}
+                                </span>
+                              )}
+                              <h2>
+                                {t("Study scenarios")}{" "}
+                                <span className="qa-count">
+                                  {n(scenarios.length)}
+                                </span>
+                              </h2>
+                              {editable && (
+                                <p className="qa-muted">
+                                  {t(
+                                    "Prepare six maps and draw an alternative route for each.",
+                                  )}
+                                </p>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        {editable && (
-                          <p className="qa-muted" role="status">
-                            {protocolComplete ? "Six scenarios are ready for the study." : `${scenarios.length} of 6 scenarios saved. Scenarios are linked automatically.`}
-                          </p>
-                        )}
-                        {editable && scenarios.length === 6 && !protocolComplete && (
-                          <button type="button" disabled={panelBusy} onClick={() => void retryStudySetup()}>
-                            Retry study setup
-                          </button>
-                        )}
-                        {editable && (
-                          <button
-                            type="button"
-                            disabled={panelBusy}
-                            onClick={() => {
-                              if (selected)
-                                confirmDiscard(() => setView("preparation"));
-                            }}
-                          >
-                            {scenarios.length === 6
-                              ? "Review preparation"
-                              : "Prepare six scenarios"}
-                          </button>
-                        )}
-                        {scenarios.length > 0 && (
-                          <div className="qa-scenario-view">
-                            <ul
-                              className="qa-scenarios"
-                              aria-label="Saved scenarios"
+                          {editable && (
+                            <p className="qa-muted" role="status">
+                              {protocolComplete
+                                ? t("Six scenarios are ready for the study.")
+                                : t(
+                                    "{count} of 6 scenarios saved. Scenarios are linked automatically.",
+                                    { count: n(scenarios.length) },
+                                  )}
+                            </p>
+                          )}
+                          {editable &&
+                            scenarios.length === 6 &&
+                            !protocolComplete && (
+                              <button
+                                type="button"
+                                disabled={panelBusy}
+                                onClick={() => void retryStudySetup()}
+                              >
+                                {t("Retry study setup")}
+                              </button>
+                            )}
+                          {editable && (
+                            <button
+                              type="button"
+                              disabled={panelBusy}
+                              onClick={() => {
+                                if (selected)
+                                  confirmDiscard(() => setView("preparation"));
+                              }}
                             >
-                              {scenarios.map((scenario) => (
-                                <li
-                                  key={scenario.id}
-                                  className={
-                                    selectedScenario === scenario.id
-                                      ? "is-active"
-                                      : ""
-                                  }
-                                >
-                                  <div className="qa-scenario-row">
-                                    <strong>{scenario.title}</strong>
-                                    <div className="qa-actions">
-                                      <button
-                                        type="button"
-                                        className="qa-secondary"
-                                        aria-pressed={
-                                          selectedScenario === scenario.id
-                                        }
-                                        aria-label={`${selectedScenario === scenario.id ? "Hide" : "View"} scenario ${scenario.title}`}
-                                        onClick={() =>
-                                          setSelectedScenario((previous) =>
-                                            previous === scenario.id
-                                              ? null
-                                              : scenario.id,
-                                          )
-                                        }
-                                        disabled={panelBusy}
-                                      >
-                                        {selectedScenario === scenario.id
-                                          ? "Hide"
-                                          : "View"}
-                                      </button>
-                                      {editable && (
-                                        <button
-                                          type="button"
-                                          className="qa-secondary qa-rename-scenario"
-                                          disabled={
-                                            panelBusy ||
-                                            renamingScenario === scenario.id
-                                          }
-                                          aria-label={`Rename scenario ${scenario.title}`}
-                                          onClick={() =>
-                                            confirmDiscard(() => {
-                                              setRenamingScenario(scenario.id);
-                                              setScenarioName(scenario.title);
-                                            }, scenarioDirty)
-                                          }
-                                        >
-                                          Rename
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                  {renamingScenario === scenario.id && (
-                                    <form
-                                      className="qa-form qa-scenario-rename"
-                                      onSubmit={renameScenario}
-                                    >
-                                      <label>
-                                        Scenario name
-                                        <input
-                                          autoFocus
-                                          required
-                                          value={scenarioName}
-                                          disabled={panelBusy}
-                                          onChange={(event) =>
-                                            setScenarioName(event.target.value)
-                                          }
-                                        />
-                                      </label>
+                              {t(
+                                scenarios.length === 6
+                                  ? "Review preparation"
+                                  : "Prepare six scenarios",
+                              )}
+                            </button>
+                          )}
+                          {scenarios.length > 0 && (
+                            <div className="qa-scenario-view">
+                              <ul
+                                className="qa-scenarios"
+                                aria-label={t("Saved scenarios")}
+                              >
+                                {scenarios.map((scenario) => (
+                                  <li
+                                    key={scenario.id}
+                                    className={
+                                      selectedScenario === scenario.id
+                                        ? "is-active"
+                                        : ""
+                                    }
+                                  >
+                                    <div className="qa-scenario-row">
+                                      <strong>
+                                        {displayScenarioTitle(scenario.title)}
+                                      </strong>
                                       <div className="qa-actions">
-                                        <button
-                                          type="submit"
-                                          disabled={
-                                            panelBusy || !scenarioName.trim()
-                                          }
-                                        >
-                                          Save name
-                                        </button>
                                         <button
                                           type="button"
                                           className="qa-secondary"
+                                          aria-pressed={
+                                            selectedScenario === scenario.id
+                                          }
+                                          aria-label={t(
+                                            "{action} scenario {title}",
+                                            {
+                                              action: t(
+                                                selectedScenario === scenario.id
+                                                  ? "Hide"
+                                                  : "View",
+                                              ),
+                                              title: displayScenarioTitle(
+                                                scenario.title,
+                                              ),
+                                            },
+                                          )}
+                                          onClick={() =>
+                                            setSelectedScenario((previous) =>
+                                              previous === scenario.id
+                                                ? null
+                                                : scenario.id,
+                                            )
+                                          }
                                           disabled={panelBusy}
-                                          onClick={(event) => {
-                                            const row =
-                                              event.currentTarget.closest("li");
-                                            rememberView(
-                                              () =>
-                                                row?.querySelector<HTMLButtonElement>(
-                                                  ".qa-rename-scenario",
-                                                ) ?? null,
-                                            );
-                                            setRenamingScenario(null);
-                                            setScenarioName("");
-                                          }}
                                         >
-                                          Cancel
+                                          {t(
+                                            selectedScenario === scenario.id
+                                              ? "Hide"
+                                              : "View",
+                                          )}
                                         </button>
+                                        {editable && (
+                                          <button
+                                            type="button"
+                                            className="qa-secondary qa-rename-scenario"
+                                            disabled={
+                                              panelBusy ||
+                                              renamingScenario === scenario.id
+                                            }
+                                            aria-label={t(
+                                              "Rename scenario {title}",
+                                              {
+                                                title: displayScenarioTitle(
+                                                  scenario.title,
+                                                ),
+                                              },
+                                            )}
+                                            onClick={() =>
+                                              confirmDiscard(() => {
+                                                setRenamingScenario(
+                                                  scenario.id,
+                                                );
+                                                setScenarioName(scenario.title);
+                                              }, scenarioDirty)
+                                            }
+                                          >
+                                            {t("Rename")}
+                                          </button>
+                                        )}
                                       </div>
-                                    </form>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                            {currentScenario && (
-                              <ScenarioMap
-                                key={currentScenario.id}
-                                scenario={currentScenario}
-                              />
-                            )}
-                          </div>
-                        )}
-                        {protocolComplete && (
-                          <details className="qa-instrument-details">
-                            <summary>
-                              View the 14 adapted evaluation items
-                            </summary>
-                            <p>
-                              Adapted route explanation questionnaire, selected
-                              from ESS, SCS and xHIS. Responses range from 1
-                              (Strongly disagree) to 5 (Strongly agree). This
-                              custom instrument has not been validated.
-                            </p>
-                            <ol>
-                              {selected.questions
-                                .filter(
-                                  (question) => question.type === "likert",
-                                )
-                                .map((question) => (
-                                  <li key={question.id}>
-                                    <strong>
-                                      {question.configuration.source_scale}{" "}
-                                      {
-                                        question.configuration
-                                          .source_item_number
-                                      }
-                                    </strong>{" "}
-                                    · {question.configuration.topic}:{" "}
-                                    {question.prompt}
+                                    </div>
+                                    {renamingScenario === scenario.id && (
+                                      <form
+                                        className="qa-form qa-scenario-rename"
+                                        onSubmit={renameScenario}
+                                      >
+                                        <label>
+                                          {t("Scenario name")}{" "}
+                                          <input
+                                            autoFocus
+                                            required
+                                            value={scenarioName}
+                                            disabled={panelBusy}
+                                            onChange={(event) =>
+                                              setScenarioName(
+                                                event.target.value,
+                                              )
+                                            }
+                                          />
+                                        </label>
+                                        <div className="qa-actions">
+                                          <button
+                                            type="submit"
+                                            disabled={
+                                              panelBusy || !scenarioName.trim()
+                                            }
+                                          >
+                                            {t("Save name")}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="qa-secondary"
+                                            disabled={panelBusy}
+                                            onClick={(event) => {
+                                              const row =
+                                                event.currentTarget.closest(
+                                                  "li",
+                                                );
+                                              rememberView(
+                                                () =>
+                                                  row?.querySelector<HTMLButtonElement>(
+                                                    ".qa-rename-scenario",
+                                                  ) ?? null,
+                                              );
+                                              setRenamingScenario(null);
+                                              setScenarioName("");
+                                            }}
+                                          >
+                                            {t("Cancel")}
+                                          </button>
+                                        </div>
+                                      </form>
+                                    )}
                                   </li>
                                 ))}
-                            </ol>
-                          </details>
-                        )}
-                      </section>
-                    )}
-                    {editable && (
-                      <section className="qa-panel qa-review-panel">
-                        <span className="qa-overline">STEP 2 OF 2</span>
-                        <div className="qa-setup-heading"><h2>Review and activate</h2><span className="qa-setup-status">{protocolComplete && !hasUnsavedChanges ? "Ready" : "Not ready"}</span></div>
-                        <p className="qa-muted" role="status">
-                          {!protocolComplete ? "Prepare six successful scenarios to enable preview and activation." : hasUnsavedChanges ? "Save your changes before previewing or activating the questionnaire." : "Preview the study before activation. Activation locks editing."}
-                        </p>
-                        <div className="qa-actions">
-                          <button type="button" className="qa-secondary" disabled={panelBusy || hasUnsavedChanges || !protocolComplete} onClick={() => setView("preview")}>Preview questionnaire</button>
-                          <button type="button" disabled={panelBusy || hasUnsavedChanges || !protocolComplete} onClick={handleActivateQuestionnaire}>Activate questionnaire</button>
-                        </div>
-                      </section>
-                    )}
-                    {selected.status === "active" && (
-                      <details className="qa-panel qa-access-details">
-                        <summary>Participation keys</summary>
-                        <ParticipationKeysPanel key={selected.id} questionnaireId={selected.id} disabled={panelBusy} />
-                      </details>
-                    )}
-                    <section className="qa-panel qa-danger-panel">
-                      <div className="qa-heading">
-                        <div>
-                          <span className="qa-overline">DANGER ZONE</span>
-                          <h2>Delete questionnaire</h2>
-                          <p className="qa-muted">
-                            Permanently delete this questionnaire along with its
-                            questions and scenarios.
+                              </ul>
+                              {currentScenario && (
+                                <ScenarioMap
+                                  key={currentScenario.id}
+                                  scenario={currentScenario}
+                                />
+                              )}
+                            </div>
+                          )}
+                          {protocolComplete && (
+                            <details className="qa-instrument-details">
+                              <summary>
+                                {t("View the 14 adapted evaluation items")}
+                              </summary>
+                              <p>
+                                {t(
+                                  "Adapted route explanation questionnaire, selected from ESS, SCS and xHIS. Responses range from 1 (Strongly disagree) to 5 (Strongly agree). This custom instrument has not been validated.",
+                                )}
+                              </p>
+                              <ol>
+                                {selected.questions
+                                  .filter(
+                                    (question) => question.type === "likert",
+                                  )
+                                  .map((question) => (
+                                    <li key={question.id}>
+                                      <strong>
+                                        {question.configuration.source_scale}{" "}
+                                        {
+                                          question.configuration
+                                            .source_item_number
+                                        }
+                                      </strong>{" "}
+                                      · {t(question.configuration.topic ?? "")}:{" "}
+                                      {t(question.prompt)}
+                                    </li>
+                                  ))}
+                              </ol>
+                            </details>
+                          )}
+                        </section>
+                      )}
+                      {editable && (
+                        <section className="qa-panel qa-review-panel">
+                          <span className="qa-overline">
+                            {t("STEP 2 OF 2")}
+                          </span>
+                          <div className="qa-setup-heading">
+                            <h2>{t("Review and activate")}</h2>
+                            <span className="qa-setup-status">
+                              {t(
+                                protocolComplete && !hasUnsavedChanges
+                                  ? "Ready"
+                                  : "Not ready",
+                              )}
+                            </span>
+                          </div>
+                          <p className="qa-muted" role="status">
+                            {t(
+                              !protocolComplete
+                                ? "Prepare six successful scenarios to enable preview and activation."
+                                : hasUnsavedChanges
+                                  ? "Save your changes before previewing or activating the questionnaire."
+                                  : "Preview the study before activation. Activation locks editing.",
+                            )}
                           </p>
+                          <div className="qa-actions">
+                            <button
+                              type="button"
+                              className="qa-secondary"
+                              disabled={
+                                panelBusy ||
+                                hasUnsavedChanges ||
+                                !protocolComplete
+                              }
+                              onClick={() => setView("preview")}
+                            >
+                              {t("Preview questionnaire")}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={
+                                panelBusy ||
+                                hasUnsavedChanges ||
+                                !protocolComplete
+                              }
+                              onClick={handleActivateQuestionnaire}
+                            >
+                              {t("Activate questionnaire")}
+                            </button>
+                          </div>
+                        </section>
+                      )}
+                      {selected.status === "active" && (
+                        <details className="qa-panel qa-access-details">
+                          <summary>{t("Participation keys")}</summary>
+                          <ParticipationKeysPanel
+                            key={selected.id}
+                            questionnaireId={selected.id}
+                            disabled={panelBusy}
+                          />
+                        </details>
+                      )}
+                      <section className="qa-panel qa-danger-panel">
+                        <div className="qa-heading">
+                          <div>
+                            <span className="qa-overline">
+                              {t("DANGER ZONE")}
+                            </span>
+                            <h2>{t("Delete questionnaire")}</h2>
+                            <p className="qa-muted">
+                              {t(
+                                "Permanently delete this questionnaire along with its questions and scenarios.",
+                              )}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className="qa-danger"
+                            disabled={panelBusy}
+                            onClick={() => setConfirmDelete(true)}
+                          >
+                            {t("Delete questionnaire")}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          className="qa-danger"
-                          disabled={panelBusy}
-                          onClick={() => setConfirmDelete(true)}
-                        >
-                          Delete questionnaire
-                        </button>
-                      </div>
-                    </section>
-                  </>
-                )}
-              </>
-            )}
+                      </section>
+                    </>
+                  )}
+                </>
+              )}
             </div>
           </main>
         </div>
@@ -1390,25 +1652,33 @@ export function QuestionnaireAdmin({
       )}
       {confirmDelete && selected && (
         <ConfirmModal
-          title="Delete Questionnaire"
+          title={t("Delete Questionnaire")}
           description={
             <>
-              The questionnaire <strong>&quot;{selected.title}&quot;</strong>{" "}
-              currently contains{" "}
-              <strong>{selected.questions.length} question(s)</strong>
+              {t("The questionnaire")}{" "}
+              <strong>&quot;{selected.title}&quot;</strong>{" "}
+              {t("currently contains")}{" "}
+              <strong>
+                {n(selected.questions.length)} {t("question(s)")}
+              </strong>
               {scenarios.length > 0 && (
                 <>
                   {" "}
-                  and <strong>{scenarios.length} scenario(s)</strong>
+                  {t("and")}{" "}
+                  <strong>
+                    {n(scenarios.length)} {t("scenario(s)")}
+                  </strong>
                 </>
               )}
               .
             </>
           }
-          warning="Continuing will permanently delete this questionnaire along with all its configured questions, scenarios, and generated routes."
-          confirmLabel={
-            busy ? "Deleting Questionnaire..." : "Continue & Delete"
-          }
+          warning={t(
+            "Continuing will permanently delete this questionnaire along with all its configured questions, scenarios, and generated routes.",
+          )}
+          confirmLabel={t(
+            busy ? "Deleting Questionnaire..." : "Continue & Delete",
+          )}
           busy={busy}
           onClose={() => setConfirmDelete(false)}
           onConfirm={handleConfirmDelete}

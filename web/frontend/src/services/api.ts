@@ -125,10 +125,11 @@ export async function solveScenarioISP(
   );
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(
+    throw new ApiError(
       typeof data?.detail === "string"
         ? data.detail
         : `Unable to resolve the scenario: ${response.statusText}`,
+      "Unable to resolve the scenario.",
     );
   }
   if (

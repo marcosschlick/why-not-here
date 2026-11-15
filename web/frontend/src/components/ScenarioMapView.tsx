@@ -5,6 +5,7 @@ import { interventionDescriptions } from "../utils/terrainAccess";
 import type { GridPoint } from "../utils/geometry";
 import { useMapCanvasFit } from "../utils/useMapCanvasFit";
 import { TacticalMapCanvas, TacticalMapLegend } from "./TacticalMapCanvas";
+import { useI18n } from "../i18n";
 
 type ScenarioMapViewProps = {
   mapData: MapData;
@@ -23,6 +24,7 @@ export function ScenarioMapView({
   alternativePathLabel,
   onRendered,
 }: ScenarioMapViewProps) {
+  const { language, t, n } = useI18n();
   const [wrapper, setWrapper] = useState<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [hoveredCell, setHoveredCell] = useState<GridPoint | null>(null);
@@ -65,24 +67,28 @@ export function ScenarioMapView({
   return (
     <div className="scenario-map-view">
       <div className="scenario-map-controls">
-        <div className="zoom-controls-bar" role="group" aria-label="Map zoom">
-          <span className="zoom-label">Zoom</span>
+        <div
+          className="zoom-controls-bar"
+          role="group"
+          aria-label={t("Map zoom")}
+        >
+          <span className="zoom-label">{t("Zoom")}</span>
           <button
             type="button"
             className="btn-zoom"
             onClick={() => setZoom(Math.max(1, zoomLevel / 2))}
             disabled={zoomLevel <= 1}
-            aria-label="Zoom out"
+            aria-label={t("Zoom out")}
           >
             &minus;
           </button>
-          <span className="zoom-value">{Math.round(zoomLevel * 100)}%</span>
+          <span className="zoom-value">{n(Math.round(zoomLevel * 100))}%</span>
           <button
             type="button"
             className="btn-zoom"
             onClick={() => setZoom(Math.min(maxZoom, zoomLevel * 2))}
             disabled={zoomLevel >= maxZoom}
-            aria-label="Zoom in"
+            aria-label={t("Zoom in")}
           >
             +
           </button>
@@ -92,7 +98,7 @@ export function ScenarioMapView({
             onClick={() => setZoom(1)}
             disabled={zoomLevel === 1}
           >
-            Fit
+            {t("Fit")}
           </button>
         </div>
       </div>
@@ -118,27 +124,33 @@ export function ScenarioMapView({
         <div className="cell-inspector">
           {hoveredCell ? (
             <span>
-              Cell [{hoveredCell[0]}, {hoveredCell[1]}] &bull; Terrain{" "}
+              {t("Cell [")}
+              {n(hoveredCell[0])}, {n(hoveredCell[1])}] &bull; {t("Terrain")}{" "}
               <strong>
-                {mapData.terrain[hoveredCell[0]]?.[hoveredCell[1]]}
+                {t(mapData.terrain[hoveredCell[0]]?.[hoveredCell[1]] ?? "")}
               </strong>{" "}
-              &bull; Elevation{" "}
+              &bull; {t("Elevation")}{" "}
               <strong>
-                {mapData.elevation[hoveredCell[0]]?.[hoveredCell[1]]?.toFixed(
-                  1,
+                {new Intl.NumberFormat(language, {
+                  minimumFractionDigits: 1,
+                  maximumFractionDigits: 1,
+                }).format(
+                  mapData.elevation[hoveredCell[0]]?.[hoveredCell[1]] ?? 0,
                 )}{" "}
                 m
               </strong>
-              {interventionDescriptions(modifications, hoveredCell).map(
-                (detail) => (
-                  <span className="intervention-inspection" key={detail}>
-                    {detail}
-                  </span>
-                ),
-              )}
+              {interventionDescriptions(
+                modifications,
+                hoveredCell,
+                language,
+              ).map((detail) => (
+                <span className="intervention-inspection" key={detail}>
+                  {detail}
+                </span>
+              ))}
             </span>
           ) : (
-            "Hover over grid to inspect cell attributes"
+            t("Hover over grid to inspect cell attributes")
           )}
         </div>
         <TacticalMapLegend

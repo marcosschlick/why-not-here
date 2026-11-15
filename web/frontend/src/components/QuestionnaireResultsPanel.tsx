@@ -2,6 +2,16 @@ import { useEffect, useId, useState } from "react";
 
 import { STUDY_GROUPS as GROUPS, GROUP_LABELS } from "../utils/studyGroups";
 import type { StudyGroup } from "../utils/studyGroups";
+import {
+  ApiError,
+  formatNumber as localizedNumber,
+  presentError,
+  requestedLanguage,
+  translate,
+} from "../i18n";
+
+const t = (message: string, variables?: Record<string, string | number>) =>
+  translate(requestedLanguage(), message, variables);
 type GroupValues<T> = Record<StudyGroup, T>;
 type ObservationCounts = {
   responses: number;
@@ -46,11 +56,18 @@ const LIKERT_LABELS = [
 ];
 
 function formatNumber(value: number, decimals = 1) {
-  return value.toLocaleString("en-US", { maximumFractionDigits: decimals });
+  return localizedNumber(requestedLanguage(), value, decimals);
 }
 
 function observationLabel(counts: ObservationCounts) {
-  return `${counts.responses} valid responses · ${counts.participants} participants · ${counts.missing} missing or invalid`;
+  return t(
+    "{responses} valid responses · {participants} participants · {missing} missing or invalid",
+    {
+      responses: formatNumber(counts.responses, 0),
+      participants: formatNumber(counts.participants, 0),
+      missing: formatNumber(counts.missing, 0),
+    },
+  );
 }
 
 function GroupBar({
@@ -69,7 +86,7 @@ function GroupBar({
   return (
     <div className="qa-results-group">
       <div className="qa-results-group-heading">
-        <strong>{GROUP_LABELS[group]}</strong>
+        <strong>{t(GROUP_LABELS[group])}</strong>
         <span className="qa-results-value">{label}</span>
       </div>
       {value !== null && (
@@ -91,20 +108,25 @@ function RatingDistribution({ item }: { item: RatingItem }) {
     <figure className="qa-rating-item" tabIndex={0} aria-labelledby={headingId}>
       <figcaption id={headingId}>
         <span className="qa-overline">
-          {item.source_scale} {item.source_item_number}
+          {item.source_scale} {formatNumber(item.source_item_number, 0)}
         </span>
-        <h5>{item.prompt}</h5>
-        <p className="qa-muted">{item.topic}</p>
+        <h5>{t(item.prompt)}</h5>
+        <p className="qa-muted">{t(item.topic)}</p>
       </figcaption>
       {GROUPS.map((group) => {
         const counts = item.groups[group];
         return (
           <div className="qa-results-group" key={group}>
             <div className="qa-results-group-heading">
-              <strong>{GROUP_LABELS[group]}</strong>
+              <strong>{t(GROUP_LABELS[group])}</strong>
               <span className="qa-muted">
-                {counts.responses} valid responses · {counts.missing} missing or
-                invalid
+                {t(
+                  "{responses} valid responses · {missing} missing or invalid",
+                  {
+                    responses: formatNumber(counts.responses, 0),
+                    missing: formatNumber(counts.missing, 0),
+                  },
+                )}
               </span>
             </div>
             {counts.responses > 0 ? (
@@ -118,11 +140,15 @@ function RatingDistribution({ item }: { item: RatingItem }) {
                 ))}
               </div>
             ) : (
-              <p className="qa-muted">No valid responses for this item.</p>
+              <p className="qa-muted">
+                {t("No valid responses for this item.")}
+              </p>
             )}
             <dl
               className="qa-rating-counts"
-              aria-label={`${GROUP_LABELS[group]} response distribution`}
+              aria-label={t("{group} response distribution", {
+                group: t(GROUP_LABELS[group]),
+              })}
             >
               {counts.distribution.map((count, index) => (
                 <div key={index}>
@@ -131,10 +157,12 @@ function RatingDistribution({ item }: { item: RatingItem }) {
                       className={`qa-rating-swatch qa-rating-level-${index + 1}`}
                       aria-hidden="true"
                     />
-                    Rating {index + 1}
+                    {t("Rating {number}", {
+                      number: formatNumber(index + 1, 0),
+                    })}
                   </dt>
                   <dd>
-                    {count}
+                    {formatNumber(count, 0)}
                     {counts.responses > 0 && (
                       <span>
                         {" "}
@@ -174,11 +202,13 @@ function PredictionCharts({
         aria-labelledby={accuracyId}
       >
         <figcaption id={accuracyId}>
-          <h4>Predictive accuracy / alignment with the system’s choice</h4>
+          <h4>
+            {t("Predictive accuracy / alignment with the system’s choice")}
+          </h4>
           <p className="qa-muted">
-            One measure: the proportion of valid predictions matching the
-            optimal route across the three unseen scenarios. Predictive accuracy
-            and alignment refer to this same proportion.
+            {t(
+              "One measure: the proportion of valid predictions matching the optimal route across the three unseen scenarios. Predictive accuracy and alignment refer to this same proportion.",
+            )}
           </p>
         </figcaption>
         {GROUPS.map((group) => {
@@ -191,14 +221,14 @@ function PredictionCharts({
               maximum={1}
               label={
                 values.proportion === null
-                  ? "No valid responses"
-                  : `${formatNumber(values.proportion * 100)}% · ${values.correct} / ${values.responses}`
+                  ? t("No valid responses")
+                  : `${formatNumber(values.proportion * 100)}% · ${formatNumber(values.correct, 0)} / ${formatNumber(values.responses, 0)}`
               }
               detail={observationLabel(values)}
             />
           );
         })}
-        <p className="qa-results-axis">Scale: 0–100%</p>
+        <p className="qa-results-axis">{t("Scale: 0–100%")}</p>
       </figure>
       <figure
         className="qa-results-chart"
@@ -206,10 +236,11 @@ function PredictionCharts({
         aria-labelledby={confidenceId}
       >
         <figcaption id={confidenceId}>
-          <h4>Mean prediction confidence</h4>
+          <h4>{t("Mean prediction confidence")}</h4>
           <p className="qa-muted">
-            Self-reported confidence in predicting the system’s choice, from 0
-            to 100.
+            {t(
+              "Self-reported confidence in predicting the system’s choice, from 0 to 100.",
+            )}
           </p>
         </figcaption>
         {GROUPS.map((group) => {
@@ -222,14 +253,14 @@ function PredictionCharts({
               maximum={100}
               label={
                 values.mean === null
-                  ? "No valid responses"
+                  ? t("No valid responses")
                   : `${formatNumber(values.mean)} / 100`
               }
               detail={observationLabel(values)}
             />
           );
         })}
-        <p className="qa-results-axis">Scale: 0–100</p>
+        <p className="qa-results-axis">{t("Scale: 0–100")}</p>
       </figure>
       <figure
         className="qa-results-chart"
@@ -237,11 +268,11 @@ function PredictionCharts({
         aria-labelledby={timeId}
       >
         <figcaption id={timeId}>
-          <h4>Median prediction decision time</h4>
+          <h4>{t("Median prediction decision time")}</h4>
           <p className="qa-muted">
-            Foreground time from scenario presentation to Confirm route,
-            excluding confidence, justification, hidden-tab intervals and time
-            away.
+            {t(
+              "Foreground time from scenario presentation to Confirm route, excluding confidence, justification, hidden-tab intervals and time away.",
+            )}
           </p>
         </figcaption>
         {GROUPS.map((group) => {
@@ -254,7 +285,7 @@ function PredictionCharts({
               maximum={maximumTime}
               label={
                 values.median_seconds === null
-                  ? "No valid responses"
+                  ? t("No valid responses")
                   : `${formatNumber(values.median_seconds, 3)} s`
               }
               detail={observationLabel(values)}
@@ -262,7 +293,8 @@ function PredictionCharts({
           );
         })}
         <p className="qa-results-axis">
-          Shared scale: 0–{formatNumber(maximumTime, 3)} seconds
+          {t("Shared scale: 0–")}
+          {formatNumber(maximumTime, 3)} {t("seconds")}
         </p>
       </figure>
     </div>
@@ -293,10 +325,11 @@ export function QuestionnaireResultsPanel({
       .then(async (response) => {
         const body = await response.json().catch(() => null);
         if (!response.ok || body === null)
-          throw new Error(
+          throw new ApiError(
             typeof body?.detail === "string"
               ? body.detail
               : "Unable to load questionnaire results.",
+            "Unable to load questionnaire results.",
           );
         return body as QuestionnaireResults;
       })
@@ -306,9 +339,11 @@ export function QuestionnaireResultsPanel({
       .catch((reason: unknown) => {
         if (!controller.signal.aborted)
           setError(
-            reason instanceof Error
-              ? reason.message
-              : "Unable to load questionnaire results.",
+            presentError(
+              requestedLanguage(),
+              reason,
+              "Unable to load questionnaire results.",
+            ),
           );
       })
       .finally(() => {
@@ -334,10 +369,11 @@ export function QuestionnaireResultsPanel({
       );
       if (!response.ok) {
         const data = await response.json().catch(() => null);
-        throw new Error(
+        throw new ApiError(
           typeof data?.detail === "string"
             ? data.detail
             : "Unable to export responses.",
+          "Unable to export responses.",
         );
       }
       const url = URL.createObjectURL(await response.blob());
@@ -350,9 +386,11 @@ export function QuestionnaireResultsPanel({
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (reason) {
       setExportError(
-        reason instanceof Error
-          ? reason.message
-          : "Unable to export responses.",
+        presentError(
+          requestedLanguage(),
+          reason,
+          "Unable to export responses.",
+        ),
       );
     } finally {
       setExporting(false);
@@ -362,11 +400,11 @@ export function QuestionnaireResultsPanel({
   return (
     <section
       className="qa-control-group qa-participation-summary qa-results-panel"
-      aria-label="Participation and results"
+      aria-label={t("Participation and results")}
       aria-busy={loading}
     >
       <div className="qa-heading">
-        <h3>Participation</h3>
+        <h3>{t("Participation")}</h3>
         <div className="qa-actions">
           <button
             type="button"
@@ -374,7 +412,7 @@ export function QuestionnaireResultsPanel({
             disabled={exporting}
             onClick={() => void downloadCsv()}
           >
-            {exporting ? "Exporting…" : "Export completed responses (CSV)"}
+            {t(exporting ? "Exporting…" : "Export completed responses (CSV)")}
           </button>
           <button
             type="button"
@@ -382,7 +420,7 @@ export function QuestionnaireResultsPanel({
             onClick={refresh}
             disabled={loading}
           >
-            Refresh results
+            {t("Refresh results")}
           </button>
           <button
             type="button"
@@ -391,7 +429,7 @@ export function QuestionnaireResultsPanel({
             aria-controls={contentId}
             onClick={() => setExpanded((current) => !current)}
           >
-            {expanded ? "Hide results" : "View results"}
+            {t(expanded ? "Hide results" : "View results")}
           </button>
         </div>
       </div>
@@ -402,26 +440,27 @@ export function QuestionnaireResultsPanel({
       )}
       <dl className="qa-participation-counts">
         <div className="qa-completed-count">
-          <dt>Completed</dt>
-          <dd>{summary?.completed ?? "—"}</dd>
+          <dt>{t("Completed")}</dt>
+          <dd>{summary ? formatNumber(summary.completed, 0) : "—"}</dd>
         </div>
         <div>
-          <dt>In progress</dt>
-          <dd>{summary?.in_progress ?? "—"}</dd>
+          <dt>{t("In progress")}</dt>
+          <dd>{summary ? formatNumber(summary.in_progress, 0) : "—"}</dd>
         </div>
         <div>
-          <dt>Total started</dt>
-          <dd>{summary?.total ?? "—"}</dd>
+          <dt>{t("Total started")}</dt>
+          <dd>{summary ? formatNumber(summary.total, 0) : "—"}</dd>
         </div>
       </dl>
       {summary && (
         <p className="qa-results-cohort">
-          Completed by group:{" "}
+          {t("Completed by group:")}{" "}
           {GROUPS.map((group, index) => (
             <span key={group}>
               {index > 0 && " · "}
               <strong>
-                {GROUP_LABELS[group]} {summary.completed_by_group[group]}
+                {t(GROUP_LABELS[group])}{" "}
+                {formatNumber(summary.completed_by_group[group], 0)}
               </strong>
             </span>
           ))}
@@ -429,7 +468,7 @@ export function QuestionnaireResultsPanel({
       )}
       {loading && (
         <p className="qa-muted" role="status">
-          Loading participation and results...
+          {t("Loading participation and results...")}
         </p>
       )}
       {error && (
@@ -437,8 +476,8 @@ export function QuestionnaireResultsPanel({
           <p>
             {error}{" "}
             {results
-              ? "Showing the previous results. Refresh to try again."
-              : "No results have been loaded."}
+              ? t("Showing the previous results. Refresh to try again.")
+              : t("No results have been loaded.")}
           </p>
           <button
             type="button"
@@ -446,7 +485,7 @@ export function QuestionnaireResultsPanel({
             onClick={refresh}
             disabled={loading}
           >
-            Try again
+            {t("Try again")}
           </button>
         </div>
       )}
@@ -454,39 +493,41 @@ export function QuestionnaireResultsPanel({
         {results && (
           <>
             <div className="qa-results-heading">
-              <h3>Study results</h3>
+              <h3>{t("Study results")}</h3>
               <p className="qa-muted">
-                Completed participations only. These descriptive comparisons do
-                not establish statistical significance, objective comprehension
-                or causal improvement. Sample sizes are shown for each measure.
+                {t(
+                  "Completed participations only. These descriptive comparisons do not establish statistical significance, objective comprehension or causal improvement. Sample sizes are shown for each measure.",
+                )}
               </p>
             </div>
             {results.participation.completed === 0 ? (
               <p className="qa-results-empty">
-                No completed participations yet. In-progress responses are
-                excluded from the analyses.
+                {t(
+                  "No completed participations yet. In-progress responses are excluded from the analyses.",
+                )}
               </p>
             ) : (
               <>
                 <PredictionCharts predictions={results.predictions} />
                 <p className="qa-muted">
-                  Confidence means and decision-time medians pool valid
-                  prediction responses, rather than participant averages. Each
-                  participant contributes up to three repeated observations.
-                  Decision time is not reading time or a measure of attention.
+                  {t(
+                    "Confidence means and decision-time medians pool valid prediction responses, rather than participant averages. Each participant contributes up to three repeated observations. Decision time is not reading time or a measure of attention.",
+                  )}
                 </p>
                 <section
                   className="qa-results-ratings"
-                  aria-label="Adapted explanation questionnaire results"
+                  aria-label={t("Adapted explanation questionnaire results")}
                 >
-                  <h4>Adapted route explanation questionnaire</h4>
+                  <h4>{t("Adapted route explanation questionnaire")}</h4>
                   <p className="qa-muted">
-                    Distribution for each of the 14 selected ESS, SCS and xHIS
-                    items. Percentages use valid responses to that item in each
-                    group. The custom instrument has not been psychometrically
-                    validated; no overall score is calculated.
+                    {t(
+                      "Distribution for each of the 14 selected ESS, SCS and xHIS items. Percentages use valid responses to that item in each group. The custom instrument has not been psychometrically validated; no overall score is calculated.",
+                    )}
                   </p>
-                  <ol className="qa-rating-legend" aria-label="Response scale">
+                  <ol
+                    className="qa-rating-legend"
+                    aria-label={t("Response scale")}
+                  >
                     {LIKERT_LABELS.map((label, index) => (
                       <li key={label}>
                         <span
@@ -494,7 +535,8 @@ export function QuestionnaireResultsPanel({
                           aria-hidden="true"
                         />
                         <span>
-                          <strong>{index + 1}</strong> · {label}
+                          <strong>{formatNumber(index + 1, 0)}</strong> ·{" "}
+                          {t(label)}
                         </span>
                       </li>
                     ))}

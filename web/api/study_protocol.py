@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from src import config
 from src.visual.appearance import resolve_map_appearance
+from web.api.presentation import saved_scenario_justification
 from web.api.rating_instrument import INSTRUMENT_TITLE, QUESTION_COUNT, RATING_ITEMS
 
 PROTOCOL_VERSION = "route-study-v4"
@@ -242,7 +243,9 @@ def resolve_scenario_terrain_colors(configuration):
     return config.TERRAIN_COLORS
 
 
-def serialize_step(questions, index, submission_key, group, scenario_ids):
+def serialize_step(
+    questions, index, submission_key, group, scenario_ids, language="en"
+):
     steps = study_steps(questions, scenario_ids)
     if index < 0 or index > len(steps):
         raise HTTPException(status_code=422, detail="Invalid study step")
@@ -296,6 +299,10 @@ def serialize_step(questions, index, submission_key, group, scenario_ids):
         step["justification"] = data[
             "cost_baseline_text" if group == "cost_based" else "explanation_text"
         ]
+        if language == "pt-BR":
+            step["presentation"] = {
+                "justification": saved_scenario_justification(data, group)
+            }
         step["scenario"]["route_order"] = order
         if group == "contrastive_visual":
             step["scenario"]["show_explanation_map"] = True

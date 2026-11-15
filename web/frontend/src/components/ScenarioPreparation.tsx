@@ -3,6 +3,7 @@ import { fetchMapProfiles, solveScenarioISP } from "../services/api";
 import type { LastResult, MapData, MapProfile, SystemConfig } from "../types";
 import { validateDrawingRoute } from "../utils/validateRoute";
 import { RouteCanvas } from "./RouteCanvas";
+import { ApiError, FrontendError, presentError, useI18n } from "../i18n";
 
 type Candidate = {
   map: MapData;
@@ -24,10 +25,11 @@ async function request<T>(path: string, body: unknown): Promise<T> {
   });
   const data = await response.json().catch(() => null);
   if (!response.ok || data === null) {
-    throw new Error(
+    throw new ApiError(
       typeof data?.detail === "string"
         ? data.detail
         : "Request failed. Saved scenarios are preserved.",
+      "Request failed. Saved scenarios are preserved.",
     );
   }
   return data as T;
@@ -64,6 +66,7 @@ export function ScenarioPreparation({
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
 }) {
+  const { language, t, n } = useI18n();
   const [profiles, setProfiles] = useState<MapProfile[]>([]);
   const [size, setSize] = useState(
     () =>
@@ -78,7 +81,9 @@ export function ScenarioPreparation({
   const [error, setError] = useState("");
   const protocolSaved = initial.protocolComplete;
   const [retryPending, setRetryPending] = useState(false);
-  const [solveStatuses, setSolveStatuses] = useState<Record<number, "pending" | "solving" | "saved" | "failed">>({});
+  const [solveStatuses, setSolveStatuses] = useState<
+    Record<number, "pending" | "solving" | "saved" | "failed">
+  >({});
 
   useEffect(() => {
     let mounted = true;
@@ -87,12 +92,15 @@ export function ScenarioPreparation({
         if (mounted) setProfiles(data);
       })
       .catch((reason: Error) => {
-        if (mounted) setError(reason.message);
+        if (mounted)
+          setError(
+            presentError(language, reason, "Unable to load map profiles."),
+          );
       });
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [language]);
 
   useEffect(() => {
     onDirtyChange(candidates.length > 0);
@@ -110,7 +118,9 @@ export function ScenarioPreparation({
     const [height, width] = size.split("x").map(Number);
     while (saved + next.length < 6 && failures < 6) {
       setMessage(
-        `Generating map ${saved + next.length + 1} of 6. Monolithic ISP · No reduction.`,
+        t("Generating map {number} of 6. Monolithic ISP · No reduction.", {
+          number: n(saved + next.length + 1),
+        }),
       );
       try {
         const map = await request<MapData>(
@@ -123,20 +133,28 @@ export function ScenarioPreparation({
         failures = 0;
       } catch (reason) {
         failures += 1;
-        lastFailure =
-          reason instanceof Error ? reason.message : "Map generation failed.";
+        lastFailure = presentError(language, reason, "Map generation failed.");
         setError(lastFailure);
       }
     }
     if (failures >= 6) {
       setError(
-        `Preparation paused after six consecutive generation failures. ${lastFailure} Saved scenarios and reserved seeds are preserved. Continue to try new seeds, or return to the questionnaire.`,
+        t(
+          "Preparation paused after six consecutive generation failures. {error} Saved scenarios and reserved seeds are preserved. Continue to try new seeds, or return to the questionnaire.",
+          { error: lastFailure },
+        ),
       );
     } else {
       setError("");
     }
     setMessage(
-      `${saved} of 6 scenarios saved. ${next.length} maps require manual routes.`,
+      t(
+        "{saved} of 6 scenarios saved. {remaining} maps require manual routes.",
+        {
+          saved: n(saved),
+          remaining: n(next.length),
+        },
+      ),
     );
     setActive(0);
     return next;
@@ -163,10 +181,11 @@ export function ScenarioPreparation({
     );
     if (!response.ok) {
       const data = await response.json().catch(() => null);
-      throw new Error(
+      throw new ApiError(
         typeof data?.detail === "string"
           ? data.detail
           : "Unable to save the protocol. Retry without solving again.",
+        "Unable to save the protocol. Retry without solving again.",
       );
     }
     await onComplete();
@@ -185,8 +204,8 @@ export function ScenarioPreparation({
       if (invalid >= 0) setActive(invalid);
       setError(
         invalid >= 0
-          ? routeError(candidates[invalid])!
-          : "Generate all remaining maps before solving.",
+          ? t(routeError(candidates[invalid])!)
+          : t("Generate all remaining maps before solving."),
       );
       return;
     }
@@ -194,7 +213,14 @@ export function ScenarioPreparation({
     setError("");
     setRetryPending(false);
     const pending = [...candidates];
-    setSolveStatuses(Object.fromEntries(pending.map((candidate) => [candidate.map.config.MAP_DEFAULT_SEED, "pending"])));
+    setSolveStatuses(
+      Object.fromEntries(
+        pending.map((candidate) => [
+          candidate.map.config.MAP_DEFAULT_SEED,
+          "pending",
+        ]),
+      ),
+    );
     const saved = [...savedIds];
     const remaining: Candidate[] = [];
     try {
@@ -205,14 +231,20 @@ export function ScenarioPreparation({
         setActive(index);
         setSolveStatuses((previous) => ({ ...previous, [seed]: "solving" }));
         setMessage(
-          `Solving seed ${map.generation?.base_seed ?? map.config.MAP_DEFAULT_SEED}. ${saved.length} of 6 saved.`,
+          t("Solving seed {seed}. {saved} of 6 saved.", {
+            seed: n(map.generation?.base_seed ?? map.config.MAP_DEFAULT_SEED),
+            saved: n(saved.length),
+          }),
         );
         let result = candidate.result;
         if (!result) {
           try {
             const response = await solveScenarioISP(questionnaireId, map, path);
             if (response.result.success === false) {
-              setSolveStatuses((previous) => ({ ...previous, [seed]: "failed" }));
+              setSolveStatuses((previous) => ({
+                ...previous,
+                [seed]: "failed",
+              }));
               continue;
             }
             result = response.result;
@@ -222,10 +254,10 @@ export function ScenarioPreparation({
             setActive(0);
             setRetryPending(true);
             setMessage(
-              "Resolution paused. Pending maps and routes are preserved.",
+              t("Resolution paused. Pending maps and routes are preserved."),
             );
-            throw new Error(
-              `${reason instanceof Error ? reason.message : "Unable to contact the API."} Retry the pending scenarios without redrawing their routes.`,
+            throw new FrontendError(
+              `${presentError(language, reason, "Unable to contact the API.")} ${t("Retry the pending scenarios without redrawing their routes.")}`,
               { cause: reason },
             );
           }
@@ -258,8 +290,8 @@ export function ScenarioPreparation({
           setCandidates(remaining);
           setActive(0);
           setRetryPending(true);
-          throw new Error(
-            `${reason instanceof Error ? reason.message : "Saving failed."} Retry to save this successful result without solving it again.`,
+          throw new FrontendError(
+            `${presentError(language, reason, "Saving failed.")} ${t("Retry to save this successful result without solving it again.")}`,
             { cause: reason },
           );
         }
@@ -272,9 +304,7 @@ export function ScenarioPreparation({
       }
     } catch (reason) {
       setSolveStatuses({});
-      setError(
-        reason instanceof Error ? reason.message : "Preparation failed.",
-      );
+      setError(presentError(language, reason, "Preparation failed."));
     } finally {
       setBusy(false);
     }
@@ -286,9 +316,7 @@ export function ScenarioPreparation({
     try {
       await saveProtocol();
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Protocol saving failed.",
-      );
+      setError(presentError(language, reason, "Protocol saving failed."));
     } finally {
       setBusy(false);
     }
@@ -299,14 +327,14 @@ export function ScenarioPreparation({
     candidates.length > 0 &&
     (retryPending || savedIds.length + candidates.length === 6) &&
     candidates.every((candidate) => candidate.result || !routeError(candidate));
-  const solveLabel = retryPending
-    ? "Retry pending scenarios"
-    : "Solve all pending scenarios";
+  const solveLabel = t(
+    retryPending ? "Retry pending scenarios" : "Solve all pending scenarios",
+  );
   function nextMap() {
     if (!selected) return;
     const invalid = selected.result ? null : routeError(selected);
     if (invalid) {
-      setError(invalid);
+      setError(t(invalid));
       return;
     }
     setError("");
@@ -318,8 +346,8 @@ export function ScenarioPreparation({
     <section className="qa-panel qa-preparation" aria-busy={busy}>
       <div className="qa-heading">
         <div>
-          <span className="qa-overline">SCENARIO PREPARATION</span>
-          <h2>Six successful scenarios</h2>
+          <span className="qa-overline">{t("SCENARIO PREPARATION")}</span>
+          <h2>{t("Six successful scenarios")}</h2>
         </div>
         <button
           type="button"
@@ -327,21 +355,22 @@ export function ScenarioPreparation({
           onClick={onBack}
           disabled={busy}
         >
-          Back to questionnaire
+          {t("Back to questionnaire")}
         </button>
       </div>
       <p>
-        Generate six maps, draw each alternative route manually, then solve the
-        batch. Failed scenarios are replaced using a new seed. Successful
-        scenarios are saved immediately.
+        {t(
+          "Generate six maps, draw each alternative route manually, then solve the batch. Failed scenarios are replaced using a new seed. Successful scenarios are saved immediately.",
+        )}
       </p>
       <p className="qa-muted">
-        Random unique seeds · Monolithic ISP · No reduction. Unresolved maps and
-        drawings are temporary; you will be warned before leaving.
+        {t(
+          "Random unique seeds · Monolithic ISP · No reduction. Unresolved maps and drawings are temporary; you will be warned before leaving.",
+        )}
       </p>
       <div className="qa-form">
         <label>
-          Grid size
+          {t("Grid size")}{" "}
           <select
             value={size}
             disabled={busy || fixedSize}
@@ -362,7 +391,10 @@ export function ScenarioPreparation({
         </label>
       </div>
       <p role="status">
-        {message || `${savedIds.length} / 6 successful scenarios saved.`}
+        {message ||
+          t("{saved} / 6 successful scenarios saved.", {
+            saved: n(savedIds.length),
+          })}
       </p>
       {error && (
         <p className="qa-error" role="alert">
@@ -371,11 +403,13 @@ export function ScenarioPreparation({
       )}
       {savedIds.length + candidates.length < 6 && (
         <button type="button" onClick={() => void generate()} disabled={busy}>
-          {busy
-            ? "Generating…"
-            : candidates.length || fixedSize
-              ? "Generate remaining maps"
-              : "Generate six maps"}
+          {t(
+            busy
+              ? "Generating…"
+              : candidates.length || fixedSize
+                ? "Generate remaining maps"
+                : "Generate six maps",
+          )}
         </button>
       )}
       {selected && (
@@ -397,23 +431,43 @@ export function ScenarioPreparation({
           onSolve={nextMap}
           onPrevMap={active > 0 ? () => setActive(active - 1) : undefined}
           solveButtonText={
-            active < candidates.length - 1 ? "Save Route & Next Map →" : solveLabel
+            active < candidates.length - 1
+              ? t("Save Route & Next Map →")
+              : solveLabel
           }
           batchStepper={
             <div className="batch-stepper-bar">
               <div className="batch-stepper-label">
                 <span className="batch-stepper-title">
-                  Batch Route Setup - Map {active + 1} of {candidates.length}
+                  {t("Batch Route Setup - Map {number} of {total}", {
+                    number: n(active + 1),
+                    total: n(candidates.length),
+                  })}
                 </span>
-                <span className="batch-stepper-sub">Define an alternative route for each map before solving.</span>
+                <span className="batch-stepper-sub">
+                  {t(
+                    "Define an alternative route for each map before solving.",
+                  )}
+                </span>
               </div>
               <div className="batch-steps-list">
                 {candidates.map((candidate, index) => {
-                  const ready = Boolean(candidate.result) || !routeError(candidate);
-                  const status = solveStatuses[candidate.map.config.MAP_DEFAULT_SEED];
+                  const ready =
+                    Boolean(candidate.result) || !routeError(candidate);
+                  const status =
+                    solveStatuses[candidate.map.config.MAP_DEFAULT_SEED];
                   const label = status
-                    ? { pending: "Pending", solving: "Solving", saved: "Saved", failed: "Failed" }[status]
-                    : candidate.result ? "Ready to save" : ready ? "Ready" : "Pending";
+                    ? {
+                        pending: "Pending",
+                        solving: "Solving",
+                        saved: "Saved",
+                        failed: "Failed",
+                      }[status]
+                    : candidate.result
+                      ? "Ready to save"
+                      : ready
+                        ? "Ready"
+                        : "Pending";
                   return (
                     <button
                       type="button"
@@ -423,9 +477,15 @@ export function ScenarioPreparation({
                       disabled={busy}
                       onClick={() => setActive(index)}
                     >
-                      <span>Seed {candidate.map.config.MAP_DEFAULT_SEED}</span>
-                      <span className={`batch-step-status-pill ${status ?? (ready ? "ready" : "pending")}`}>
-                        {label}
+                      <span>
+                        {t("Seed {seed}", {
+                          seed: n(candidate.map.config.MAP_DEFAULT_SEED),
+                        })}
+                      </span>
+                      <span
+                        className={`batch-step-status-pill ${status ?? (ready ? "ready" : "pending")}`}
+                      >
+                        {t(label)}
                       </span>
                     </button>
                   );
@@ -433,9 +493,9 @@ export function ScenarioPreparation({
               </div>
             </div>
           }
-          busyButtonText={
-            selected.result ? "Result awaiting save" : "Preparing scenarios…"
-          }
+          busyButtonText={t(
+            selected.result ? "Result awaiting save" : "Preparing scenarios…",
+          )}
         />
       )}
       {selected?.result && (
@@ -444,7 +504,7 @@ export function ScenarioPreparation({
           onClick={() => void solve()}
           disabled={busy || !allReady}
         >
-          {busy ? "Preparing scenarios…" : solveLabel}
+          {busy ? t("Preparing scenarios…") : solveLabel}
         </button>
       )}
       {savedIds.length === 6 && !protocolSaved && (
@@ -453,7 +513,7 @@ export function ScenarioPreparation({
           disabled={busy}
           onClick={() => void retryProtocol()}
         >
-          Retry study setup
+          {t("Retry study setup")}
         </button>
       )}
     </section>

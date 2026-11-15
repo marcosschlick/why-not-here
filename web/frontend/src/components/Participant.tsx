@@ -18,6 +18,7 @@ import type {
 import type { StudyGroup } from "../utils/studyGroups";
 import { ScenarioMapView } from "./ScenarioMapView";
 import { Brand } from "./Brand";
+import { useI18n, presentError } from "../i18n";
 import "./questionnaire-admin.css";
 
 type Point = [number, number];
@@ -41,6 +42,7 @@ type StudyStep = {
   scenario_number?: number;
   scenario?: Scenario;
   justification?: string;
+  presentation?: { justification: string };
   instrument?: string;
   source?: string;
   item_number?: number;
@@ -110,6 +112,7 @@ function RouteOptions({
   disabled: boolean;
   onReady: () => void;
 }) {
+  const { t } = useI18n();
   const map = useMemo(() => scenarioMap(scenario), [scenario]);
   const root = useRef<HTMLDivElement>(null);
   const rendered = useRef(new Set<number>());
@@ -149,12 +152,12 @@ function RouteOptions({
               disabled={disabled}
               required
             />
-            Route {index === 0 ? "A" : "B"}
+            {t("Route {name}", { name: index === 0 ? "A" : "B" })}
           </label>
           <ScenarioMapView
             mapData={map}
             userPath={path}
-            alternativePathLabel="Route"
+            alternativePathLabel={t("Route")}
             onRendered={index === 0 ? firstRendered : secondRendered}
           />
         </div>
@@ -174,15 +177,16 @@ function ConfidenceField({
   attempted: boolean;
   prediction: boolean;
 }) {
+  const { t, n } = useI18n();
   const invalid = attempted && value === null;
   return (
     <div className="qa-assessment-field">
       <label htmlFor="confidence">
         {prediction
-          ? "Confidence in your prediction of the system’s choice (0 to 100)"
-          : "Confidence in your choice (0 to 100)"}
+          ? t("Confidence in your prediction of the system’s choice (0 to 100)")
+          : t("Confidence in your choice (0 to 100)")}
         <span className="qa-confidence-value">
-          {value === null ? "Not selected" : value}
+          {value === null ? t("Not selected") : n(value)}
         </span>
         <input
           id="confidence"
@@ -211,18 +215,18 @@ function ConfidenceField({
           }}
           aria-invalid={invalid}
           aria-required="true"
-          aria-valuetext={value === null ? "Not selected" : undefined}
+          aria-valuetext={value === null ? t("Not selected") : undefined}
           aria-describedby={
             invalid ? "confidence-help confidence-error" : "confidence-help"
           }
         />
       </label>
       <p id="confidence-help" className="qa-muted">
-        0 means no confidence; 100 means complete confidence.
+        {t("0 means no confidence; 100 means complete confidence.")}
       </p>
       {invalid && (
         <p id="confidence-error" className="qa-field-error">
-          Select your confidence level.
+          {t("Select your confidence level.")}
         </p>
       )}
     </div>
@@ -240,6 +244,7 @@ function ReasonField({
   onChange: (value: string) => void;
   attempted: boolean;
 }) {
+  const { t, n } = useI18n();
   const length = Array.from(value.trim()).length;
   const invalid = attempted && (length < 20 || length > 1000);
   return (
@@ -262,11 +267,11 @@ function ReasonField({
       </label>
       {invalid && (
         <p id="reason-error" className="qa-field-error">
-          Enter 20 to 1000 characters.
+          {t("Enter 20 to 1000 characters.")}
         </p>
       )}
       <span id="reason-count" className="qa-text-counter">
-        {length} / 1000 characters (minimum 20)
+        {t("{length} / 1000 characters (minimum 20)", { length: n(length) })}
       </span>
     </div>
   );
@@ -287,6 +292,7 @@ function StudyForm({
   load: (index?: number) => Promise<Study>;
   accept: (study: Study) => void;
 }) {
+  const { language, t, n } = useI18n();
   const step = study.step;
   const [busy, setBusy] = useState(false);
   const [attempted, setAttempted] = useState(false);
@@ -321,12 +327,22 @@ function StudyForm({
       : null;
   const routeConfirmed = progress.progress.route_confirmed;
   const phaseLabel = !step
-    ? "Ready to submit"
+    ? t("Ready to submit")
     : step.type === "likert"
-      ? `Explanation evaluation ${step.item_number} of ${step.item_total}`
+      ? t("Explanation evaluation {number} of {total}", {
+          number: n(step.item_number ?? 0),
+          total: n(step.item_total ?? 0),
+        })
       : step.type === "route_prediction"
-        ? `Prediction ${step.scenario_number} of 3`
-        : `${step.type === "explanation" ? "Explanation" : "Route selection"} ${step.scenario_number} of 3`;
+        ? t("Prediction {number} of 3", {
+            number: n(step.scenario_number ?? 0),
+          })
+        : t("{phase} {number} of 3", {
+            phase: t(
+              step.type === "explanation" ? "Explanation" : "Route selection",
+            ),
+            number: n(step.scenario_number ?? 0),
+          });
 
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
@@ -369,9 +385,7 @@ function StudyForm({
         fieldsRef.current?.focus();
       } catch (failure) {
         setError(
-          failure instanceof Error
-            ? failure.message
-            : "Unable to confirm your route.",
+          presentError(language, failure, "Unable to confirm your route."),
         );
       } finally {
         setBusy(false);
@@ -410,7 +424,7 @@ function StudyForm({
         await progress.flush();
         const next = await readResponse<Study>(
           await fetch(
-            `/api/participate/${encodeURIComponent(token)}/steps/${step.index}/confirm`,
+            `/api/participate/${encodeURIComponent(token)}/steps/${step.index}/confirm${language === "pt-BR" ? "?lang=pt-BR" : ""}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -428,11 +442,7 @@ function StudyForm({
     } catch (failure) {
       if (failure instanceof RequestError && failure.status === 410)
         setClosed(true);
-      setError(
-        failure instanceof Error
-          ? failure.message
-          : "Unable to save this step.",
-      );
+      setError(presentError(language, failure, "Unable to save this step."));
     } finally {
       setBusy(false);
       progress.resume();
@@ -446,9 +456,7 @@ function StudyForm({
       accept(await load(study.current_step));
     } catch (failure) {
       setError(
-        failure instanceof Error
-          ? failure.message
-          : "Unable to reload this questionnaire.",
+        presentError(language, failure, "Unable to reload this questionnaire."),
       );
     } finally {
       setBusy(false);
@@ -459,8 +467,8 @@ function StudyForm({
   if (closed)
     return (
       <section className="qa-panel">
-        <h2>Questionnaire closed</h2>
-        <p>This questionnaire is no longer accepting answers.</p>
+        <h2>{t("Questionnaire closed")}</h2>
+        <p>{t("This questionnaire is no longer accepting answers.")}</p>
       </section>
     );
   return (
@@ -469,9 +477,9 @@ function StudyForm({
         <h2>{study.title}</h2>
         <p>{study.description}</p>
         <p className="qa-muted">
-          Progress is saved as you work. To resume later, return to this address
-          and enter the same name, email and individual key. Confirmed steps
-          cannot be revisited.
+          {t(
+            "Progress is saved as you work. To resume later, return to this address and enter the same name, email and individual key. Confirmed steps cannot be revisited.",
+          )}
         </p>
       </section>
       {error && (
@@ -483,7 +491,7 @@ function StudyForm({
             disabled={busy}
             onClick={() => void reload()}
           >
-            Reload saved progress
+            {t("Reload saved progress")}
           </button>
         </div>
       )}
@@ -501,13 +509,15 @@ function StudyForm({
                   else void progress.flush().catch(() => undefined);
                 }}
               >
-                {progress.conflict ? "Reload saved progress" : "Retry saving"}
+                {t(
+                  progress.conflict ? "Reload saved progress" : "Retry saving",
+                )}
               </button>
             </>
           ) : progress.saved ? (
-            "Progress saved."
+            t("Progress saved.")
           ) : (
-            "Saving progress..."
+            t("Saving progress...")
           )}
         </div>
       )}
@@ -519,15 +529,17 @@ function StudyForm({
         <section className="qa-panel" aria-busy={busy}>
           <p className="qa-muted">{phaseLabel}</p>
           <h2 ref={heading} tabIndex={-1}>
-            {step?.prompt || "Submit your completed questionnaire"}
+            {step ? t(step.prompt) : t("Submit your completed questionnaire")}
           </h2>
           {step?.type === "likert" && (
             <>
-              <p>{step.instrument}</p>
+              <p>{t(step.instrument ?? "")}</p>
               <p className="qa-muted">
-                Rate the explanations received in the first three scenarios.{" "}
-                {step.source_scale} {step.source_item_number} · {step.topic}.{" "}
-                {step.source}.
+                {t(
+                  "Rate the explanations received in the first three scenarios.",
+                )}{" "}
+                {step.source_scale} {n(step.source_item_number ?? 0)} ·{" "}
+                {t(step.topic ?? "")}. {step.source}.
               </p>
             </>
           )}
@@ -540,11 +552,15 @@ function StudyForm({
               <>
                 <p className="qa-muted">
                   {routeConfirmed
-                    ? "Your route is confirmed. Complete the fields below to continue."
-                    : "Choose route A or B. You may change your choice until you confirm it."}
+                    ? t(
+                        "Your route is confirmed. Complete the fields below to continue.",
+                      )
+                    : t(
+                        "Choose route A or B. You may change your choice until you confirm it.",
+                      )}
                 </p>
                 {attempted && choice === null && (
-                  <p className="qa-field-error">Choose route A or B.</p>
+                  <p className="qa-field-error">{t("Choose route A or B.")}</p>
                 )}
                 <RouteOptions
                   scenario={step.scenario}
@@ -567,7 +583,7 @@ function StudyForm({
                     />
                     {step.type === "route_assessment" && (
                       <ReasonField
-                        prompt="Why did you choose this route?"
+                        prompt={t("Why did you choose this route?")}
                         value={reason}
                         onChange={(value) => editFields({ reason: value })}
                         attempted={attempted}
@@ -580,7 +596,7 @@ function StudyForm({
             {step?.type === "likert" && (
               <div className="qa-likert-group">
                 {attempted && rating === null && (
-                  <p className="qa-field-error">Select one rating.</p>
+                  <p className="qa-field-error">{t("Select one rating.")}</p>
                 )}
                 {LIKERT_LABELS.map((label, index) => (
                   <label className="qa-option" key={label}>
@@ -591,7 +607,7 @@ function StudyForm({
                       onChange={() => progress.update({ value: index + 1 })}
                       required
                     />
-                    {index + 1}. {label}
+                    {n(index + 1)}. {t(label)}
                   </label>
                 ))}
               </div>
@@ -599,17 +615,26 @@ function StudyForm({
             {step?.type === "explanation" && step.scenario && (
               <>
                 <div className="qa-justification">
-                  <p>{step.justification}</p>
                   <p>
-                    Route{" "}
-                    {step.scenario.route_order?.indexOf("optimal") === 0
-                      ? "A"
-                      : "B"}{" "}
-                    is the system’s optimal route; route{" "}
-                    {step.scenario.route_order?.indexOf("alternative") === 0
-                      ? "A"
-                      : "B"}{" "}
-                    is the alternative.
+                    {language === "pt-BR"
+                      ? step.presentation?.justification
+                      : step.justification}
+                  </p>
+                  <p>
+                    {t(
+                      "Route {optimal} is the system’s optimal route; route {alternative} is the alternative.",
+                      {
+                        optimal:
+                          step.scenario.route_order?.indexOf("optimal") === 0
+                            ? "A"
+                            : "B",
+                        alternative:
+                          step.scenario.route_order?.indexOf("alternative") ===
+                          0
+                            ? "A"
+                            : "B",
+                      },
+                    )}
                   </p>
                   {step.scenario.show_explanation_map &&
                     step.scenario.route_order && (
@@ -632,10 +657,10 @@ function StudyForm({
                 </div>
                 <div className="qa-form qa-assessment-fields">
                   <ReasonField
-                    prompt={
+                    prompt={t(
                       step.response_prompt ??
-                      "After reading the explanation, which characteristics explain the system’s route choice?"
-                    }
+                        "After reading the explanation, which characteristics explain the system’s route choice?",
+                    )}
                     value={reason}
                     onChange={(value) => editFields({ reason: value })}
                     attempted={attempted}
@@ -645,23 +670,26 @@ function StudyForm({
             )}
             {!step && (
               <p>
-                All required responses have been recorded. Submit to complete
-                your participation.
+                {t(
+                  "All required responses have been recorded. Submit to complete your participation.",
+                )}
               </p>
             )}
             <button
               type="submit"
               disabled={busy || (!!step && !progress.isReady)}
             >
-              {busy
-                ? "Saving..."
-                : !step
-                  ? "Submit answers"
-                  : route && !routeConfirmed
-                    ? "Confirm route"
-                    : step.type === "route_assessment"
-                      ? "Confirm and reveal explanation"
-                      : "Continue"}
+              {t(
+                busy
+                  ? "Saving..."
+                  : !step
+                    ? "Submit answers"
+                    : route && !routeConfirmed
+                      ? "Confirm route"
+                      : step.type === "route_assessment"
+                        ? "Confirm and reveal explanation"
+                        : "Continue",
+              )}
             </button>
           </fieldset>
         </section>
@@ -671,6 +699,7 @@ function StudyForm({
 }
 
 export function Participant({ preview }: { preview?: Preview }) {
+  const { language, t } = useI18n();
   const [session, setSession] = useState<Session | null>(() => {
     if (preview) return null;
     try {
@@ -704,11 +733,11 @@ export function Participant({ preview }: { preview?: Preview }) {
     async (index = 0) => {
       const path =
         previewId != null
-          ? `/api/questionnaires/${previewId}/preview?group=${previewGroup}&step=${index}&submission_key=${submissionKey}`
-          : `/api/participate/${encodeURIComponent(token)}?submission_key=${submissionKey}`;
+          ? `/api/questionnaires/${previewId}/preview?group=${previewGroup}&step=${index}&submission_key=${submissionKey}${language === "pt-BR" ? "&lang=pt-BR" : ""}`
+          : `/api/participate/${encodeURIComponent(token)}?submission_key=${submissionKey}${language === "pt-BR" ? "&lang=pt-BR" : ""}`;
       return readResponse<Study>(await fetch(path, { cache: "no-store" }));
     },
-    [previewId, previewGroup, submissionKey, token],
+    [previewId, previewGroup, submissionKey, token, language],
   );
   useEffect(() => {
     if (previewId == null && !session?.started) return;
@@ -719,7 +748,13 @@ export function Participant({ preview }: { preview?: Preview }) {
       })
       .catch((failure: Error) => {
         if (!cancelled) {
-          setError(failure.message);
+          setError(
+            presentError(
+              language,
+              failure,
+              "Unable to load this questionnaire.",
+            ),
+          );
           if (failure instanceof RequestError && failure.status === 410)
             setClosed(true);
         }
@@ -727,7 +762,7 @@ export function Participant({ preview }: { preview?: Preview }) {
     return () => {
       cancelled = true;
     };
-  }, [load, previewId, session?.started]);
+  }, [load, previewId, session?.started, language]);
   useEffect(() => {
     if (error) errorRef.current?.focus();
   }, [error]);
@@ -750,16 +785,21 @@ export function Participant({ preview }: { preview?: Preview }) {
       const data = await readResponse<
         Study & { access_token: string; submission_key: string }
       >(
-        await fetch("/api/participate/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name,
-            email,
-            key: individualKey,
-            submission_key: pending.id,
-          }),
-        }),
+        await fetch(
+          language === "pt-BR"
+            ? "/api/participate/start?lang=pt-BR"
+            : "/api/participate/start",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name,
+              email,
+              key: individualKey,
+              submission_key: pending.id,
+            }),
+          },
+        ),
       );
       const authenticated = {
         id: data.submission_key,
@@ -777,9 +817,11 @@ export function Participant({ preview }: { preview?: Preview }) {
       if (failure instanceof RequestError && failure.status === 410)
         setClosed(true);
       setError(
-        failure instanceof Error
-          ? failure.message
-          : "Unable to start or resume participation.",
+        presentError(
+          language,
+          failure,
+          "Unable to start or resume participation.",
+        ),
       );
     } finally {
       setBusy(false);
@@ -798,7 +840,9 @@ export function Participant({ preview }: { preview?: Preview }) {
       {!preview && (
         <header className="app-topbar qa-participant-header">
           <Brand />
-          <span className="qa-participant-title">Route planning study</span>
+          <span className="qa-participant-title">
+            {t("Route planning study")}
+          </span>
         </header>
       )}
       <main className="qa-content qa-participant">
@@ -809,40 +853,48 @@ export function Participant({ preview }: { preview?: Preview }) {
         )}
         {closed ? (
           <section className="qa-panel">
-            <h2>Questionnaire closed</h2>
-            <p>This questionnaire is no longer accepting answers.</p>
+            <h2>{t("Questionnaire closed")}</h2>
+            <p>{t("This questionnaire is no longer accepting answers.")}</p>
           </section>
         ) : study?.submission_completed ? (
           <section className="qa-panel">
-            <h2>Thank you for participating</h2>
+            <h2>{t("Thank you for participating")}</h2>
             <p>
               {preview
-                ? "Preview complete. No answers were saved."
-                : "Your answers have been submitted."}
+                ? t("Preview complete. No answers were saved.")
+                : t("Your answers have been submitted.")}
             </p>
             {preview && (
               <button
                 onClick={() => {
                   void load()
                     .then(accept)
-                    .catch((failure: Error) => setError(failure.message));
+                    .catch((failure: Error) =>
+                      setError(
+                        presentError(
+                          language,
+                          failure,
+                          "Unable to reload this questionnaire.",
+                        ),
+                      ),
+                    );
                 }}
               >
-                Restart preview
+                {t("Restart preview")}
               </button>
             )}
           </section>
         ) : !preview && !session?.started ? (
           <section className="qa-panel">
-            <h2>Start or resume participation</h2>
+            <h2>{t("Start or resume participation")}</h2>
             <p>
-              Enter your name, email and individual key. To resume, use the same
-              details you entered at the start. Your saved progress will be
-              restored.
+              {t(
+                "Enter your name, email and individual key. To resume, use the same details you entered at the start. Your saved progress will be restored.",
+              )}
             </p>
             <form className="qa-form" onSubmit={start}>
               <label>
-                Name
+                {t("Name")}
                 <input
                   required
                   maxLength={200}
@@ -853,7 +905,7 @@ export function Participant({ preview }: { preview?: Preview }) {
                 />
               </label>
               <label>
-                Email
+                {t("Email")}
                 <input
                   type="email"
                   required
@@ -865,7 +917,7 @@ export function Participant({ preview }: { preview?: Preview }) {
                 />
               </label>
               <label>
-                Individual key
+                {t("Individual key")}
                 <input
                   required
                   maxLength={100}
@@ -876,7 +928,7 @@ export function Participant({ preview }: { preview?: Preview }) {
                 />
               </label>
               <button type="submit" disabled={busy}>
-                {busy ? "Loading..." : "Start or resume questionnaire"}
+                {t(busy ? "Loading..." : "Start or resume questionnaire")}
               </button>
             </form>
           </section>
@@ -884,8 +936,8 @@ export function Participant({ preview }: { preview?: Preview }) {
           <section className="qa-panel" aria-busy={!error}>
             <p role="status">
               {error
-                ? "The questionnaire could not be loaded."
-                : "Loading questionnaire..."}
+                ? t("The questionnaire could not be loaded.")
+                : t("Loading questionnaire...")}
             </p>
             <div className="qa-actions">
               <button
@@ -894,10 +946,18 @@ export function Participant({ preview }: { preview?: Preview }) {
                   setError("");
                   void load()
                     .then(accept)
-                    .catch((failure: Error) => setError(failure.message));
+                    .catch((failure: Error) =>
+                      setError(
+                        presentError(
+                          language,
+                          failure,
+                          "Unable to reload this questionnaire.",
+                        ),
+                      ),
+                    );
                 }}
               >
-                Reload questionnaire
+                {t("Reload questionnaire")}
               </button>
               {!preview && (
                 <button
@@ -905,7 +965,7 @@ export function Participant({ preview }: { preview?: Preview }) {
                   className="qa-secondary"
                   onClick={signInAgain}
                 >
-                  Enter participation details again
+                  {t("Enter participation details again")}
                 </button>
               )}
             </div>

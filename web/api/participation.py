@@ -170,7 +170,9 @@ def participation_record(connection, questionnaire, submission_key):
     return participation
 
 
-def public_state(questionnaire, questions, participation, submission_key):
+def public_state(
+    questionnaire, questions, participation, submission_key, language="en"
+):
     completed = participation["completed_at"] is not None
     return {
         "title": questionnaire["title"],
@@ -189,12 +191,15 @@ def public_state(questionnaire, questions, participation, submission_key):
             submission_key,
             participation["study_group"],
             participation["scenario_order"],
+            language,
         ),
     }
 
 
 @public_router.post("/participate/start")
-def start_participation(payload: ParticipationStartInput, response: Response):
+def start_participation(
+    payload: ParticipationStartInput, response: Response, lang: str | None = None
+):
     response.headers["Cache-Control"] = "no-store"
     with connect_database() as connection:
         target = connection.execute(
@@ -287,6 +292,7 @@ def start_participation(payload: ParticipationStartInput, response: Response):
                 read_questions(connection, questionnaire["id"]),
                 participation,
                 submission_key,
+                lang or "en",
             ),
             "access_token": token,
             "submission_key": submission_key,
@@ -294,13 +300,17 @@ def start_participation(payload: ParticipationStartInput, response: Response):
 
 
 @public_router.get("/participate/{token}")
-def get_public_questionnaire(token: str, submission_key: UUID, response: Response):
+def get_public_questionnaire(
+    token: str, submission_key: UUID, response: Response, lang: str | None = None
+):
     response.headers["Cache-Control"] = "no-store"
     with connect_database() as connection:
         questionnaire = active_questionnaire(connection, token)
         participation = participation_record(connection, questionnaire, submission_key)
         questions = read_questions(connection, questionnaire["id"])
-        return public_state(questionnaire, questions, participation, submission_key)
+        return public_state(
+            questionnaire, questions, participation, submission_key, lang or "en"
+        )
 
 
 def current_step(questions, participation, index):
@@ -360,6 +370,7 @@ def confirm_step(
     step: Annotated[int, Path(ge=0)],
     payload: StepProgressInput,
     response: Response,
+    lang: str | None = None,
 ):
     response.headers["Cache-Control"] = "no-store"
     with connect_database() as connection:
@@ -394,7 +405,11 @@ def confirm_step(
                     detail="This step was already confirmed with a different answer",
                 )
             return public_state(
-                questionnaire, questions, participation, payload.submission_key
+                questionnaire,
+                questions,
+                participation,
+                payload.submission_key,
+                lang or "en",
             )
         require_revision(participation, payload.revision)
         value = validate_progress(
@@ -446,7 +461,11 @@ def confirm_step(
             ),
         )
         return public_state(
-            questionnaire, questions, participation, payload.submission_key
+            questionnaire,
+            questions,
+            participation,
+            payload.submission_key,
+            lang or "en",
         )
 
 

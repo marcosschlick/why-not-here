@@ -79,8 +79,8 @@ export function App() {
   const { language, t, n } = useI18n();
   const [showAdmin, setShowAdmin] = useState(false);
   useLayoutEffect(() => {
-    document.documentElement.lang = showAdmin ? "en" : language;
-  }, [language, showAdmin]);
+    document.documentElement.lang = language;
+  }, [language]);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const initialConfigRef = useRef<SystemConfig | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<"individual" | "queue">(
@@ -974,7 +974,7 @@ export function App() {
   }
   if (showAdmin) {
     return (
-      <LanguageProvider language="en">
+      <LanguageProvider language={language}>
         <QuestionnaireAdmin
           currentStep={currentStep}
           hasMapData={hasMapData}

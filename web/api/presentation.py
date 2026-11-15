@@ -5,6 +5,7 @@ from src.incremental.explanation import (
     generate_cost_baseline_justification,
     generate_explanation_text,
 )
+from src.isp.types import SemanticModifications
 from src.pipeline.reporting import execution_error
 
 PRECHECK_MESSAGES = {
@@ -87,3 +88,47 @@ def build_result_presentation(result) -> dict[str, str | None]:
         "cost_baseline_text": baseline,
         "execution_error": error_presentation,
     }
+
+
+def saved_scenario_justification(data: dict, group: str) -> str:
+    metrics = data["metrics"]
+    if group == "cost_based":
+        states = metrics.get("cost_states") or {}
+        optimal_cost = (
+            math.inf
+            if states.get("original_optimal") == "UNREACHABLE"
+            else data["original_optimal_cost"]
+        )
+        alternative_cost = (
+            math.inf
+            if states.get("original_alternative") == "IMPASSABLE"
+            else data["original_alternative_cost"]
+        )
+        return generate_cost_baseline_justification(
+            optimal_cost, alternative_cost, language="pt-BR"
+        )
+
+    from web.api.schemas import SemanticModificationsData
+
+    records = data.get("modifications")
+    modifications = None
+    if records is not None:
+        validated = SemanticModificationsData.model_validate(records)
+        modifications = SemanticModifications(
+            model=validated.model,
+            terrain_nodes=validated.terrain_nodes,
+            terrain_assignments=validated.terrain_assignments,
+            cell_openings=validated.cell_openings,
+            slope_adjustments=validated.slope_adjustments,
+            environmental_speed_edges=validated.environmental_speed_edges,
+            robot_capability_edges=validated.robot_capability_edges,
+        )
+    return generate_explanation_text(
+        modifications,
+        stop_reason=metrics.get("stop_reason"),
+        solver_status="PATH_VALIDATED" if data["success"] else "CANDIDATE_UNVALIDATED",
+        objective_cost=(metrics.get("interventions") or {}).get("objective_cost"),
+        objective_certified=metrics.get("objective_certified", False),
+        original_optimal_available=bool(data["original_optimal_path"]),
+        language="pt-BR",
+    )
