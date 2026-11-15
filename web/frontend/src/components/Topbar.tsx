@@ -1,4 +1,5 @@
 import { Brand } from "./Brand";
+import { LanguageButton } from "./LanguageButton";
 import { useI18n } from "../i18n";
 
 export interface TopbarProps {
@@ -93,6 +94,7 @@ export function Topbar({
           <span>{t("Questionnaires")}</span>
         </button>
 
+        <LanguageButton />
         <button
           type="button"
           className="btn-topbar-about"

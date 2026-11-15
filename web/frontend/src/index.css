@@ -2325,6 +2325,11 @@ kbd,
     align-items: flex-start;
     flex-direction: column;
   }
+  .qa-participant-header {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
   .topbar-actions-group {
     width: 100%;
     justify-content: space-between;

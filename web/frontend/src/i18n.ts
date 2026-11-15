@@ -17,6 +17,9 @@ export class ApiError extends Error {
 type Variables = Record<string, string | number>;
 
 export const LanguageContext = createContext<Language>("en");
+export const SetLanguageContext = createContext<(language: Language) => void>(
+  () => undefined,
+);
 
 export function requestedLanguage(): Language {
   return new URLSearchParams(window.location.search).get("lang") === "pt-BR"

@@ -18,6 +18,7 @@ import type {
 import type { StudyGroup } from "../utils/studyGroups";
 import { ScenarioMapView } from "./ScenarioMapView";
 import { Brand } from "./Brand";
+import { LanguageButton } from "./LanguageButton";
 import { useI18n, presentError } from "../i18n";
 import "./questionnaire-admin.css";
 
@@ -722,6 +723,7 @@ export function Participant({ preview }: { preview?: Preview }) {
   const [email, setEmail] = useState("");
   const [individualKey, setIndividualKey] = useState("");
   const [study, setStudy] = useState<Study | null>(null);
+  const studyRef = useRef<Study | null>(null);
   const [generation, setGeneration] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -742,9 +744,13 @@ export function Participant({ preview }: { preview?: Preview }) {
   useEffect(() => {
     if (previewId == null && !session?.started) return;
     let cancelled = false;
-    load()
+    const currentStep = studyRef.current?.current_step;
+    load(currentStep)
       .then((data) => {
-        if (!cancelled) setStudy(data);
+        if (!cancelled && studyRef.current?.current_step === currentStep) {
+          studyRef.current = data;
+          setStudy(data);
+        }
       })
       .catch((failure: Error) => {
         if (!cancelled) {
@@ -768,6 +774,7 @@ export function Participant({ preview }: { preview?: Preview }) {
   }, [error]);
 
   function accept(data: Study) {
+    studyRef.current = data;
     setStudy(data);
     setGeneration((value) => value + 1);
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -831,6 +838,7 @@ export function Participant({ preview }: { preview?: Preview }) {
   function signInAgain() {
     sessionStorage.removeItem("questionnaire-session");
     setSession(null);
+    studyRef.current = null;
     setStudy(null);
     setError("");
   }
@@ -843,6 +851,7 @@ export function Participant({ preview }: { preview?: Preview }) {
           <span className="qa-participant-title">
             {t("Route planning study")}
           </span>
+          <LanguageButton />
         </header>
       )}
       <main className="qa-content qa-participant">

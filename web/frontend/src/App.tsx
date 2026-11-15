@@ -41,7 +41,6 @@ import type {
   SystemConfig,
 } from "./types";
 import { FrontendError, presentError, useI18n } from "./i18n";
-import { LanguageProvider } from "./LanguageProvider";
 function isSameMap(a?: SystemConfig | null, b?: SystemConfig | null): boolean {
   if (!a || !b) return false;
   const mapConfigKeys: (keyof SystemConfig)[] = [
@@ -173,8 +172,8 @@ export function App() {
     async function loadInitial() {
       try {
         const initialConfig = await fetchConfig();
-        initialConfigRef.current = initialConfig;
-        setConfig(initialConfig);
+        initialConfigRef.current ??= initialConfig;
+        setConfig((current) => current ?? initialConfig);
       } catch (err) {
         setErrorMessage(
           presentError(language, err, "Failed to load server configuration"),
@@ -974,7 +973,7 @@ export function App() {
   }
   if (showAdmin) {
     return (
-      <LanguageProvider language={language}>
+      <>
         <QuestionnaireAdmin
           currentStep={currentStep}
           hasMapData={hasMapData}
@@ -989,7 +988,7 @@ export function App() {
           isOpen={isAboutOpen}
           onClose={() => setIsAboutOpen(false)}
         />
-      </LanguageProvider>
+      </>
     );
   }
   return (
