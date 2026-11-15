@@ -464,10 +464,10 @@ export function ResultsView({
       ? currentModifications
       : null;
   const explanationText = currentResult
-    ? (requestedLanguage() === "pt-BR" && currentPresentation
-        ? currentPresentation.explanation_text
-        : (requestFailureMessage(currentResult, requestedLanguage()) ??
-          currentResult.explanation_text?.trim())) ||
+    ? (requestFailureMessage(currentResult, requestedLanguage()) ??
+        (requestedLanguage() === "pt-BR"
+          ? currentResult.explanation_text_pt.trim()
+          : currentResult.explanation_text.trim())) ||
       t("No detailed explanation was returned for solver status {status}.", {
         status: currentResult.solver_status,
       })

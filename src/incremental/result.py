@@ -23,3 +23,4 @@ class ClosedLoopResult:
     path_metrics: dict[str, float | int] | None = None
     metrics: dict = field(default_factory=dict)
     prepared_grid: object | None = None
+    explanation_text_pt: str = ""

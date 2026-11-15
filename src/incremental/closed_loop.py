@@ -524,9 +524,16 @@ class ClosedLoopISPSolver:
                     solver_status="PATH_VALIDATED"
                     if result.success
                     else "CANDIDATE_UNVALIDATED",
-                    objective_cost=metrics["interventions"].get("objective_cost"),
                     objective_certified=metrics["objective_certified"],
-                    original_optimal_available=bool(result.original_optimal_path),
+                    original_optimal_available=(metrics.get("cost_states") or {}).get(
+                        "original_optimal"
+                    )
+                    != "UNREACHABLE",
+                    alternative_path=alternative_path,
+                    original_optimal_path=result.original_optimal_path,
+                    original_optimal_cost=result.original_optimal_cost,
+                    original_alternative_cost=metrics.get("original_alternative_cost"),
+                    tolerance=self.tolerance,
                 )
             if result.graph_nodes is not None:
                 metrics["node_reduction_ratio"] = (

@@ -172,6 +172,7 @@ export interface LastResult {
       }[]
     | null;
   explanation_text: string;
+  explanation_text_pt: string;
   original_optimal_cost?: number | null;
   final_alternative_cost?: number | null;
   cost_baseline_text?: string;

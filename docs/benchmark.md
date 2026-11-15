@@ -357,3 +357,23 @@ identical changed cells when multiple optimal solutions exist.
 Normal map and saved experiment contracts identify `normal-eder-grid-v1`.
 Old incompatible records are rejected, never converted. Brandao remains
 `brandao-grid-v2` with its scientific behavior and visual encoding preserved.
+
+## Contrastive explanation presentation
+
+Each newly generated result stores `explanation_text` in English and
+`explanation_text_pt` in Brazilian Portuguese. Both are generated from the same
+prepared grid, desired route, intervention records, costs and validation state.
+The text summarizes the original comparison and the calculated hypothetical
+changes without treating individual changes as necessary or the solution as
+unique. Full-grid validation, reduced-subgraph outcomes, limits and objective
+certification remain distinct. Terrain names are included only where supported by
+the grid or intervention records. A change outside the desired path is identified
+as such; for Brandao, slow-to-fast and fast-to-slow changes are reported
+separately, and preparation conversions are explicitly excluded from the weighted
+objective. The cost-based justification remains separate.
+
+The explanation uses the intervention categories and affected locations also
+used by the map visualization. Both language variants are persisted at calculation
+time, so presenting a result does not reconstruct a translation from an older
+stored English string. Incompatible earlier scenario records need to be regenerated.
+The wording is inspired by the cited studies, not validated for this system by them.

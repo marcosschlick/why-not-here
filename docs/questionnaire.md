@@ -324,6 +324,10 @@ There are twenty-three content steps and a final submission action:
    `cost_based` receives `cost_baseline_text`. `contrastive_text` receives
    `explanation_text`. `contrastive_visual` receives exactly the same
    `explanation_text` plus the contrastive map with semantic interventions.
+   New scenarios also store `explanation_text_pt`; both contrastive groups use
+   that same saved Portuguese text when Portuguese is selected. The text is
+   self-contained and is generated from the same interventions shown on the map.
+   Scenarios without the bilingual explanation must be regenerated.
    The textual conditions do not receive intervention data in the step payload.
    The explanation compares the saved optimal/alternative routes regardless of
    the participant's choice. On this same step, participants must answer:

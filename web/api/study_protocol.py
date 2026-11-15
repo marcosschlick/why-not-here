@@ -179,7 +179,7 @@ def validate_scenario(data):
         )
     if any(
         not isinstance(data.get(key), str) or not data[key].strip()
-        for key in ("cost_baseline_text", "explanation_text")
+        for key in ("cost_baseline_text", "explanation_text", "explanation_text_pt")
     ):
         raise HTTPException(
             status_code=422, detail="Scenario must contain both group explanations"

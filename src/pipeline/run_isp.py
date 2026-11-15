@@ -6,6 +6,7 @@ from uuid import uuid4
 from src import config
 from src.grid.grid import Grid
 from src.incremental import ClosedLoopResult, ISPValidator, solve_closed_loop
+from src.incremental.explanation import generate_explanation_text, precheck_presentation
 from src.isp.budget import ScenarioBudget, ScenarioDeadlineExceeded
 from src.isp.profile import prepare_scenario_grid
 from src.pipeline.storage import get_output_directory
@@ -136,7 +137,10 @@ def run_isp(
     result.runtime_sec = elapsed
     result.prepared_grid = prepared
     metrics = result.metrics
-    metrics.setdefault("requested_astar_scope", config.INCREMENTAL_ASTAR_SCOPE if config.USE_INCREMENTAL_SOLVER else None)
+    metrics.setdefault(
+        "requested_astar_scope",
+        config.INCREMENTAL_ASTAR_SCOPE if config.USE_INCREMENTAL_SOLVER else None,
+    )
     metrics.setdefault("effective_astar_scope", None)
     stop = metrics.get("stop_reason")
     overrun = elapsed > budget.limit_sec
@@ -172,6 +176,42 @@ def run_isp(
         strategy="INCREMENTAL" if config.USE_INCREMENTAL_SOLVER else "MONOLITHIC",
         reduction=config.DEFAULT_REDUCTION_METHOD,
     )
+    if (
+        stop in {"INVALID_ALTERNATIVE_PATH", "BLOCKED_ENDPOINT"}
+        and result.explanation_text
+    ):
+        result.explanation_text_pt = precheck_presentation(
+            result.explanation_text
+        ) or generate_explanation_text(None, stop_reason=stop, language="pt-BR")
+    else:
+        explanation_options = {
+            "modifications": result.modifications,
+            "grid": prepared,
+            "solver_status": "PATH_VALIDATED"
+            if result.success
+            else "CANDIDATE_UNVALIDATED",
+            "stop_reason": stop,
+            "objective_certified": metrics.get("objective_certified", False),
+            "original_optimal_available": (metrics.get("cost_states") or {}).get(
+                "original_optimal"
+            )
+            != "UNREACHABLE",
+            "alternative_path": p_user,
+            "original_optimal_path": result.original_optimal_path,
+            "original_optimal_cost": result.original_optimal_cost,
+            "original_alternative_cost": metrics.get("original_alternative_cost"),
+            "tolerance": metrics.get("tolerance_sec", config.INCREMENTAL_TOLERANCE),
+            "preparation": preparation,
+            "deadline_exceeded": metrics["deadline_exceeded"],
+            "candidate_from_solver_limit": metrics.get(
+                "candidate_from_solver_limit", False
+            ),
+        }
+        result.explanation_text = generate_explanation_text(**explanation_options)
+        result.explanation_text_pt = generate_explanation_text(
+            **explanation_options, language="pt-BR"
+        )
+
     from .experiment_config import get_experiment_configurations
 
     parameters = get_experiment_configurations()

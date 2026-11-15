@@ -26,6 +26,7 @@ export function requestFailure(
     runtime_sec: null,
     iterations: null,
     explanation_text: message,
+    explanation_text_pt: message,
     metrics: {
       identity: execution,
       model: config.ISP_MODEL ?? "NORMAL",

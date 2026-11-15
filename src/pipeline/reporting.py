@@ -79,6 +79,7 @@ def serialize_result(result) -> dict:
             "path_metrics": result.path_metrics,
             "iteration_metrics": result.iteration_metrics,
             "explanation_text": result.explanation_text,
+            "explanation_text_pt": result.explanation_text_pt,
             "cost_baseline_text": result.cost_baseline_text,
             "modifications": modifications,
             "metrics": {
