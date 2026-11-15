@@ -126,6 +126,7 @@ export function App() {
   const [cacheKey, setCacheKey] = useState<number>(() => Date.now());
   const [isGeneratingMap, setIsGeneratingMap] = useState<boolean>(false);
   const [isSolvingISP, setIsSolvingISP] = useState<boolean>(false);
+  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -152,6 +153,17 @@ export function App() {
     ConfirmModalProps,
     "title" | "description" | "confirmLabel" | "cancelLabel" | "onConfirm"
   > | null>(null);
+  const isLoadingOverlayActive =
+    (isGeneratingMap && currentStep === "config") ||
+    (isSolvingISP && !isBatchMode);
+  useEffect(() => {
+    if (!isLoadingOverlayActive) return;
+    const timer = window.setTimeout(() => setShowLoadingOverlay(true), 300);
+    return () => {
+      window.clearTimeout(timer);
+      setShowLoadingOverlay(false);
+    };
+  }, [isLoadingOverlayActive]);
   useEffect(() => {
     if (!mapData && queue.length === 0) return;
     function warnBeforeUnload(event: BeforeUnloadEvent) {
@@ -1173,10 +1185,7 @@ export function App() {
                     ? reviewIndices(queue).some(
                         (index) => index > batchReviewIndex,
                       )
-                      ? t("Save Route & Next Map ({current}/{total})", {
-                          current: n(reviewPosition + 2),
-                          total: n(reviewSteps.length),
-                        })
+                      ? t("Save Route & Next Map")
                       : t("Save Batch Configurations")
                     : t("Save Configuration")
                   : isBatchMode
@@ -1527,8 +1536,7 @@ export function App() {
         )}
       </main>
 
-      {((isGeneratingMap && currentStep === "config") ||
-        (isSolvingISP && !isBatchMode)) && (
+      {isLoadingOverlayActive && showLoadingOverlay && (
         <div className="loading-overlay-backdrop">
           <div
             className="loading-overlay-card"

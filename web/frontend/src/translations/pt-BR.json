@@ -290,7 +290,7 @@
   "Generate New Maps": "Gerar novos mapas",
   "Discard the current simulation and generate new maps?": "Descartar a simulação atual e gerar novos mapas?",
   "Saving Configuration...": "Salvando configuração...",
-  "Save Route & Next Map ({current}/{total})": "Salvar rota e próximo mapa ({current}/{total})",
+  "Save Route & Next Map": "Salvar rota e próximo mapa",
   "Save Batch Configurations": "Salvar configurações do lote",
   "Save Configuration": "Salvar configuração",
   "Save Route & Next Map →": "Salvar rota e próximo mapa →",
