@@ -35,6 +35,14 @@ an independent workflow input. The CLI command `python -B src/main.py run
 configuration.json` uses the same expansion, generates the source map once and
 returns a collection of separately recorded scenario results.
 
+The CLI also accepts a saved batch directory with `python -B src/main.py run
+configurations/batch-example`. For a benchmark, select Benchmark in the web
+interface before saving and pass its resulting directory in the same way. The
+CLI processes its JSON files in deterministic order, keeps files sharing a
+benchmark group together, and does not expand a saved benchmark a second time.
+Files without a group are independent, including those with matching seeds.
+It uses each saved seed, endpoints and desired path; no new human path is made.
+
 The same original grid, endpoints and desired route feed both Brandao strategies.
 Preparation is performed separately, deterministically, and included in each
 budget; their `prepared_scenario_id` values must match for a fair comparison.
@@ -266,6 +274,13 @@ Unsupported systems return null measurements. No additional dependency is used.
 Batch executions share a timestamped `results/batch-*` directory; individual
 executions keep their own directory directly under `results/`. Batch configuration
 files likewise share a timestamped `configurations/batch-*` directory.
+
+CLI batches place each group in a separate `map-*` directory and write
+`batch.json` with source paths, group IDs, scenario settings, execution order,
+output paths and errors. The summary is updated during execution. Invalid files
+and failed scenarios do not stop the remaining configurations; any execution
+error produces a nonzero CLI exit status. Only JSON files directly within the
+specified directory are read.
 
 New execution directories retain the original `map/map.json`, prepared and
 candidate grids under `results/`, PNGs, `log.txt` and `scenario.json`.

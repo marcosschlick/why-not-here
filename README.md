@@ -82,21 +82,39 @@ artifacts; execution persists the displayed map in a fresh folder. Import JSON
 using the browser file picker. Old configurations and API calls containing
 removed name or destination options must be recreated in the current format.
 
-Enable **Benchmark** to run twelve scenarios per map: ten normal
-combinations (monolithic/incremental × `NONE`, `PATH_ONLY`, `SPARSIFIED`, `BBOX`,
-`FLOODFILL`) followed by Brandao monolithic and incremental, both without
+Enable **Benchmark** to run seventeen scenarios per map: five normal
+monolithic combinations and ten incremental combinations (with `SUBGRAPH` and
+`GLOBAL` scopes) across `NONE`, `PATH_ONLY`, `SPARSIFIED`, `BBOX`,
+and `FLOODFILL`, followed by Brandao monolithic and incremental, both without
 reduction. Outside the full benchmark, configuring normal incremental with
 `NONE` automatically runs the normal scenario plus both Brandao strategies on
 the same source map, endpoints and alternative route. Other individual settings
 run only their normal scenario. There is no manual traversal-model selector.
 
 Configuration files contain only normal scenarios. An individual configuration
-saves one file; a full benchmark saves ten normal files per map. Importing
+saves one file; a full benchmark saves fifteen normal files per map. Importing
 or executing a normal incremental/`NONE` file generates the trio automatically,
 including `python -B src/main.py run configuration.json`. Brandao remains an
 internal, separately recorded model with fast/slow 1:8 costs and no slope effects.
 Its time differences from normal scenarios cannot be attributed solely to solver
 strategy. No legacy conversion or deduplication is applied.
+
+Run configurations saved in the simulation screen from the project root:
+
+```bash
+python -B src/main.py run configurations/experiment-example.json
+python -B src/main.py run configurations/batch-example
+python -B src/main.py run configurations/batch-benchmark-example
+```
+
+The first command runs one configuration. The second runs every JSON directly
+inside a saved batch directory. The third runs a batch saved with Benchmark
+enabled: its fifteen normal configurations per map expand to seventeen
+executions. Choose Benchmark before saving in the web interface; the CLI does
+not add it to ordinary configurations. Batch results are grouped under a new
+`results/batch-*` directory, and `batch.json` identifies each source file,
+scenario, output directory and execution error. Processing continues after
+individual failures, and the CLI returns a nonzero status if any execution fails.
 
 Both strategies use one cooperative preparation-through-validation budget.
 Queue `Completed` means all scenarios were processed without execution errors;

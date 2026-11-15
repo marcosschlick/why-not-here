@@ -3,6 +3,7 @@ import json
 import math
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -367,7 +368,11 @@ def expand_scenario_configurations(
     if benchmark:
         for incremental in (False, True):
             for reduction in ("NONE", "PATH_ONLY", "SPARSIFIED", "BBOX", "FLOODFILL"):
-                for scope in (("SUBGRAPH", "GLOBAL") if incremental else (normal["INCREMENTAL_ASTAR_SCOPE"],)):
+                for scope in (
+                    ("SUBGRAPH", "GLOBAL")
+                    if incremental
+                    else (normal["INCREMENTAL_ASTAR_SCOPE"],)
+                ):
                     scenarios.append(
                         {
                             **copy.deepcopy(normal),
@@ -531,7 +536,10 @@ def validate_experiment_config(
         execution["benchmark_group_id"], str
     ):
         raise ValueError("benchmark_group_id must be a string.")
-    if "benchmark_member" in execution and type(execution["benchmark_member"]) is not bool:
+    if (
+        "benchmark_member" in execution
+        and type(execution["benchmark_member"]) is not bool
+    ):
         raise ValueError("benchmark_member must be a boolean.")
     raw_start = data.get("start")
     if not raw_start or not isinstance(raw_start, (list, tuple)) or len(raw_start) != 2:
@@ -644,18 +652,23 @@ def load_experiment_file(file_path: str | Path) -> dict[str, Any]:
 
 
 def execute_experiment(
-    config_data: dict[str, Any], verbose: bool = True
+    config_data: dict[str, Any],
+    verbose: bool = True,
+    batch_directory: Path | None = None,
+    record_scenario: Callable[[dict[str, Any]], int] | None = None,
 ) -> list[ClosedLoopResult]:
     params, start, goal, p_user = validate_experiment_config(config_data)
     scenarios = expand_scenario_configurations(params)
-    if (config_data.get("execution") or {}).get("benchmark_member") and params["INCREMENTAL_ASTAR_SCOPE"] == "SUBGRAPH":
+    if (config_data.get("execution") or {}).get("benchmark_member") and params[
+        "INCREMENTAL_ASTAR_SCOPE"
+    ] == "SUBGRAPH":
         scenarios = scenarios[:1]
     apply_experiment_config(params, start=start, goal=goal)
     generated = generate_map(verbose=verbose, persist_artifacts=False)
     execution = dict(config_data.get("execution") or {})
     execution.setdefault("benchmark_group_id", str(uuid4()))
     results = []
-    batch_directory = (
+    batch_directory = batch_directory or (
         reserve_batch_directory(get_project_path("results"))
         if len(scenarios) > 1
         else None
@@ -663,33 +676,60 @@ def execute_experiment(
     if verbose and batch_directory is not None:
         print(f"Batch results: {batch_directory}")
     for index, scenario in enumerate(scenarios, start=1):
-        apply_experiment_config(scenario, start=start, goal=goal)
-        output = reserve_output_directory(
-            generated.h,
-            generated.w,
-            benchmark=len(scenarios) > 1,
-            incremental=scenario["USE_INCREMENTAL_SOLVER"],
-            reduction=scenario["DEFAULT_REDUCTION_METHOD"],
-            isp_model=scenario["ISP_MODEL"],
-            batch_directory=batch_directory,
-        )
-        set_output_directory(output)
-        persist_map(generated, start=start, goal=goal)
-        if verbose:
-            strategy = (
-                "incremental" if scenario["USE_INCREMENTAL_SOLVER"] else "monolithic"
+        output = None
+        record = {
+            "model": scenario["ISP_MODEL"],
+            "incremental": scenario["USE_INCREMENTAL_SOLVER"],
+            "reduction": scenario["DEFAULT_REDUCTION_METHOD"],
+            "scope": scenario["INCREMENTAL_ASTAR_SCOPE"],
+            "output": None,
+            "status": "running",
+            "error": None,
+        }
+        order = record_scenario(record) if record_scenario else index
+        try:
+            apply_experiment_config(scenario, start=start, goal=goal)
+            output = reserve_output_directory(
+                generated.h,
+                generated.w,
+                benchmark=len(scenarios) > 1 or record_scenario is not None,
+                incremental=scenario["USE_INCREMENTAL_SOLVER"],
+                reduction=scenario["DEFAULT_REDUCTION_METHOD"],
+                isp_model=scenario["ISP_MODEL"],
+                batch_directory=batch_directory,
             )
-            print(
-                f"Scenario {index}/{len(scenarios)}: {scenario['ISP_MODEL']} {strategy}"
-            )
-        results.append(
-            run_isp(
+            record["output"] = str(output)
+            set_output_directory(output)
+            persist_map(generated, start=start, goal=goal)
+            if verbose:
+                strategy = (
+                    "incremental"
+                    if scenario["USE_INCREMENTAL_SOLVER"]
+                    else "monolithic"
+                )
+                print(
+                    f"Scenario {index}/{len(scenarios)}: {scenario['ISP_MODEL']} {strategy}"
+                )
+            result = run_isp(
                 verbose=verbose,
                 user_path=p_user,
                 start=start,
                 goal=goal,
                 grid=generated,
-                metadata={**execution, "execution_order": index},
+                metadata={**execution, "execution_order": order},
             )
-        )
+            results.append(result)
+            from src.pipeline.reporting import execution_error
+
+            record["error"] = execution_error(result)
+            record["status"] = "failed" if record["error"] else "completed"
+        except Exception as exc:
+            if record_scenario is None:
+                raise
+            record["status"] = "failed"
+            record["error"] = f"{type(exc).__name__}: {exc}"
+            if verbose:
+                print(f"Scenario failed: {record['error']}")
+        if record_scenario:
+            record_scenario(record)
     return results
