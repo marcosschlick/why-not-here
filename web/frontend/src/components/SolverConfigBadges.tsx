@@ -1,56 +1,74 @@
 import { useState } from "react";
-import type { SystemConfig } from "../types";
+import type { MapData, SystemConfig } from "../types";
 import {
   configuredValidationScope,
   formatReductionMethod,
   formatValidationScope,
 } from "../utils/formatters";
 import { useI18n } from "../i18n";
+import { LocalizedMapPreview } from "./LocalizedMapPreview";
 
 interface SolverConfigBadgesProps {
   config?: SystemConfig | null;
   mapImageUrl?: string;
+  mapData?: MapData | null;
   cacheKey: number;
   onSelectMap: (imageUrl: string) => void;
 }
 
 function SolverMapPreview({
   mapImageUrl,
+  mapData,
   cacheKey,
   onSelectMap,
 }: Required<Pick<SolverConfigBadgesProps, "mapImageUrl">> &
-  Pick<SolverConfigBadgesProps, "cacheKey" | "onSelectMap">) {
-  const { t } = useI18n();
+  Pick<SolverConfigBadgesProps, "cacheKey" | "onSelectMap" | "mapData">) {
+  const { language, t } = useI18n();
   const [isLoaded, setIsLoaded] = useState(false);
   const fullUrl = mapImageUrl.includes("?")
     ? `${mapImageUrl}&t=${cacheKey}`
     : `${mapImageUrl}?t=${cacheKey}`;
 
   return (
-    <button
-      type="button"
+    <div
       className="solver-map-preview"
       onClick={() => onSelectMap(mapImageUrl)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelectMap(mapImageUrl);
+        }
+      }}
+      role="button"
+      tabIndex={0}
       aria-label={t("Open base map")}
     >
       <span className="solver-map-preview-label">{t("Base map")}</span>
-      <img
-        src={fullUrl}
-        alt={t("Base map")}
-        className={`solver-map-preview-image ${isLoaded ? "is-loaded" : ""}`}
-        onLoad={() => setIsLoaded(true)}
-      />
-    </button>
+      {language === "pt-BR" && mapData ? (
+        <LocalizedMapPreview
+          view={{ mapData }}
+          className="solver-map-preview-canvas"
+        />
+      ) : (
+        <img
+          src={fullUrl}
+          alt={t("Base map")}
+          className={`solver-map-preview-image ${isLoaded ? "is-loaded" : ""}`}
+          onLoad={() => setIsLoaded(true)}
+        />
+      )}
+    </div>
   );
 }
 
 export function SolverConfigBadges({
   config,
   mapImageUrl,
+  mapData,
   cacheKey,
   onSelectMap,
 }: SolverConfigBadgesProps) {
-  const { t, n } = useI18n();
+  const { language, t, n } = useI18n();
   if (!config) return null;
 
   const reductionLabel = t(
@@ -131,10 +149,11 @@ export function SolverConfigBadges({
         </div>
       </div>
 
-      {mapImageUrl && (
+      {mapImageUrl && (language !== "pt-BR" || mapData) && (
         <SolverMapPreview
           key={`${mapImageUrl}-${cacheKey}`}
           mapImageUrl={mapImageUrl}
+          mapData={mapData}
           cacheKey={cacheKey}
           onSelectMap={onSelectMap}
         />

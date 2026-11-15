@@ -9,16 +9,18 @@ import type {
   SolveResponse,
   SystemConfig,
 } from "../types";
-import { FrontendError } from "../i18n";
+import { ApiError, FrontendError } from "../i18n";
+import type { Language } from "../i18n";
 
 function responseError(body: unknown, fallback: string): Error {
   if (
     body !== null &&
     typeof body === "object" &&
     "detail" in body &&
-    typeof body.detail === "string"
+    typeof body.detail === "string" &&
+    body.detail.trim()
   ) {
-    return new Error(body.detail);
+    return new ApiError(body.detail, fallback);
   }
   return new FrontendError(fallback);
 }
@@ -76,22 +78,26 @@ export async function solveISP(
   map?: Record<string, unknown>,
   naming?: NamingMetadata,
   execution?: ExecutionMetadata,
+  language: Language = "en",
 ): Promise<SolveResponse> {
-  const response = await fetch("/api/isp/solve", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  const response = await fetch(
+    language === "pt-BR" ? "/api/isp/solve?lang=pt-BR" : "/api/isp/solve",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_path: userPath,
+        map,
+        config: config || null,
+        start,
+        goal,
+        naming,
+        execution,
+      }),
     },
-    body: JSON.stringify({
-      user_path: userPath,
-      map,
-      config: config || null,
-      start,
-      goal,
-      naming,
-      execution,
-    }),
-  });
+  );
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
     throw responseError(errorData, "Failed to execute ISP solver.");

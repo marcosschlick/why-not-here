@@ -1538,6 +1538,10 @@ kbd,
 .solver-map-preview-image.is-loaded {
   opacity: 1;
 }
+.solver-map-preview-canvas {
+  width: 100%;
+  min-height: 13rem;
+}
 .param-chip-label,
 .metric-label,
 .about-meta-label {
@@ -1742,6 +1746,26 @@ kbd,
   transition:
     opacity var(--duration-fast) var(--ease-out),
     transform var(--duration-normal) var(--ease-out);
+}
+.localized-map-preview {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--surface-canvas);
+}
+.localized-map-modal-body {
+  max-height: calc(92dvh - 4rem);
+  padding: 1rem;
+  overflow: auto;
+}
+.localized-map-modal {
+  width: 100%;
+  height: min(65dvh, 40rem);
+}
+.localized-map-details {
+  margin: 0.75rem 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
 }
 .artifact-image.is-loaded {
   opacity: 1;

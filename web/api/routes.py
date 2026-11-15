@@ -43,6 +43,7 @@ from src.visual.layers import find_steep_cells
 
 from .artifacts import collect_artifacts
 from .config_manager import get_experiment_configurations, update_configurations
+from .presentation import build_result_presentation
 from .runner import runner
 from .schemas import (
     ExportConfigRequest,
@@ -365,11 +366,13 @@ def create_batch_endpoint() -> dict[str, str]:
 
 @router.post("/isp/solve")
 @exclusive_pipeline
-def solve_isp_endpoint(payload: SolveISPRequest) -> dict[str, Any]:
-    return solve_isp_data(payload)
+def solve_isp_endpoint(
+    payload: SolveISPRequest, lang: str | None = None
+) -> dict[str, Any]:
+    return solve_isp_data(payload, language=lang or "en")
 
 
-def solve_isp_data(payload: SolveISPRequest) -> dict[str, Any]:
+def solve_isp_data(payload: SolveISPRequest, language: str = "en") -> dict[str, Any]:
     if runner.is_running():
         raise HTTPException(
             status_code=409, detail="Pipeline execution already in progress"
@@ -464,12 +467,15 @@ def solve_isp_data(payload: SolveISPRequest) -> dict[str, Any]:
             runner.state["status"] = sanitized_result["execution_status"]
             runner.state["error"] = sanitized_result["execution_error"]
 
-        return {
+        response = {
             "status": sanitized_result["execution_status"],
             "result": sanitized_result,
             "artifacts": artifacts,
             "output_dir": str(output_dir),
         }
+        if language == "pt-BR":
+            response["presentation"] = build_result_presentation(result)
+        return response
     except Exception as exc:
         with runner.lock:
             runner.state["error"] = str(exc)

@@ -186,6 +186,13 @@ export interface SolveResponse {
   result: LastResult;
   artifacts: string[];
   output_dir: string;
+  presentation?: ScientificPresentation;
+}
+
+export interface ScientificPresentation {
+  explanation_text: string;
+  cost_baseline_text: string | null;
+  execution_error: string | null;
 }
 
 export interface NamingMetadata {
@@ -214,6 +221,7 @@ export interface QueueItem {
   mapData?: MapData;
   userPath?: [number, number][];
   result?: LastResult;
+  presentation?: ScientificPresentation;
   artifacts?: string[];
   error?: string;
 }

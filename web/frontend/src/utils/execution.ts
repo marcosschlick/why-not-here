@@ -4,9 +4,10 @@ import type {
   MapData,
   SystemConfig,
 } from "../types";
-import { FrontendError } from "../i18n";
+import { presentError } from "../i18n";
+import type { Language } from "../i18n";
 
-const frontendFailures = new WeakSet<LastResult>();
+const requestErrors = new WeakMap<LastResult, unknown>();
 
 export function requestFailure(
   error: unknown,
@@ -54,14 +55,21 @@ export function requestFailure(
       error: message,
     },
   };
-  if (error instanceof FrontendError || !(error instanceof Error)) {
-    frontendFailures.add(result);
-  }
+  requestErrors.set(result, error);
   return result;
 }
 
-export function isFrontendFailure(result: LastResult): boolean {
-  return frontendFailures.has(result);
+export function requestFailureMessage(
+  result: LastResult,
+  language: Language,
+): string | null {
+  return requestErrors.has(result)
+    ? presentError(
+        language,
+        requestErrors.get(result),
+        "Execution request failed.",
+      )
+    : null;
 }
 
 export function executionStatus(result: LastResult): "completed" | "failed" {

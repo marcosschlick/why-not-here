@@ -5,15 +5,18 @@ import type {
   MapData,
   QueueItem,
   SemanticModificationsData,
+  ScientificPresentation,
   SystemConfig,
 } from "../types";
 import { ResultsExport } from "./ResultsExport";
 import {
-  isFrontendFailure,
+  requestFailureMessage,
   scientificOutcome,
   scientificOutcomeLabel,
 } from "../utils/execution";
 import { SolverConfigBadges } from "./SolverConfigBadges";
+import { LocalizedMapPreview } from "./LocalizedMapPreview";
+import type { MapViewLayers } from "./LocalizedMapPreview";
 import {
   configuredValidationScope,
   directoryName,
@@ -34,6 +37,7 @@ const t = (message: string, variables?: Record<string, string | number>) =>
 
 interface ResultsViewProps {
   result: LastResult | null;
+  presentation?: ScientificPresentation | null;
   records?: LastResult[];
   mapData?: MapData | null;
   userPath?: GridPoint[];
@@ -106,11 +110,14 @@ function ArtifactCard({
   artifactPath,
   cacheKey,
   onSelect,
+  view,
 }: {
   artifactPath: string;
   cacheKey: number;
   onSelect: (path: string) => void;
+  view: MapViewLayers | null;
 }) {
+  const language = requestedLanguage();
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -135,33 +142,44 @@ function ArtifactCard({
       <div className="artifact-item-header">
         <span className="artifact-title">{displayTitle}</span>
       </div>
-      <div className="artifact-img-wrap">
-        {!isLoaded && !hasError && (
-          <div className="artifact-placeholder-loading">
-            <div className="spinner-tiny" />
-            <span>{t("Rendering artifact...")}</span>
-          </div>
-        )}
-        {hasError ? (
-          <div className="artifact-placeholder-error">
-            <span>{t("Artifact unavailable")}</span>
-          </div>
+      {language === "pt-BR" ? (
+        view ? (
+          <LocalizedMapPreview view={view} className="artifact-img-wrap" />
         ) : (
-          <img
-            src={fullUrl}
-            alt={displayTitle}
-            onLoad={() => setIsLoaded(true)}
-            onError={() => setHasError(true)}
-            className={`artifact-image ${isLoaded ? "is-loaded" : ""}`}
-          />
-        )}
-      </div>
+          <div className="artifact-img-wrap">
+            <span>{t("Preview unavailable for this artifact.")}</span>
+          </div>
+        )
+      ) : (
+        <div className="artifact-img-wrap">
+          {!isLoaded && !hasError && (
+            <div className="artifact-placeholder-loading">
+              <div className="spinner-tiny" />
+              <span>{t("Rendering artifact...")}</span>
+            </div>
+          )}
+          {hasError ? (
+            <div className="artifact-placeholder-error">
+              <span>{t("Artifact unavailable")}</span>
+            </div>
+          ) : (
+            <img
+              src={fullUrl}
+              alt={displayTitle}
+              onLoad={() => setIsLoaded(true)}
+              onError={() => setHasError(true)}
+              className={`artifact-image ${isLoaded ? "is-loaded" : ""}`}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 export function ResultsView({
   result,
+  presentation,
   records = [],
   mapData,
   userPath = [],
@@ -192,6 +210,7 @@ export function ResultsView({
 
   function handleTabSelect(idx: number) {
     setHoveredCell(null);
+    setSelectedImage(null);
     if (onSelectBatchIndex) {
       onSelectBatchIndex(idx);
     } else {
@@ -208,6 +227,9 @@ export function ResultsView({
   const currentResult: LastResult | null = isBatch
     ? (activeBatchItem?.result ?? null)
     : result;
+  const currentPresentation = isBatch
+    ? activeBatchItem?.presentation
+    : presentation;
   const currentArtifacts: string[] = isBatch
     ? (activeBatchItem?.artifacts ?? [])
     : artifacts;
@@ -258,6 +280,77 @@ export function ResultsView({
   const tacticalArtifacts = currentArtifacts.filter(
     (artifactPath) => getArtifactFilename(artifactPath) !== "map.png",
   );
+  function mapViewForArtifact(artifactPath: string): MapViewLayers | null {
+    const filename = getArtifactFilename(artifactPath);
+    if (filename === "map.png" && originalMapData) {
+      return { mapData: originalMapData };
+    }
+    if (!preparedMapData || !currentResult) return null;
+    const optimalPath = currentResult.original_optimal_path ?? [];
+    if (filename === "optimal_path.png") {
+      return { mapData: preparedMapData, optimalPath };
+    }
+    if (filename === "alternative_path.png") {
+      return { mapData: preparedMapData, userPath: currentUserPath };
+    }
+    if (filename === "path_comparison.png") {
+      return {
+        mapData: preparedMapData,
+        optimalPath,
+        userPath: currentUserPath,
+      };
+    }
+    if (filename === "changes.png") {
+      return {
+        mapData: preparedMapData,
+        modifications: currentResult.modifications,
+      };
+    }
+    if (filename === "changes_and_paths.png") {
+      return {
+        mapData: preparedMapData,
+        optimalPath,
+        userPath: currentUserPath,
+        modifications: currentResult.modifications,
+      };
+    }
+    return null;
+  }
+  const selectedView = selectedImage ? mapViewForArtifact(selectedImage) : null;
+  const selectedFilename = selectedImage
+    ? getArtifactFilename(selectedImage)
+    : "";
+  const selectedProfile = isBrandao
+    ? t("Brandao adaptation: fast/slow 1:8, fixed obstacles, no slope effects")
+    : t("Normal traversal model");
+  const objectiveName = isBrandao
+    ? t("weighted intervention cost")
+    : t("intervention count");
+  const selectedStatus =
+    currentResult?.metrics?.stop_reason === "COST_MODEL_MISMATCH"
+      ? t(
+          "Execution error: modeled and applied costs differ; physical validation: {status}",
+          {
+            status: currentResult.metrics.validation_status ?? "UNKNOWN",
+          },
+        )
+      : currentResult?.metrics?.objective_certified
+        ? t(
+            "Global path validated; minimum {objective} certified in the declared domain",
+            {
+              objective: objectiveName,
+            },
+          )
+        : currentResult?.success
+          ? t("Global path validated; minimum {objective} not certified", {
+              objective: objectiveName,
+            })
+          : t("Candidate not globally validated ({reason})", {
+              reason:
+                currentResult?.metrics?.stop_reason ??
+                currentResult?.solver_status ??
+                "UNKNOWN",
+            });
   const currentStatus = isBatch
     ? activeBatchItem?.status
     : result
@@ -371,9 +464,10 @@ export function ResultsView({
       ? currentModifications
       : null;
   const explanationText = currentResult
-    ? (isFrontendFailure(currentResult)
-        ? t(currentResult.explanation_text?.trim() ?? "")
-        : currentResult.explanation_text?.trim()) ||
+    ? (requestedLanguage() === "pt-BR" && currentPresentation
+        ? currentPresentation.explanation_text
+        : (requestFailureMessage(currentResult, requestedLanguage()) ??
+          currentResult.explanation_text?.trim())) ||
       t("No detailed explanation was returned for solver status {status}.", {
         status: currentResult.solver_status,
       })
@@ -840,6 +934,7 @@ export function ResultsView({
         <SolverConfigBadges
           config={currentConfig}
           mapImageUrl={currentMapImageUrl}
+          mapData={originalMapData}
           cacheKey={cacheKey}
           onSelectMap={setSelectedImage}
         />
@@ -1009,9 +1104,11 @@ export function ResultsView({
       {(currentResult?.execution_error || activeBatchItem?.error) && (
         <p className="results-notice warning" role="alert">
           {currentResult?.execution_error
-            ? isFrontendFailure(currentResult)
-              ? t(currentResult.execution_error)
-              : currentResult.execution_error
+            ? requestedLanguage() === "pt-BR" &&
+              currentPresentation?.execution_error
+              ? currentPresentation.execution_error
+              : (requestFailureMessage(currentResult, requestedLanguage()) ??
+                currentResult.execution_error)
             : activeBatchItem?.error}
         </p>
       )}
@@ -1041,13 +1138,24 @@ export function ResultsView({
               className="btn btn-ghost btn-sm"
               onClick={() =>
                 currentResult.cost_baseline_text &&
-                handleCopy(currentResult.cost_baseline_text, "baseline")
+                handleCopy(
+                  requestedLanguage() === "pt-BR" &&
+                    currentPresentation?.cost_baseline_text
+                    ? currentPresentation.cost_baseline_text
+                    : currentResult.cost_baseline_text,
+                  "baseline",
+                )
               }
             >
               {copiedKey === "baseline" ? t("Copied") : t("Copy")}
             </button>
           </div>
-          <pre className="code-report">{currentResult.cost_baseline_text}</pre>
+          <pre className="code-report">
+            {requestedLanguage() === "pt-BR" &&
+            currentPresentation?.cost_baseline_text
+              ? currentPresentation.cost_baseline_text
+              : currentResult.cost_baseline_text}
+          </pre>
         </div>
       )}
 
@@ -1061,6 +1169,7 @@ export function ResultsView({
                 artifactPath={artifactPath}
                 cacheKey={cacheKey}
                 onSelect={setSelectedImage}
+                view={mapViewForArtifact(artifactPath)}
               />
             ))}
           </div>
@@ -1089,15 +1198,56 @@ export function ResultsView({
                 &times;
               </button>
             </div>
-            <img
-              src={
-                selectedImage.includes("?")
-                  ? `${selectedImage}&t=${cacheKey}`
-                  : `${selectedImage}?t=${cacheKey}`
-              }
-              alt={getArtifactTitle(selectedImage)}
-              className="modal-image"
-            />
+            {requestedLanguage() === "pt-BR" ? (
+              selectedView ? (
+                <div className="localized-map-modal-body">
+                  <LocalizedMapPreview
+                    view={selectedView}
+                    className="localized-map-modal"
+                  />
+                  <p className="localized-map-details">
+                    {t("Grid: {height} × {width} · Seed: {seed}", {
+                      height: formatMetric(selectedView.mapData.h),
+                      width: formatMetric(selectedView.mapData.w),
+                      seed: formatMetric(
+                        selectedView.mapData.generation?.base_seed ??
+                          selectedView.mapData.config.MAP_DEFAULT_SEED,
+                      ),
+                    })}
+                  </p>
+                  <p className="localized-map-details">
+                    {selectedFilename === "map.png"
+                      ? t("Base map")
+                      : selectedFilename.startsWith("changes")
+                        ? `${selectedProfile} · ${selectedStatus}`
+                        : selectedProfile}
+                  </p>
+                  <p className="localized-map-details">
+                    {t("Column (j)")} · {t("Row (i; 0 at top)")}
+                  </p>
+                  <TacticalMapLegend
+                    mapData={selectedView.mapData}
+                    modifications={selectedView.modifications}
+                    showOptimalPath={Boolean(selectedView.optimalPath?.length)}
+                    showAlternativePath={Boolean(selectedView.userPath?.length)}
+                  />
+                </div>
+              ) : (
+                <div className="localized-map-modal-body">
+                  {t("Preview unavailable for this artifact.")}
+                </div>
+              )
+            ) : (
+              <img
+                src={
+                  selectedImage.includes("?")
+                    ? `${selectedImage}&t=${cacheKey}`
+                    : `${selectedImage}?t=${cacheKey}`
+                }
+                alt={getArtifactTitle(selectedImage)}
+                className="modal-image"
+              />
+            )}
           </div>
         </div>
       )}

@@ -37,6 +37,7 @@ import type {
   MapData,
   QueueItem,
   SaveConfigurationItem,
+  ScientificPresentation,
   SystemConfig,
 } from "./types";
 import { FrontendError, presentError, useI18n } from "./i18n";
@@ -120,6 +121,8 @@ export function App() {
     null,
   );
   const [lastResult, setLastResult] = useState<LastResult | null>(null);
+  const [lastPresentation, setLastPresentation] =
+    useState<ScientificPresentation | null>(null);
   const [artifacts, setArtifacts] = useState<string[]>([]);
   const [cacheKey, setCacheKey] = useState<number>(() => Date.now());
   const [isGeneratingMap, setIsGeneratingMap] = useState<boolean>(false);
@@ -342,6 +345,7 @@ export function App() {
           ...execution,
           map_generation_sec: mapData.generation?.runtime_sec ?? undefined,
         },
+        language,
       );
       setMapData({
         ...mapData,
@@ -357,6 +361,7 @@ export function App() {
       ]);
       setSingleOutputDirectory(response.output_dir);
       setLastResult(response.result);
+      setLastPresentation(response.presentation ?? null);
       setArtifacts(response.artifacts);
       setCacheKey(Date.now());
       setCurrentStep("results");
@@ -373,6 +378,7 @@ export function App() {
         { group: execution.run_id, result: failed },
       ]);
       setLastResult(failed);
+      setLastPresentation(null);
       setCurrentStep("results");
       setErrorMessage(
         presentError(language, err, "Error executing ISP solver"),
@@ -536,7 +542,13 @@ export function App() {
         setUserPath(initialPath);
       } catch (err) {
         setErrorMessage(
-          presentError(language, err, "Error generating map for item {item}"),
+          presentError(
+            language,
+            err,
+            t("Error generating map for item {item}", {
+              item: n(targetIndex + 1),
+            }),
+          ),
         );
       } finally {
         setIsGeneratingMap(false);
@@ -667,6 +679,7 @@ export function App() {
                 ...it,
                 userPath: copy,
                 result: undefined,
+                presentation: undefined,
                 artifacts: undefined,
                 error: undefined,
                 mapData: mapData
@@ -695,6 +708,7 @@ export function App() {
               ...it,
               userPath: currentPathCopy,
               result: undefined,
+              presentation: undefined,
               artifacts: undefined,
               error: undefined,
               status: "awaiting_route",
@@ -762,7 +776,13 @@ export function App() {
       setQueue((prev) =>
         prev.map((it, idx) =>
           idx === i
-            ? { ...it, status: "solving", error: undefined, result: undefined }
+            ? {
+                ...it,
+                status: "solving",
+                error: undefined,
+                result: undefined,
+                presentation: undefined,
+              }
             : it,
         ),
       );
@@ -787,6 +807,7 @@ export function App() {
             map_generation_sec:
               item.mapData.generation?.runtime_sec ?? undefined,
           },
+          language,
         );
         setExecutionRecords((previous) => [
           ...previous,
@@ -811,6 +832,7 @@ export function App() {
                   status: executionStatus(response.result),
                   error: response.result.execution_error ?? undefined,
                   result: response.result,
+                  presentation: response.presentation,
                   artifacts: response.artifacts,
                 }
               : it,
@@ -818,6 +840,7 @@ export function App() {
         );
         if (i === 0) {
           setLastResult(response.result);
+          setLastPresentation(response.presentation ?? null);
           setArtifacts(response.artifacts);
         }
         setCacheKey(Date.now());
@@ -845,6 +868,7 @@ export function App() {
                   status: "failed",
                   error: msg,
                   result: failure,
+                  presentation: undefined,
                   batchDir: batch.output_dir,
                 }
               : it,
@@ -869,6 +893,7 @@ export function App() {
         setActiveBatchResultIndex(idx);
       }
       setLastResult(item.result);
+      setLastPresentation(item.presentation ?? null);
       setArtifacts(item.artifacts || []);
       if (item.mapData) {
         setMapData(item.mapData);
@@ -889,6 +914,7 @@ export function App() {
     setMapData(null);
     setUserPath([]);
     setLastResult(null);
+    setLastPresentation(null);
     setArtifacts([]);
     setBatchRouteFeedback(null);
     setIsBatchMode(false);
@@ -1098,6 +1124,7 @@ export function App() {
                             ...item,
                             userPath: path,
                             result: undefined,
+                            presentation: undefined,
                             artifacts: undefined,
                             error: undefined,
                             status: "awaiting_route",
@@ -1444,6 +1471,7 @@ export function App() {
         {currentStep === "results" && (
           <div key="step-results" className="step-container results-step">
             <ResultsView
+              presentation={lastPresentation}
               records={executionRecords
                 .filter((record) => record.group === exportGroup)
                 .map((record) => record.result)}
@@ -1472,6 +1500,7 @@ export function App() {
                 setActiveBatchResultIndex(idx);
                 if (queue[idx]?.result) {
                   setLastResult(queue[idx].result!);
+                  setLastPresentation(queue[idx].presentation ?? null);
                   setArtifacts(queue[idx].artifacts || []);
                 }
               }}
