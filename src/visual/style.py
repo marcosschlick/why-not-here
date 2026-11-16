@@ -3,7 +3,7 @@ import numpy as np
 from .. import config
 
 DEFAULT_TERRAIN_COLOR = np.array([0.5, 0.5, 0.5])
-BRANDAO_TERRAIN_COLORS = {"GRASS": "#5A9E68", "FOREST": "#324B64"}
+BRANDAO_TERRAIN_COLORS = {"GRASS": "#9ECAE1", "FOREST": "#DB5461"}
 BRANDAO_BLOCKED_COLOR = "#282828"
 
 

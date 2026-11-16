@@ -105,8 +105,8 @@ $shadow-grey: #282828;
 
 ### Terrain textures and obstacles
 
-The prepared Brandao map uses map-specific green (`#5A9E68`) for fast terrain,
-Yale Blue (`#324B64`) for slow terrain, and Shadow Grey (`#282828`) for all
+The prepared Brandao map uses map-specific light blue (`#9ECAE1`) for fast terrain,
+Lobster Pink (`#DB5461`) for slow terrain, and Shadow Grey (`#282828`) for all
 blocked cells. These three classes replace terrain textures and relief shading
 in this view, including its generated tactical images. Route, intervention, and
 endpoint symbols retain the rules above.
