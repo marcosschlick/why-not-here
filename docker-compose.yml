@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:18
-    container_name: tcc_postgres
+    container_name: why_not_here_postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:?DB_USER is required}
@@ -19,7 +19,7 @@ services:
 
   backend:
     build: .
-    container_name: tcc_backend
+    container_name: why_not_here_backend
     ports:
       - "127.0.0.1:8000:8000"
     environment:
@@ -46,7 +46,7 @@ services:
 
   participant_backend:
     build: .
-    container_name: tcc_participant_backend
+    container_name: why_not_here_participant_backend
     command: ["uvicorn", "web.api.public_app:app", "--host", "0.0.0.0", "--port", "8001", "--no-proxy-headers", "--reload"]
     environment:
       - PYTHONDONTWRITEBYTECODE=1
@@ -65,7 +65,7 @@ services:
 
   frontend:
     build: ./web/frontend
-    container_name: tcc_frontend
+    container_name: why_not_here_frontend
     ports:
       - "127.0.0.1:5173:5173"
     environment:
@@ -79,7 +79,7 @@ services:
 
   participant_frontend:
     build: ./web/frontend
-    container_name: tcc_participant_frontend
+    container_name: why_not_here_participant_frontend
     command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5174"]
     ports:
       - "5174:5174"
