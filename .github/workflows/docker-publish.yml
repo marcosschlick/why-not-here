@@ -33,3 +33,11 @@ jobs:
           context: ./web/frontend
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/why-not-here-frontend:latest
+
+      - name: Build and push standalone application
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.standalone
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/why-not-here:latest

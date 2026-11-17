@@ -60,15 +60,16 @@ cd web/frontend && npm install && cd ../..
 
 #### Running Web Platform
 
-The API requires a running PostgreSQL database. Set the database connection
-variables in the backend terminal before starting it:
+The API requires a running PostgreSQL database. Start only the Compose database
+with `docker compose up -d db` (or `podman compose up -d db`), then set the
+matching connection variables in the backend terminal:
 
 ```bash
 export DB_HOST=127.0.0.1
 export DB_PORT=5432
-export DB_USER=your_database_user
-export DB_PASSWORD=your_database_password
-export DB_NAME=your_database_name
+export DB_USER=why_not_here
+export DB_PASSWORD=why_not_here_local_password
+export DB_NAME=why_not_here
 ```
 
 `DB_HOST` and `DB_PORT` default to `127.0.0.1` and `5432` when omitted. The
@@ -223,46 +224,49 @@ cd web/frontend && VITE_PUBLIC_ONLY=true VITE_BACKEND_URL=http://127.0.0.1:8001 
 
 ---
 
-### 2. Docker Compose
+### 2. Complete application with Compose
 
-The Compose file runs PostgreSQL, the APIs and the frontends using container
-images. Docker or Podman with Compose support is required. The default database
-credentials are intended for local demonstrations; an `.env` file is optional.
-
-Until the images are published, build them locally from the repository:
-
-```bash
-docker build -t why-not-here/backend:1.0.0 .
-docker build -t why-not-here/frontend:1.0.0 web/frontend
-```
-
-Start the complete application in the background:
+Clone the repository and run:
 
 ```bash
 docker compose up -d
 ```
 
-To start only PostgreSQL, run `docker compose up -d db`. This command does not
-stop other services that are already running. Use `docker compose down` first
-if only the database should remain running. Replace `docker` with `podman` in
-these commands when using Podman.
+Replace `docker` with `podman` when using Podman. Compose downloads the public
+backend, frontend, and PostgreSQL images as needed. Open `http://localhost:5173`.
+The API is available at `http://localhost:8000` and the participant interface at
+`http://localhost:5174`. To update published images, run `docker compose pull`
+followed by `docker compose up -d`.
 
-- Dashboard: `http://localhost:5173`
-- API: `http://localhost:8000`
-- Participant frontend: `http://localhost:5174`
+To run only the database and start the API and frontend locally, use
+`docker compose up -d db` and follow the local setup above. This command does not
+stop other services that are already running. The database, results and saved
+configurations use persistent named volumes. PostgreSQL creates its credentials
+only when its volume is empty; an existing volume requires its original credentials.
 
-To publish the application later, change the `IMAGE_NAMESPACE` default in
-`docker-compose.yml` to your Docker Hub username or organization, and build and
-push `YOUR_DOCKERHUB_USERNAME/backend:1.0.0` and
-`YOUR_DOCKERHUB_USERNAME/frontend:1.0.0`. After publication, share
-`docker-compose.yml`; recipients can start the application with `docker compose
-up -d` without the source tree or an `.env` file.
+For participants on another device, set `PUBLIC_PARTICIPANT_URL` to the URL they
+can reach before starting Compose. Only the participant frontend is exposed to
+the network; do not expose the dashboard, administrative API or database.
 
-The database, results and saved configurations use persistent named volumes.
-PostgreSQL creates its user, password and database only when its volume is empty.
-If a volume already exists, use its original credentials through environment
-variables or an `.env` file; changing the values does not update that volume.
-`DB_PORT` controls the local PostgreSQL port. For participants on another device,
-set `PUBLIC_PARTICIPANT_URL` to the URL they can reach and recreate the frontend
-containers. Only the participant frontend is exposed to the network; do not
-expose the dashboard, administrative API or PostgreSQL through another proxy.
+### 3. Standalone image
+
+After the standalone image has been published to Docker Hub, run the entire
+application without cloning the repository or installing Compose:
+
+```bash
+docker run -d --name why-not-here -p 127.0.0.1:5173:5173 \
+  -v why-not-here-db:/var/lib/why-not-here \
+  -v why-not-here-results:/app/results \
+  -v why-not-here-configurations:/app/configurations \
+  marcosschlick/why-not-here:latest
+```
+
+Open `http://localhost:5173`. Replace `docker` with `podman` if needed. The image
+contains its own PostgreSQL, API, and frontend; the named volumes retain data
+across container recreation. To enable the participant interface on another
+device, also publish port 5174 and set `PUBLIC_PARTICIPANT_URL` to its reachable
+URL. The standalone and Compose database volumes are independent.
+
+The GitHub Actions workflow publishes the two Compose images and the standalone
+image after changes are pushed to `main`. Configure the `DOCKERHUB_USERNAME` and
+`DOCKERHUB_TOKEN` repository secrets before running it.

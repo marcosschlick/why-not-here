@@ -16,7 +16,7 @@ services:
       retries: 10
 
   backend:
-    image: ${IMAGE_NAMESPACE:-why-not-here}/backend:1.0.0
+    image: marcosschlick/why-not-here-backend:latest
     command: ["uvicorn", "web.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]
     environment:
       DB_HOST: db
@@ -39,7 +39,7 @@ services:
       retries: 30
 
   participant_backend:
-    image: ${IMAGE_NAMESPACE:-why-not-here}/backend:1.0.0
+    image: marcosschlick/why-not-here-backend:latest
     command: ["uvicorn", "web.api.public_app:app", "--host", "0.0.0.0", "--port", "8001", "--no-proxy-headers"]
     environment:
       DB_HOST: db
@@ -52,7 +52,7 @@ services:
         condition: service_healthy
 
   frontend:
-    image: ${IMAGE_NAMESPACE:-why-not-here}/frontend:1.0.0
+    image: marcosschlick/why-not-here-frontend:latest
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
     environment:
@@ -63,7 +63,7 @@ services:
         condition: service_healthy
 
   participant_frontend:
-    image: ${IMAGE_NAMESPACE:-why-not-here}/frontend:1.0.0
+    image: marcosschlick/why-not-here-frontend:latest
     command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5174"]
     ports:
       - "${PARTICIPANT_PORT:-5174}:5174"

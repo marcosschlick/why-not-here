@@ -53,9 +53,9 @@ export default defineConfig({
           "/api/participate": { target: backendUrl, changeOrigin: false },
         }
       : {
-          "/api": backendUrl,
-          "/maps": backendUrl,
-          "/output": backendUrl,
+          "/api": { target: backendUrl, changeOrigin: false },
+          "/maps": { target: backendUrl, changeOrigin: false },
+          "/output": { target: backendUrl, changeOrigin: false },
         },
   },
 });
