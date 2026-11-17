@@ -26,6 +26,11 @@ Controls the independent Perlin fields, terrain classification thresholds, conte
 
 | Parameter                      | Type               | Default Value | Description                                                                 |
 | :----------------------------- | :----------------- | :------------ | :-------------------------------------------------------------------------- |
+| `MAP_PROFILE_VERSION` | `str` | `"perlin-v7"` | Required map generation profile identifier. |
+| `MAP_PROFILE_FREQUENCIES` | `dict[tuple[int, int], float]` | See config | Elevation frequencies indexed by map height and width. |
+| `MAP_SIZE_OPTIONS` | `tuple` | Derived | Available map dimensions in profile order. |
+| `MAP_PROFILE_ELEVATION_DETAIL` | `dict` | See config | Elevation octave and persistence values per map size. |
+| `MAP_GENERATION_PROFILES` | `dict` | Derived | Complete generation settings resolved for each map size. |
 | `MAP_DEFAULT_SEED`             | `int`              | `42`          | Seed for reproducible generation and deterministic retry seeds.             |
 | `MAP_ELEVATION_SCALE`          | `float`            | `4.0`         | Elevation amplitude in meters.                                              |
 | `MAP_ELEVATION_FREQ`           | `float`            | `0.06`        | Spatial frequency for the elevation Perlin field.                            |
@@ -83,11 +88,12 @@ One cell opening resolves every original blocking cause at unit cost. Impassable
 
 | Parameter        | Type    | Default Value      | Description                                                                      |
 | :--------------- | :------ | :----------------- | :------------------------------------------------------------------------------- |
+| `ISP_MODEL` | `str` | `"NORMAL"` | Internal model selection: `NORMAL` or `BRANDAO`. |
 | `NORMAL_MODEL_VERSION` | `str` | `"normal-eder-grid-v1"` | Required current normal intervention semantics. |
 | `ROBOT_SPEED_THEORETICAL` | `float` | `5.0` | Theoretical speed in m/s; must be finite and greater than the grid's maximum nominal speed. |
 | `ROBOT_SPEED_ELIGIBILITY_RATIO` | `float` | `0.75` | Frozen original effective speed divided by the normal robot limit; below this ratio only environmental speed intervention is eligible. |
 
-The normal objective counts cell openings, directed slope adjustments, environmental speed interventions and hypothetical robot capability interventions, all with unit weight. Obstacles and impassable terrain in the same cell form one opening with both original causes retained. Start and goal cells are protected. Interventions on incident edges remain allowed. The Brandao adaptation retains its independent weighted terrain-assignment objective described in [benchmark.md](benchmark.md).
+The normal objective counts cell openings, directed slope adjustments, environmental speed interventions and hypothetical robot capability interventions, all with unit weight. Obstacles and impassable terrain in the same cell form one opening with both original causes retained. Start and goal cells are protected. Interventions on incident edges remain allowed. The Brandao adaptation retains its independent weighted terrain-assignment objective.
 
 The original edge reference is the harmonic mean of endpoint terrain speeds divided by `1 + max(0, original_slope / MAX_SLOPE_DEG)`. For blocked terrain, the minimum configured positive speed substitutes its zero speed; physical obstacle flags are ignored only for this finite reference. Classification uses a strict `< 0.75 * ROBOT_SPEED_NORMAL` comparison and never changes during optimization. A blocked edge can therefore receive its required opening and slope corrections plus one separately charged speed intervention. Both speed targets are effective velocities: they replace, rather than multiply, the normal terrain-and-slope velocity. The parameters are code-only; no new Web controls or numerical experiment configuration fields are exposed.
 
@@ -139,7 +145,7 @@ Controls subgraph pruning heuristics to reduce problem dimension before optimiza
 
 Reduction and semantic closure are separate stages. The common entry point protects the intervention domain and its incident neighbors before sparsification. Subsequent preparation adds nodes and edges needed for semantic decisions, except for `BBOX`, `FLOODFILL`, and `PATH_ONLY`, whose optimization graphs remain within their extracted regions. The even-odd interior and conservative chain contraction are explicit grid adaptations of Eder's preprocessing description. Reduced graphs can omit competing paths, so global validation remains necessary.
 
-Result logs, records and the API report actual formulation nodes/directed edges and per-iteration sizes. Incremental global competitors can augment the reduced graph with physical external edges. Both strategies now use the same preparation-through-validation runtime boundaries. Geometry includes route lengths and symmetric discrete vertex Hausdorff distances in cells and meters. See [Computational ISP benchmark](benchmark.md) for definitions and certification conditions.
+Result logs, records and the API report actual formulation nodes/directed edges and per-iteration sizes. Incremental global competitors can augment the reduced graph with physical external edges. Both strategies now use the same preparation-through-validation runtime boundaries. Geometry includes route lengths and symmetric discrete vertex Hausdorff distances in cells and meters.
 
 ---
 
@@ -159,7 +165,7 @@ Benchmark is initially disabled and unavailable in questionnaire preparation. Ea
 
 Configuration creation saves only normal inputs: one file per individual configuration or fifteen per full benchmark map. Executing/importing an individual normal incremental/`NONE` file generates the trio; among saved benchmark members only the `GLOBAL` incremental/`NONE` file generates the trio, including via `python -B src/main.py run configuration.json`. Brandao-only files are rejected rather than converted. There is no format migration or deduplication. The manual model selector and comparison button have been removed; `ISP_MODEL` remains an internal execution/reproduction parameter.
 
-`POST /api/config/scenarios` accepts `config`, `benchmark`, and `purpose` (`run` or `create`); it returns `configurations` without executing or publishing settings. CLI and Web share its expansion function. `/api/isp/solve` still executes one resolved scenario per request. Results add `execution_status` and `execution_error`, independent of scientific `success`. Queue groups complete even when processed scenarios are infeasible or time-limited, unless there is an actual execution error. See [Computational ISP benchmark](benchmark.md).
+`POST /api/config/scenarios` accepts `config`, `benchmark`, and `purpose` (`run` or `create`); it returns `configurations` without executing or publishing settings. CLI and Web share its expansion function. `/api/isp/solve` still executes one resolved scenario per request. Results add `execution_status` and `execution_error`, independent of scientific `success`. Queue groups complete even when processed scenarios are infeasible or time-limited, unless there is an actual execution error.
 
 ## 10. Unified Experiment Serialization Schema (JSON)
 

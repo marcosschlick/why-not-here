@@ -10,7 +10,7 @@ at 1 m/s, and hypothetical robot capability at 5 m/s. Every action costs one.
 Speed eligibility is frozen at the original 75% threshold; speed activations use
 effective edge speed without an extra slope penalty. The finite reference for
 blocked edges is a documented grid adaptation. Brandao retains its separate
-terrain-assignment model. See [model details](docs/benchmark.md).
+terrain-assignment model.
 Saved normal configurations require `NORMAL_MODEL_VERSION=normal-eder-grid-v1`;
 incompatible old configurations, maps and intervention records must be regenerated.
 No migration or compatibility conversion is provided.
@@ -32,8 +32,10 @@ No migration or compatibility conversion is provided.
 
 #### Prerequisites
 
-- Python 3.12+
-- Node.js 20.19+ or 22.12+ (for the frontend; required by the Vite version in the lockfile)
+- Python 3.12 (the project uses 3.12.15 locally and Python 3.12 in containers)
+- Node.js 20.19+ or 22.12+ (the frontend container uses Node.js 24)
+- PostgreSQL 18 for the containerized database
+- Python package versions are pinned in `requirements.txt`; frontend versions are locked in `web/frontend/package-lock.json`.
 
 #### Install Dependencies
 
@@ -123,8 +125,6 @@ validation, infeasibility, inconclusive results and limits. Results use the exis
 metric cards; detailed diagnostics remain in **Export Scenarios (CSV)** and
 **Export Iterations (CSV)**, including unsuccessful attempts and execution order.
 Benchmark remains unavailable for questionnaire scenarios.
-See [Computational ISP benchmark](docs/benchmark.md) for formulas, metric units,
-reproduction and measurement limitations.
 
 Use **Questionnaires** to create a draft and select **Prepare six scenarios**.
 Choose only the grid size; the existing generator and size profiles are preserved.
@@ -193,13 +193,12 @@ participation after closing the tab or clearing session storage.
 Answers remain stored in PostgreSQL, including unfinished participations.
 
 The custom instrument is not a full or validated administration of the source
-scales. See [the selected items and original sources](docs/questionarios-avaliacao.md).
+scales.
 
 The `route-study-v4` questionnaire schema requires a fresh set of questionnaire
 tables. There is no migration or
 compatibility with previous questionnaire schemas, and startup does not
-erase or convert existing data. See [Questionnaire protocol](docs/questionnaire.md)
-for the endpoints, instrument adaptation and timing definitions. Request schemas
+erase or convert existing data. Request schemas
 are also available at `http://localhost:8000/docs`.
 
 ```bash
@@ -226,40 +225,44 @@ cd web/frontend && VITE_PUBLIC_ONLY=true VITE_BACKEND_URL=http://127.0.0.1:8001 
 
 ### 2. Docker Compose
 
-Set `DB_USER`, `DB_PASSWORD`, and `DB_NAME` in the shell or in an untracked
-`.env` file in the project root. Optionally set `DB_PORT` to change the host
-port published by PostgreSQL; it defaults to `5432`. The backend connects
-to the database service on its internal port, independently of `DB_PORT`.
-For external access, set `PUBLIC_PARTICIPANT_URL` to the URL participants can
-reach, for example `http://YOUR_LAN_IP:5174`. The administration screen then
-also displays controls to open or copy the public `/questionnaire` link.
-Recreate the frontend services after changing the URL. Local participation does not require this setting.
+The Compose file runs PostgreSQL, the APIs and the frontends using container
+images. Docker or Podman with Compose support is required. The default database
+credentials are intended for local demonstrations; an `.env` file is optional.
 
-Run the entire stack (PostgreSQL + backend API + frontend) with:
+Until the images are published, build them locally from the repository:
 
 ```bash
-docker compose up --build
+docker build -t why-not-here/backend:1.0.0 .
+docker build -t why-not-here/frontend:1.0.0 web/frontend
 ```
 
-- API: `http://localhost:8000`
+Start the complete application in the background:
+
+```bash
+docker compose up -d
+```
+
+To start only PostgreSQL, run `docker compose up -d db`. This command does not
+stop other services that are already running. Use `docker compose down` first
+if only the database should remain running. Replace `docker` with `podman` in
+these commands when using Podman.
+
 - Dashboard: `http://localhost:5173`
-- Participant frontend: `http://YOUR_LAN_IP:5174`
+- API: `http://localhost:8000`
+- Participant frontend: `http://localhost:5174`
 
-Only the participant frontend is published to the network. Its API proxy
-connects to a separate service exposing only participation endpoints. Do not
-expose the local dashboard, administrative API, or PostgreSQL through another
-proxy. `POST /api/questionnaires/{id}/close` permanently closes an active
-questionnaire: new submissions are rejected, and previously saved data remains
-available for export. An identical retry of a completed submission is accepted.
+To publish the application later, change the `IMAGE_NAMESPACE` default in
+`docker-compose.yml` to your Docker Hub username or organization, and build and
+push `YOUR_DOCKERHUB_USERNAME/backend:1.0.0` and
+`YOUR_DOCKERHUB_USERNAME/frontend:1.0.0`. After publication, share
+`docker-compose.yml`; recipients can start the application with `docker compose
+up -d` without the source tree or an `.env` file.
 
-The backend bind-mounts `./configurations` and `./results`, so default saved
-configurations and results remain on the host after container recreation.
-Relative paths resolve from the project root (`/app` inside the container).
-Custom directories in Compose refer to the container filesystem; add a bind mount
-when they must persist on the host. Local execution resolves relative paths from
-the repository root, independently of the terminal's current directory.
-
-PostgreSQL data is stored in the named `postgres_data` volume and persists
-across container restarts and recreation. The PostgreSQL image applies the
-database name and credentials only when initializing an empty volume; changing
-those variables later does not update an existing database or user.
+The database, results and saved configurations use persistent named volumes.
+PostgreSQL creates its user, password and database only when its volume is empty.
+If a volume already exists, use its original credentials through environment
+variables or an `.env` file; changing the values does not update that volume.
+`DB_PORT` controls the local PostgreSQL port. For participants on another device,
+set `PUBLIC_PARTICIPANT_URL` to the URL they can reach and recreate the frontend
+containers. Only the participant frontend is exposed to the network; do not
+expose the dashboard, administrative API or PostgreSQL through another proxy.
