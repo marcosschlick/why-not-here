@@ -6,6 +6,5 @@ web/frontend/node_modules/
 web/frontend/dist/
 .git
 .env
-
 configurations/
 results/
